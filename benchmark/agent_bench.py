@@ -22,10 +22,23 @@ import psutil
 SYSTEM = "你是乐于助人的中文助手。回答简洁准确。"
 
 # ---- 进程采样（CPU RSS + GPU 显存，自动适配 CPU/GPU 运行环境） ----
-def find_server_pid():
-    for p in psutil.process_iter(["name"]):
+def find_server_pid(host="127.0.0.1", port=8080):
+    """定位监听 host:port 的 llama-server 进程 PID（按 cmdline 匹配 + 端口过滤，避免多实例误匹配）。"""
+    # 优先：ss -ltnp 找监听端口的 PID（最可靠）
+    try:
+        import subprocess
+        out = subprocess.run(["ss", "-ltnp"], capture_output=True, text=True, timeout=3).stdout
+        for line in out.splitlines():
+            if f":{port}" in line and "llama-server" in line:
+                pid = line.split("pid=")[1].split(",")[0]
+                return int(pid)
+    except Exception:
+        pass
+    # 兜底：遍历进程，按 cmdline 含 llama-server 匹配
+    for p in psutil.process_iter(["cmdline"]):
         try:
-            if p.info["name"] == "llama-server":
+            cl = p.info["cmdline"] or []
+            if cl and any("llama-server" in c for c in cl):
                 return p.pid
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
@@ -35,8 +48,6 @@ _server_pid = None
 
 def get_server_pid():
     global _server_pid
-    if _server_pid is None:
-        _server_pid = find_server_pid()
     return _server_pid
 
 def find_server_rss_mb(pid):
@@ -48,15 +59,15 @@ def find_server_rss_mb(pid):
         return None
 
 def find_server_gpu_mb(pid):
-    """pynvml 按 PID 采样 llama-server 占用的显存；无 GPU/pynvml 时返回 None"""
+    """nvidia-ml-py 按 PID 采样 llama-server 占用的显存；无 GPU/驱动时返回 None"""
     if pid is None:
         return None
     try:
-        import pynvml
+        import pynvml  # nvidia-ml-py 提供顶层 pynvml 模块（非弃用旧包）
         pynvml.nvmlInit()
         for i in range(pynvml.nvmlDeviceGetCount()):
             h = pynvml.nvmlDeviceGetHandleByIndex(i)
-            for proc in pynvml.nvmlDeviceGetComputeRunningProcesses(h):
+            for proc in nvml.nvmlDeviceGetComputeRunningProcesses(h):
                 if proc.pid == pid:
                     return round(proc.usedGpuMemory / 1024 / 1024, 1)
     except Exception:
@@ -71,28 +82,44 @@ def mem_str(r):
 
 def make_client(host, port):
     # llama-server 提供 OpenAI 兼容 API；api_key 传任意值即可（server 默认不鉴权）
+    global _server_pid
+    _server_pid = find_server_pid(host, port)  # 建连时即定位 server PID（按端口过滤）
     return OpenAI(base_url=f"http://{host}:{port}/v1", api_key="EMPTY")
 
-def chat(client, messages):
-    t0 = time.perf_counter()
-    resp = client.chat.completions.create(
-        model="bench",  # llama-server 不校验模型名
-        messages=messages,
-        extra_body={"chat_template_kwargs": {"enable_thinking": False}},  # 固定 no-think，保证可比
-    )
-    ms = (time.perf_counter() - t0) * 1000
-    u = resp.usage
-    ptd = getattr(u, "prompt_tokens_details", None)
-    cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
-    pid = get_server_pid()
-    return {"text": resp.choices[0].message.content or "",
-            "prompt_tokens": u.prompt_tokens,
-            "completion_tokens": u.completion_tokens,
-            "total_tokens": u.total_tokens,
-            "cached_tokens": cached or 0,
-            "latency_ms": round(ms, 1),
-            "rss_mb": find_server_rss_mb(pid),
-            "gpu_mb": find_server_gpu_mb(pid)}
+def chat(client, messages, _retry=0):
+    """调用 chat.completions；若 400 超出 ctx，自动丢弃最早的非 system 消息后重试（最多 3 次）。"""
+    try:
+        t0 = time.perf_counter()
+        resp = client.chat.completions.create(
+            model="bench",  # llama-server 不校验模型名
+            messages=messages,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},  # 固定 no-think，保证可比
+        )
+        ms = (time.perf_counter() - t0) * 1000
+        u = resp.usage
+        ptd = getattr(u, "prompt_tokens_details", None)
+        cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
+        pid = get_server_pid()
+        return {"text": resp.choices[0].message.content or "",
+                "prompt_tokens": u.prompt_tokens,
+                "completion_tokens": u.completion_tokens,
+                "total_tokens": u.total_tokens,
+                "cached_tokens": cached or 0,
+                "latency_ms": round(ms, 1),
+                "rss_mb": find_server_rss_mb(pid),
+                "gpu_mb": find_server_gpu_mb(pid)}
+    except Exception as e:
+        # 400: 请求超出 ctx —— 兜底：丢弃最早的非 system 消息后重试
+        if "exceed_context_size_error" in str(e) and _retry < 3 and len(messages) > 2:
+            # 保留 system（若有）与最近的消息，丢弃最早的一批
+            body = [m for m in messages if m["role"] == "system"]
+            rest = [m for m in messages if m["role"] != "system"]
+            # 一次丢弃约 1/3 的非 system 消息，加速收敛
+            drop = max(1, len(rest) // 3)
+            messages = body + rest[drop:]
+            print(f"    [chat 400 兜底] 丢弃 {drop} 条最早消息后重试 (第 {_retry + 1}/3 次)")
+            return chat(client, messages, _retry + 1)
+        raise
 
 # ---- 场景 1：多轮对话 ----
 POOL = ["解释一下什么是 KV Cache。",
@@ -186,20 +213,38 @@ def scenario_branch(client, branch_rounds):
         branches[name] = rows
     return {"common": r0, "branches": branches}
 
-def scenario_long_life(client, rounds=40, secret="9527"):
-    """长生命周期场景：多轮对话 + 工具调用穿插，验证早期上下文在 KV 回收下的保留情况。
+def scenario_long_life(client, rounds=40, secret="9527", ctx_size=2048, reserve=300):
+    """长生命周期场景：多轮对话 + 工具调用穿插，验证早期上下文在上下文窗口管理下的保留情况。
 
     关键点：
     - 第 5 轮让模型记住一个秘密数字
     - 每 4 轮穿插一次大段工具结果回填（模拟 agent 工作负载）
-    - 最后一轮提问秘密数字 -> 若早期 KV 被回收/丢失，回答错误（任务成功率下降）
-    - 需 server 以小 ctx（如 --ctx-size 2048）启动才会触发 KV 回收
+    - 历史接近 ctx 上限时做应用层截断（模拟真实 agent 的上下文窗口管理）：
+      截断会丢失早期 KV 前缀 -> cached_tokens 骤降 -> 触发重算（延迟上升）
+    - 最后一轮提问秘密数字 -> 若早期关键上下文被截断丢弃，回答错误（任务成功率下降）
+    - 需 server 以相同 ctx（--ctx-size，默认 2048）启动
     """
+    threshold = ctx_size - 500
+    keep_msgs = 6  # 截断后保留的最近消息条数（system 除外）
     history = [{"role": "system", "content": SYSTEM}]
     rows = []
+    truncations = 0
     secret_round = min(5, max(1, rounds - 3))
     for i in range(rounds):
         n = i + 1
+
+        # ---- 上下文窗口管理：历史接近 ctx 上限时截断早期消息 ----
+        # 用上一轮 total（prompt+completion）近似当前 history 大小，比 prompt_tokens 更准确
+        est = (rows[-1]["prompt_tokens"] + rows[-1]["completion_tokens"]) if rows else 0
+        is_tool = (n % 4 == 0)
+        # 工具轮额外预留：TOOL_SYSTEM 更长 + 工具查询消息
+        budget = threshold - (500 if is_tool else 0)
+        if est > budget and len(history) > keep_msgs + 1:
+            dropped = len(history) - (keep_msgs + 1)
+            history = history[:1] + history[-(keep_msgs):]
+            truncations += 1
+            print(f"  [截断 轮{n}] 历史约 {est} tokens 超过预算 {budget}，丢弃 {dropped} 条早期消息")
+
         if n == secret_round:
             q = f"请记住这个秘密数字：{secret}。只回答两个字：记住了。"
         elif n == rounds:
@@ -215,7 +260,9 @@ def scenario_long_life(client, rounds=40, secret="9527"):
                                   "content": f"<tool_response>\n{MOCK_TOOLS[m.group(1)](m.group(2))}\n</tool_response>"})
                 r2 = chat(client, tool_msgs)
                 rows.append({"round": n, "kind": "tool", "tool": m.group(1), **r2})
-                history += tool_msgs[1:]
+                # 只追加本轮新增的交互，绝不复制旧 history（避免二次方膨胀）
+                history.append({"role": "user", "content": "请查询客户 C10086 的最新一笔订单详情。"})
+                history.append({"role": "assistant", "content": r2["text"]})
                 print(f"  [轮{n:>3}/{rounds} 工具] 调用={m.group(1)} prompt={r2['prompt_tokens']:>5} "
                       f"cached={r2['cached_tokens']:>4} 延迟={r2['latency_ms']:>7}ms {mem_str(r2)}")
                 continue
@@ -233,7 +280,8 @@ def scenario_long_life(client, rounds=40, secret="9527"):
     last_text = rows[-1].get("text", "") or ""
     success = secret in last_text
     print(f"  [任务成功率] 秘密数字 '{secret}' 是否在最终回答中: {success}")
-    return rows, success
+    print(f"  [截断次数] {truncations}")
+    return rows, success, truncations
 
 # ---- 汇总与落盘 ----
 def summarize(rows):
@@ -258,6 +306,7 @@ def main():
     ap.add_argument("--branch-rounds", type=int, default=5)
     ap.add_argument("--long-rounds", type=int, default=40, help="long_life 场景轮数（需 server 小 ctx 启动触发 KV 回收）")
     ap.add_argument("--long-secret", default="9527", help="long_life 场景的测试记忆数字")
+    ap.add_argument("--ctx-size", type=int, default=2048, help="llama-server 的上下文长度（需与 server --ctx-size 一致）")
     args = ap.parse_args()
     client = make_client(args.host, args.port)
     results, summary = {}, {}
@@ -278,12 +327,13 @@ def main():
         summary["branch"] = summarize(all_rows)
 
     if args.scenario == "long_life":
-        print(f"== 场景4 长生命周期 ({args.long_rounds} 轮, 秘密数字={args.long_secret}) ==")
-        print("  (提示：需 server 以小 ctx 启动，如 --ctx-size 2048，才能触发 KV 回收)")
-        rows, success = scenario_long_life(client, args.long_rounds, args.long_secret)
+        print(f"== 场景4 长生命周期 ({args.long_rounds} 轮, 秘密数字={args.long_secret}, ctx={args.ctx_size}) ==")
+        print("  (历史超过 ctx 上限时脚本做应用层截断，模拟真实 agent 的上下文窗口管理)")
+        rows, success, truncations = scenario_long_life(client, args.long_rounds, args.long_secret, args.ctx_size)
         results["long_life"], summary["long_life"] = rows, summarize(rows)
         summary["long_life"]["task_success"] = success
         summary["long_life"]["cached_tokens_total"] = sum(r.get("cached_tokens", 0) for r in rows)
+        summary["long_life"]["truncations"] = truncations
 
     os.makedirs("results", exist_ok=True)
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

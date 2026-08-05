@@ -1,8 +1,7 @@
 [project]
 name = "benchmark"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "Agent 工作流内存/延迟基准测试（面向智能体的内存管理系统赛题）"
 authors = [
     { name = "KitraMGP", email = "3056894830@qq.com" }
 ]
@@ -10,7 +9,7 @@ requires-python = ">=3.13"
 dependencies = [
     "openai>=2.53.0",
     "psutil>=7.2.2",
-    "pynvml>=13.0.1",
+    "nvidia-ml-py>=13.610.43",
 ]
 
 [project.scripts]
