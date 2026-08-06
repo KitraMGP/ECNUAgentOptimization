@@ -25,6 +25,13 @@ X = " It then runs into the dark forest chasing a small rabbit."
 Y = " It stops to drink fresh water from the clear mountain stream."
 
 
+def _norm(text: str) -> str:
+    import hashlib
+    import re
+    t = re.sub(r"[^\w\u4e00-\u9fff]+", "", text.lower(), flags=re.UNICODE)
+    return hashlib.sha256(t.encode("utf-8")).hexdigest()[:16]
+
+
 def post(url: str, body: dict) -> Dict[str, Any]:
     req = request.Request(url, data=json.dumps(body).encode("utf-8"),
                           headers={"Content-Type": "application/json"}, method="POST")
@@ -61,15 +68,22 @@ class Probe:
         body = {
             "model": "bench",
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 8,
+            "max_tokens": 16,
             "temperature": 0,
-            "enable_thinking": False,
+            # 与 benchmark driver 一致：chat_template_kwargs 控制 Qwen3.5 thinking
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         if id_slot is not None:
             body["id_slot"] = id_slot
         r = post(f"{self.base}/v1/chat/completions", body)
         usage = r.get("usage", {})
         kv = get(f"{self.base}/metrics/kv")
+        # response 规范化 hash（输出等价性/串扰检查）
+        content = ""
+        choices = r.get("choices") or []
+        if choices:
+            msg = choices[0].get("message", {})
+            content = msg.get("content") or ""
         rec = {
             "label": label, "id_slot": id_slot,
             "prompt_tokens": usage.get("prompt_tokens"),
@@ -78,6 +92,7 @@ class Probe:
             "used_cells": kv.get("used_cells"),
             "active_sequences": kv.get("active_sequences"),
             "shared_cells": kv.get("shared_cells"),
+            "response_hash": _norm(content),
         }
         # 关联本请求产生的 routing 事件（取请求前后事件数差中的最后一条）
         all_ev = get(f"{self.base}/routing/events?limit=10000")["events"]
@@ -129,7 +144,9 @@ def main() -> int:
         pr.completion("A+Y (slot1)", A + Y, id_slot=1)
         r_ax2 = pr.completion("A+X again (slot0)", A + X, id_slot=0)
         rep_rec["explicit"] = {"cached_first": pr.log[-3].get("cached_tokens"),
-                               "cached_revisit": r_ax2.get("cached_tokens")}
+                               "cached_revisit": r_ax2.get("cached_tokens"),
+                               "hash_first": pr.log[-3].get("response_hash"),
+                               "hash_revisit": r_ax2.get("response_hash")}
         results["replicates"].append(rep_rec)
 
     with open(args.output, "w", encoding="utf-8") as f:

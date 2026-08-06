@@ -178,8 +178,9 @@ cached_tokens`（E1 已双重验证）。branch probe 已改用该字段。
 | B1（default） | 0.8585 | 2046/2048 | 458.6 | 6122.7 | 480.6 |
 | B2-1（prefix-branch） | 0.8573 | 2046/2048 | **442.7 (−3.5%)** | **5949.3 (−2.8%)** | **495.8 (+3.2%)** |
 
-→ 性能改善 ~3%（p50/tps），hit 基本持平（−0.12pp，噪声级）；无请求失败、
-task_success 均 1.0。
+→ 性能差异单次观测（p50 −3.5%、tps +3.2%），hit 基本持平（−0.12pp，噪声级）；
+无请求失败、task_success 均 1.0。**⚠️ E2.2 修正：该性能差异未在 E2.2 中复现验证，
+按任务判定规则不作为稳定收益结论（端到端收益不成立），仅记录为单次观测。**
 
 ---
 
@@ -201,6 +202,11 @@ task_success 均 1.0。
 > sequences` 与 `routing_reason` 是可靠的结构性观测（5/5 一致）。机制本身的
 > 精确行为以 tinyllama（标准架构）集成测试为准：prefix-branch 保留分支
 > （active=2）vs default 覆盖（active=1）。
+>
+> **⚠️ E2.2 修正：default 与 prefix-branch 的 A+X 回访 `cached_tokens` 均为 32
+> （无差异）——逻辑前缀复用指标（logical_prefix_reuse / prompt_processed /
+> full_recompute）在两种策略间无改善，只能称为结构性分支保留，不能称为
+> 缓存命中收益（详见 docs/E2_2_VALIDATION_REPORT.md 第 8 节）。**
 
 ---
 
@@ -273,7 +279,11 @@ task_success 均 1.0。
 4. `/routing/events` 的 `selected_prefix_tokens` 是 LCP 计数而非 per-slot
    cell 占用（per-slot cell 数当前内存 API 不可精确获取，记为 not_available）；
 5. `active_sequences` 在 unified 模式下的观测口径与 non-unified 不同（E2.0.5
-   已记录），本次实验均为 non-unified。
+   已记录），本次实验均为 non-unified；
+6. **⚠️ E2.2 补充：unified（--kv-unified）模式下 prefix-branch 回访不可靠**
+   （A+X 回访 reason 为 `prefix_branch_empty_slot` 而非 `prefix_branch_revisit`，
+   cached=0 全重算；双分支 used_cells 不翻倍=cell 共享）——策略机制目前仅
+   non-unified 有效，不可直接推广到 unified（详见 docs/E2_2_VALIDATION_REPORT.md 第 9 节）。
 
 ---
 
