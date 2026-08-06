@@ -180,3 +180,5 @@ failures: 0
 | 根 | `benchmark/tests/test_kv_probe_repeat.py` | 新增 3 例（repeat run_id 区分、warmup 不采集、start/end 全局） |
 | llama.cpp | `tools/server/tests/unit/test_metrics_kv.py` | fixture 增加 `slot_save_path`（启用 slot erase） |
 | 环境 | `llama.cpp/tmp/` | 测试模型缓存（stories260K 等）+ `run_e1_manual.py`（临时脚本，不入库） |
+
+已提交 git：llama.cpp 内部 commit `cc4f66447`（测试 fixture），根仓库 commit `aa0ad1e`（KV observations repeat/warmup 修复 + 验证报告）。
