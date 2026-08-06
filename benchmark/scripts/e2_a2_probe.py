@@ -65,6 +65,7 @@ class Probe:
         只反映最后一批的缓存计数），不可用作总命中数对比。
         """
         before = len(get(f"{self.base}/routing/events?limit=10000")["events"])
+        t0 = time.perf_counter()
         body = {
             "model": "bench",
             "messages": [{"role": "user", "content": prompt}],
@@ -76,6 +77,7 @@ class Probe:
         if id_slot is not None:
             body["id_slot"] = id_slot
         r = post(f"{self.base}/v1/chat/completions", body)
+        latency_ms = (time.perf_counter() - t0) * 1000
         usage = r.get("usage", {})
         kv = get(f"{self.base}/metrics/kv")
         # response 规范化 hash（输出等价性/串扰检查）
@@ -86,6 +88,7 @@ class Probe:
             content = msg.get("content") or ""
         rec = {
             "label": label, "id_slot": id_slot,
+            "latency_ms": round(latency_ms, 1),
             "prompt_tokens": usage.get("prompt_tokens"),
             "completion_tokens": usage.get("completion_tokens"),
             "cached_tokens": usage.get("prompt_tokens_details", {}).get("cached_tokens"),
@@ -137,7 +140,9 @@ def main() -> int:
                            "revisit_reason": pr.log[-1].get("routing_reason"),
                            "revisit_cached_tokens": r_ax.get("cached_tokens"),
                            "revisit_selected_slot": r_ax.get("selected_slot"),
-                           "active_sequences": r_ax.get("active_sequences")}
+                           "active_sequences": r_ax.get("active_sequences"),
+                           "revisit_latency_ms": r_ax.get("latency_ms"),
+                           "revisit_prompt_processed": (r_ax.get("prompt_tokens") or 0) - (r_ax.get("cached_tokens") or 0)}
         # 显式 id_slot
         assert pr.clean()
         pr.completion("A+X (slot0)", A + X, id_slot=0)
