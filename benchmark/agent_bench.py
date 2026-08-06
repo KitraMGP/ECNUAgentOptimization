@@ -67,7 +67,7 @@ def find_server_gpu_mb(pid):
         pynvml.nvmlInit()
         for i in range(pynvml.nvmlDeviceGetCount()):
             h = pynvml.nvmlDeviceGetHandleByIndex(i)
-            for proc in nvml.nvmlDeviceGetComputeRunningProcesses(h):
+            for proc in pynvml.nvmlDeviceGetComputeRunningProcesses(h):
                 if proc.pid == pid:
                     return round(proc.usedGpuMemory / 1024 / 1024, 1)
     except Exception:

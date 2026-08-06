@@ -39,8 +39,8 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40   # 长生命
 
 ## Conventions
 
-- **沙盒内禁止自动运行 llama-server / benchmark**：当前开发沙盒无 NVIDIA 驱动（无法调用 GPU），且跑 benchmark 耗时极长。需要运行验证时，给出确切命令让用户亲手执行，不要自己启动 server 或跑脚本。
-- **GPU 显存采样仅宿主机有效**：容器内 pynvml 报 `NVMLError_DriverNotLoaded`，`peak_gpu_mb` 返回 null 属正常降级，不是 bug；别据此判定脚本异常。
+- **可自主运行 server / benchmark**：GPU 已直通（RTX 4060 可用），允许 agent 自主启动 llama-server（build-cuda 版）并运行 benchmark 采集基线。约束：启动前先 `pgrep -af llama-server` 确认无残留实例/端口空闲；`all` 场景用 `--ctx-size 8192`，`long_life` 场景用 `--ctx-size 2048`（脚本传 `--ctx-size 2048`）；跑完清理自己启动的 server 进程（勿误杀用户进程）。
+- **GPU 显存采样**：pynvml 按 PID 采样（`peak_gpu_mb`）；采样不到时为 null，需检查进程是否匹配（`ss -ltnp` 端口过滤）。
 - **实验结果归档**：正式结果移入 `benchmark/baseline/` 并改可读文件名；`results/` 只留临时输出（.gitignore 已忽略）。
 - **git**：`llama.cpp/` 独立仓库不纳入根仓库；`models/*.gguf`、`build*/`、`.venv/` 不入库；根仓库提交需用户授权（用户常要求"先不要提交"）。
 - **commit message 格式**：标题 `<feat|fix|chore|docs|refactor，可多个用 & 连接如 feat&fix>: <摘要>`，空一行后分点（`- ` 开头）详细描述改动内容。
