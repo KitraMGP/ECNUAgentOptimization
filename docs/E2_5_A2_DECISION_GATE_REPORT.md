@@ -318,6 +318,8 @@ A2 自身的路由判定（需越界修复），符合 REJECT 的"持续变慢 +
 - 修改：`docs/E2_4_LONG_BRANCH_RAM_CACHE_VALIDATION_REPORT.md`（第 11 节
   独立性声明修正）；
 - llama.cpp：本阶段无源码修改（`2f851c4b4` 保持），不建空提交；
+- 根仓库提交：`0ac0e14`（docs: complete A2 branch pressure decision gate，
+  8 文件 +1506 行）；提交后两仓库 `git status --short` 均为空；
 - 测试：根 100 passed；llama.cpp test_slot_routing 10/10、E1 5/5；
 - 实际执行命令摘要：`e2_scan_e25.py --pairs 5`（off/pressure）、
   `--ram default/unified` smoke、`e25_summarize.py`、`e25_make_manifest.py`、
