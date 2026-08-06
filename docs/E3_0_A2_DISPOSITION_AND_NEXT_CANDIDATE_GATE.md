@@ -256,6 +256,5 @@ lifecycle/生命周期/淘汰/回收/compression/分层）。
   `--help` 参数确认、E2.5 manifest/summary/paired 复核、`rg` 路线图搜索；
 - 测试：本阶段无代码变更，无新测试；E2.5 测试状态（根 100 passed、
   llama.cpp 10/10 + E1 5/5）作为基线继续有效；
-- 根仓库提交：`docs: close A2 and gate the next optimization candidate`
-  （本报告，hash 见最终汇报）；
-- 提交后两仓库 `git status --short` 均为空。
+- 根仓库提交：`3f6867c`（docs: close A2 and gate the next optimization
+  candidate，1 文件 +261 行）；提交后两仓库 `git status --short` 均为空。
