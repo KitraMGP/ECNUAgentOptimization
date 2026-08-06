@@ -52,13 +52,41 @@ class Runner:
             enable_thinking=config.enable_thinking,
             timings_per_token=config.timings_per_token,
         )
+        self._last_protocol: Optional[Dict[str, Any]] = None
 
     # ---- 单场景执行 ----
     def _run_once(self, workload: Workload, spec) -> Dict[str, Any]:
         return workload.run(self.driver, spec)
 
+    # ---- E2.0.5：replicate 协议 ----
+    def _protocol_clean(self, probe) -> Dict[str, Any]:
+        """independent 模式：清除所有 slot KV 并断言 /metrics/kv 清洁。
+
+        返回协议记录 dict：clean_verified / initial_used_cells / attempts / erased。
+        """
+        rec: Dict[str, Any] = {"clean_verified": False, "initial_used_cells": None,
+                               "attempts": 0, "erased": 0}
+        if self.config.kv_clean == "erase":
+            n_attempt, n_ok = probe.clean_all_slots()
+            rec["attempts"] = n_attempt
+            rec["erased"] = n_ok
+        state = probe.kv_state()
+        if state is not None:
+            rec["initial_used_cells"] = state.get("used_cells")
+            rec["clean_verified"] = (
+                state.get("used_cells") == 0 and state.get("active_sequences") == 0)
+        return rec
+
     def run_scenario(self, workload: Workload) -> Dict[str, Any]:
-        """执行一个场景（warmup + repeat），返回场景结果对象。"""
+        """执行一个场景（warmup + repeat），返回场景结果对象。
+
+        repeat 语义（E2.0.5 起区分两套协议）：
+        - replicate_mode=independent：每个正式 replicate 前清除 KV 并断言 used_cells=0 /
+          active_sequences=0；断言失败则该 replicate 标记 valid=False（数据保留，
+          但不计入独立统计聚合）；
+        - replicate_mode=soak：多个 cycle 共享 KV（记录初始 used_cells，不视为独立重复）；
+        - replicate_mode=auto：旧行为（repeat 共享 KV）。
+        """
         params = workload.params_from_config(self.config)
         spec = workload.generate(params)
         print(f"== {SCENARIO_TITLES.get(workload.name, workload.name)} "
@@ -69,31 +97,68 @@ class Runner:
 
         if probe is not None:
             probe.set_collecting(False)
-        # warmup：结果丢弃（不计入统计）
+        # warmup：结果丢弃（不计入统计）；KV 预热残留由协议层在下个 replicate 前清除
         for _ in range(self.config.warmup):
             self._run_once(workload, spec)
         if probe is not None:
             probe.set_collecting(True)
 
         runs = []
+        protocol: Dict[str, Any] = {"mode": self.config.replicate_mode}
+        if self.config.replicate_mode == "soak":
+            protocol["note"] = ("cycles share KV across repeats; "
+                                "initial_used_cells recorded per cycle; "
+                                "NOT independent replicates")
+        records = []
         for i in range(self.config.repeat):
+            rec: Dict[str, Any] = {"run_id": f"{workload.name}_{i}",
+                                   "cycle_id": i,
+                                   "independent": self.config.replicate_mode == "independent",
+                                   "clean_verified": None,
+                                   "initial_used_cells": None,
+                                   "valid": True}
+            if self.config.replicate_mode == "independent" and probe is not None:
+                rec.update(self._protocol_clean(probe))
+                rec["valid"] = bool(rec["clean_verified"])
+            elif self.config.replicate_mode == "soak" and probe is not None:
+                state = probe.kv_state()
+                rec["independent"] = False
+                if state is not None:
+                    rec["initial_used_cells"] = state.get("used_cells")
             if probe is not None:
-                probe.begin_run(f"{workload.name}_{i}")
+                probe.begin_run(rec["run_id"])
             runs.append(self._run_once(workload, spec))
             if probe is not None:
                 probe.end_run()
+            records.append(rec)
+        protocol["replicates"] = records
+        protocol["valid_count"] = sum(1 for r in records if r["valid"])
         if self.config.repeat == 1:
+            # 保持旧返回结构（兼容 run()/_build_summary 解包）
+            self._last_protocol = protocol
             return runs[0]
-        return {"runs": runs}
+        return {"runs": runs, "protocol": protocol}
 
     # ---- 汇总 ----
     def _build_summary(self, workload: Workload, result: Dict[str, Any]) -> Dict[str, Any]:
+        # E2.0.5：independent 协议下 clean 失败的 replicate（valid=False）不计入独立统计
+        protocol = result.get("protocol") if self.config.repeat > 1 else self._last_protocol
+        valid_indices: Optional[List[int]] = None
+        if protocol and protocol.get("mode") == "independent" and self.config.repeat > 1:
+            valid_indices = [i for i, r in enumerate(protocol.get("replicates", []))
+                             if r.get("valid")]
+            if len(valid_indices) != self.config.repeat:
+                print(f"  [WARNING] {workload.name}: {self.config.repeat - len(valid_indices)} "
+                      f"replicate(s) 未通过 KV 清洁断言，已从独立统计中排除 "
+                      f"(valid={len(valid_indices)}/{self.config.repeat})")
         if self.config.repeat == 1:
             rows = workload.rows_for_summary(result)
             summary = summarize(rows)
         else:
+            runs = result["runs"]
+            chosen = runs if valid_indices is None else [runs[i] for i in valid_indices]
             run_summaries = [
-                summarize(workload.rows_for_summary(r)) for r in result["runs"]
+                summarize(workload.rows_for_summary(r)) for r in chosen
             ]
             summary = self._aggregate_summaries(run_summaries)
         # 任务判据（evaluate）：repeat>1 时对每个 run 分别判定并聚合数值键
@@ -101,7 +166,9 @@ class Runner:
         if self.config.repeat == 1:
             summary["evaluation"] = workload.evaluate(result, spec)
         else:
-            evals = [workload.evaluate(r, spec) for r in result["runs"]]
+            runs = result["runs"]
+            chosen = runs if valid_indices is None else [runs[i] for i in valid_indices]
+            evals = [workload.evaluate(r, spec) for r in chosen]
             summary["evaluation"] = self._aggregate_evaluations(evals)
         # long_life 旧字段：task_success / cached_tokens_total / truncations（顶层，保持旧格式）
         if workload.name == "long_life":
@@ -160,6 +227,7 @@ class Runner:
     # ---- 主流程 ----
     def run(self) -> Dict[str, Any]:
         results, summary = {}, {}
+        protocols: Dict[str, Any] = {}
         for workload in select_workloads(self.config.scenario):
             result = self.run_scenario(workload)
             if self.config.repeat == 1:
@@ -167,7 +235,16 @@ class Runner:
             else:
                 results[workload.name] = result
             summary[workload.name] = self._build_summary(workload, result)
-        return {"config": self.config.to_dict(), "summary": summary, "scenarios": results}
+            if self.config.repeat > 1:
+                protocols[workload.name] = result.get("protocol")
+            elif self._last_protocol is not None:
+                protocols[workload.name] = self._last_protocol
+        out: Dict[str, Any] = {"config": self.config.to_dict(),
+                               "summary": summary, "scenarios": results}
+        # 仅显式协议（independent/soak）或 repeat>1 时挂载 protocol；auto+repeat=1 保持旧结构
+        if protocols and (self.config.replicate_mode != "auto" or self.config.repeat > 1):
+            out["protocol"] = protocols
+        return out
 
     # ---- 落盘 ----
     def save(self, result: Dict[str, Any]) -> str:
@@ -213,6 +290,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
                     help="E1：启用 /metrics/kv 快照采集（请求前后 + 开始/结束）")
     ap.add_argument("--kv-probe-interval", type=float, default=None,
                     help="E1：KV 周期采样间隔秒（0 = 不周期采样，默认）")
+    ap.add_argument("--replicate-mode", choices=["auto", "independent", "soak"], default=None,
+                    help="E2.0.5：repeat 协议（independent=每 replicate 前清 KV 并断言清洁；"
+                         "soak=cycle 共享 KV 记录初始 used_cells；auto=旧行为）")
+    ap.add_argument("--kv-clean", choices=["erase", "none"], default=None,
+                    help="E2.0.5：independent 模式 KV 清洁方式（erase=POST /slots/{id}?action=erase）")
     return ap
 
 
@@ -234,6 +316,7 @@ def cli_main(argv: Optional[List[str]] = None) -> int:
         "timings_per_token": args.timings_per_token,
         "model_path": args.model_path, "parallel": args.parallel,
         "kv_probe_enabled": args.kv_probe, "kv_probe_interval": args.kv_probe_interval,
+        "replicate_mode": args.replicate_mode, "kv_clean": args.kv_clean,
     }
     config = config.merge_cli(cli_vals)
 

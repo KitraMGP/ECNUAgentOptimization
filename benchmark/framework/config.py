@@ -55,6 +55,12 @@ class BenchmarkConfig:
     timings_per_token: bool = False     # 请求 timings_per_token（旧脚本未开启）
     kv_probe_enabled: bool = False      # E1：启用 /metrics/kv 快照采集（默认关，不改变现有行为）
     kv_probe_interval: float = 0.0      # E1：KV 周期采样间隔秒（0 = 不周期采样，仅请求前后快照）
+    # ---- E2.0.5：replicate 协议 ----
+    # auto = 旧行为（repeat 共享 KV，不保证独立）；
+    # independent = 每个正式 replicate 前清除所有 slot KV 并断言清洁（不清洁则标记 invalid，不计入独立统计）；
+    # soak = 多个 cycle 共享 KV（记录 cycle_id 与初始 used_cells，不视为独立重复）
+    replicate_mode: str = "auto"
+    kv_clean: str = "erase"             # independent 模式清洁方式：erase（/slots/{id}?action=erase）
     extra: Dict[str, Any] = field(default_factory=dict)   # 保留未知配置键（向前兼容）
 
     # ---- 构造与校验 ----

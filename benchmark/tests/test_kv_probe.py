@@ -20,7 +20,7 @@ def test_snapshot_parses_valid_json(mock_openai_server):
     d = s["data"]
     assert d["schema_version"] == 1
     assert d["capacity_cells"] == 1024
-    assert d["used_cells"] == 256
+    assert d["used_cells"] == 0  # mock 初始清洁（E2.0.5 状态化）
     assert d["physical_sharing"] is False
     assert probe.schema_version == 1
     assert probe.failures == 0
@@ -60,9 +60,9 @@ def test_missing_fields_do_not_crash(mock_openai_server):
     probe.snapshot(tag="a")
     # 模拟缺失字段：手动插入一个缺字段样本
     probe.samples.append({"ts": 1.0, "tag": "b", "data": {"schema_version": 1}})
-    assert probe.peak("used_cells") == 256
-    assert probe.first("used_cells") == 256
-    assert probe.last("used_cells") == 256
+    assert probe.peak("used_cells") == 0
+    assert probe.first("used_cells") == 0
+    assert probe.last("used_cells") == 0
     assert probe.peak("missing_field") is None
     assert probe.first("missing_field") is None
     assert probe.last("missing_field") is None
@@ -71,11 +71,11 @@ def test_missing_fields_do_not_crash(mock_openai_server):
 def test_peak_first_last_aggregation(mock_openai_server):
     base_url = f"http://127.0.0.1:{mock_openai_server.port}/v1"
     probe = KVProbe(base_url)
-    probe.snapshot(tag="start")  # used_cells=256
+    probe.snapshot(tag="start")  # used_cells=0（mock 初始清洁）
     # 模拟后续更大样本
     probe.samples.append({"ts": 2.0, "tag": "mid",
                           "data": {"used_cells": 512, "capacity_cells": 1024}})
-    assert probe.first("used_cells") == 256
+    assert probe.first("used_cells") == 0
     assert probe.peak("used_cells") == 512
     assert probe.last("used_cells") == 512
 

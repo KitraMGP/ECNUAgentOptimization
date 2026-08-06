@@ -13,9 +13,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Tuple
 
 _COUNTER = {"n": 0}
+# E2.0.5：可变的 KV 状态（completion 后 used_cells 增长，slot erase 后归 0）
+_KV = {"used_cells": 0, "active_sequences": 0, "erase_disabled": False}
 
 
 def _make_body(n: int) -> dict:
+    _KV["used_cells"] = 384
+    _KV["active_sequences"] = 1
     return {
         "id": f"chatcmpl-{n}",
         "object": "chat.completion",
@@ -46,11 +50,11 @@ class _Handler(BaseHTTPRequestHandler):
             body = {
                 "schema_version": 1,
                 "capacity_bytes": 104857600,
-                "used_bytes": 20971520,
+                "used_bytes": _KV["used_cells"] * 32768,
                 "used_bytes_valid": True,
                 "capacity_cells": 1024,
-                "used_cells": 256,
-                "active_sequences": 2,
+                "used_cells": _KV["used_cells"],
+                "active_sequences": _KV["active_sequences"],
                 "shared_cells": 0,
                 "physical_sharing": False,
                 "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)",
@@ -76,6 +80,23 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_POST(self):
+        # slot erase：/slots/{id}?action=erase → KV 归零
+        import re
+        m = re.match(r"/slots/(\d+)\?action=erase", self.path)
+        if m:
+            if _KV["erase_disabled"]:
+                self.send_response(501)
+                self.end_headers()
+                return
+            _KV["used_cells"] = 0
+            _KV["active_sequences"] = 0
+            data = json.dumps({"status": "ok"}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         length = int(self.headers.get("Content-Length", 0))
         self.rfile.read(length)
         _COUNTER["n"] += 1
@@ -103,6 +124,10 @@ class MockOpenAIServer:
         return self.httpd.server_address[1]
 
     def __enter__(self) -> "MockOpenAIServer":
+        # 每个实例独立 KV 状态（避免跨测试累积）
+        _KV["used_cells"] = 0
+        _KV["active_sequences"] = 0
+        _KV["erase_disabled"] = False
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
         self._thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self._thread.start()

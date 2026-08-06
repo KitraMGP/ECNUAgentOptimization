@@ -208,6 +208,11 @@
 
 **ABBA 可复现性**：cr=0 两次逐字段一致、cr=256 两次逐字段一致 → **无环境漂移，数据可信**。
 
+> ⚠️ **E2.0.5 修正**：上表为"auto 协议"（repeat 共享 KV，warmup 残留）数值；独立协议
+> （每 replicate 前清 KV 并断言）修正后 multi_turn hit=0.8529（−5.5pp）、
+> long_life hit=0.7114（见 `docs/E2_FEASIBILITY_AND_EVALUATION_GATE_REPORT.md` 第 3 节）。
+> B0≈B1 的结论在两种协议下均成立。
+
 **结论**：multi_turn（纯前缀式重复 prompt）下 cache-reuse ∈ {0,128,256} 对命中率/重算/KV 曲线**无任何影响**，仅延迟有 ~1.5% 级差异（cr=256 略优）。原因：`get_common_prefix` 已覆盖全部前缀命中，chunk-shifting 无额外可复用块。
 
 ### 6.3 long_life（rounds=12，含工具调用，ctx=2048, parallel=1）
@@ -309,7 +314,7 @@
 | truncations | 0 | **1.0/run**（round 8 prompt 1726 触发） |
 | 400 fallback / 请求失败 | 0 | 0 |
 
-- long_life 12 轮下 Qwen3.5-4B **无法保持 secret**（state_retention_rate=0）：这是模型能力限制（E0.6 已记录 4B 指令遵循/长程记忆弱），**非缓存策略引入**；
+- long_life 12 轮下 Qwen3.5-4B `state_retention_rate=0`：**根因是 workload 应用层截断**（`keep_msgs=6` + `threshold=ctx-300`，ctx=2048 时第 8 轮后丢弃含 secret 的早期消息），**非模型能力、非 evaluator 解析**——E2.0.5 诊断证实：ctx=8192（无截断）或 rounds=4（短会话）下 retention=1.0（模型正确回答 "9527"），evaluator 正负样本测试 5/5 有完全区分度（详见 `docs/E2_FEASIBILITY_AND_EVALUATION_GATE_REPORT.md` 第 6-7 节）；
 - truncations=1 是 ctx 压力下 slot 截断（round 8）——**当前生命周期行为影响任务输入的信号**；
 - **E2.1 保真基线**：以 state_retention_rate 作为主保真指标，但需先解决"4B 无法通过 12 轮 long_life"的区分度问题（方案见第 15 节，如降低轮数/简化 secret 注入位置）。
 
@@ -362,7 +367,7 @@
 
 ## 14. 失败风险与未决问题
 
-1. **evaluator 区分度**（阻断性）：4B 真实模型 long_life 12 轮 state_retention_rate=0、truncations=1 → 无法作为 E2.1 保真判据，需先调整（轮数/secret 注入/评估窗口）；
+1. **evaluator 区分度**（已解决）：4B 真实模型 long_life 12 轮 state_retention_rate=0 的根因定位为**应用层截断**（ctx=2048 下 `keep_msgs=6` 截断丢弃 secret 消息），非模型能力；ctx=8192/短会话下 retention=1.0；evaluator 正负样本测试 5/5（详见 E2_FEASIBILITY 报告第 6-7 节）；
 2. **基线等价性**：B0/B1 在本 workload 上行为等价 → E2.1 与"cache-reuse 协同"假设（H7）可能无观测空间，需构造能分离两者的 workload（前缀中断且尾部可复用）；
 3. **KV 跨 run 累积**：run 间不独立（warmup 残留），跨配置对比必须重启 server（已遵守）；E2.1 实验需固定此口径；
 4. **宽回归缺口**：llama.cpp 完整 pytest 因模型下载基础设施未执行（已记录，非代码问题）；
@@ -402,7 +407,7 @@
 
 ## 附注：执行记录
 
-- 本阶段执行顺序：只读核对 → 回归 → 扫描 → 报告。git 提交状态：根仓库 `d946ddf`（docs: E2.0 设计报告）；llama.cpp 仓库本阶段无改动（干净）。实验产物仅写入 `benchmark/results/e20/`（临时，不入库）；临时脚本位于 `llama.cpp/tmp/`（git 忽略）。
+- 本阶段执行顺序：只读核对 → 回归 → 扫描 → 报告。git 提交状态：**E2.0 已由根仓库 commit `d946ddf` 保存**（随后 `4bb2275` 更新提交状态说明）；llama.cpp 仓库本阶段无改动（干净）。实验产物仅写入 `benchmark/results/e20/`（临时，不入库）；临时脚本位于 `llama.cpp/tmp/`（git 忽略）。
 - 实际执行命令摘要：
   - `cmake -B build-cuda -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=89` + `ninja build-cuda llama-server`（E1 HEAD 重建 binary）
   - `python3 tmp/run_e1_manual.py`（test_metrics_kv 5/5）

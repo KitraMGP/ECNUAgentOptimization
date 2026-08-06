@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib import request
 
 # endpoint 返回的兼容 schema 版本（E1 契约）
@@ -90,6 +90,58 @@ class KVProbe:
         except Exception as e:
             self.last_error = f"{type(e).__name__}: {e}"
             return None
+
+    # ---- E2.0.5：KV 清洁断言 / slot erase（independent replicate 协议） ----
+    def kv_state(self) -> Optional[Dict[str, Any]]:
+        """同步读取当前 KV 状态（无采集副作用），供清洁断言使用。
+
+        返回 /metrics/kv 原始 dict；endpoint 不可用时返回 None（last_error 更新）。
+        """
+        if not self.enabled:
+            return None
+        return self._fetch()
+
+    def list_slots(self) -> List[Dict[str, Any]]:
+        """GET /slots 返回 slot 列表；失败返回空列表。"""
+        root = self._kv_url.rsplit("/metrics/kv", 1)[0]
+        url = f"{root}/slots"
+        try:
+            with request.urlopen(url, timeout=3.0) as resp:
+                if resp.status != 200:
+                    return []
+                body = json.loads(resp.read().decode("utf-8"))
+                return body if isinstance(body, list) else []
+        except Exception:
+            return []
+
+    def erase_slot(self, slot_id: int) -> bool:
+        """POST /slots/{id}?action=erase 清空指定 slot 的 KV。
+
+        需要 server 启用 slot erase（--slot-save-path）；不支持时返回 False。
+        """
+        root = self._kv_url.rsplit("/metrics/kv", 1)[0]
+        url = f"{root}/slots/{slot_id}?action=erase"
+        try:
+            req = request.Request(url, method="POST")
+            with request.urlopen(req, timeout=3.0) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+    def clean_all_slots(self) -> Tuple[int, int]:
+        """遍历 /slots 并 erase 所有 slot。
+
+        返回 (尝试清理数, 成功清理数)；/slots 不可用或全部失败时返回 (0, 0)。
+        """
+        slots = self.list_slots()
+        if not slots:
+            return (0, 0)
+        ok = 0
+        for s in slots:
+            sid = s.get("id")
+            if isinstance(sid, int) and self.erase_slot(sid):
+                ok += 1
+        return (len(slots), ok)
 
     # ---- 周期采样（低频后台线程） ----
     def start_periodic(self, interval: float) -> None:
