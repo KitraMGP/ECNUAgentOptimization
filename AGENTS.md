@@ -32,14 +32,22 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40   # 长生命
 
 ## Architecture
 
-- `benchmark/agent_bench.py`：三场景（多轮对话/工具调用/分支推理）+ `long_life` 长生命周期场景；OpenAI 兼容 API；psutil 采样 RSS、pynvml 采样 GPU 显存；`chat()` 内置 400 兜底（超 ctx 自动丢最早消息重试）。
+- `benchmark/agent_bench.py`：兼容入口（E0 重构后为薄壳，委托 `runner.cli_main`；CLI 参数与输出格式向后兼容）。
+- `benchmark/framework/`：核心框架——`config.py`（JSON/YAML/dict 配置系统）、`driver.py`（OpenAI 兼容 API 封装，400 兜底 + timings 提取）、`sampler.py`（RSS/GPU 采样）、`workload.py`（Workload 抽象：`generate/run/evaluate` + 注册表）。
+- `benchmark/workload/`：四场景实现（multi_turn / tool_call / branch / long_life），导入即注册；结果结构与旧脚本一致（行内追加 `timings` 键）。
+- `benchmark/metrics/`：p50/p95/mean/std/cache_hit_rate/summarize（保留旧字段）。
+- `benchmark/runner/`：场景 × repeat × warmup 编排、结果落盘 `results/bench_<ts>.json`（`{config, summary, scenarios}`）。
+- `benchmark/report/`：markdown 实验报告。
+- `benchmark/configs/`：示例配置（example.json / example.yaml）。
+- `benchmark/tests/`：pytest（不依赖 GPU/真实 server，含 mock OpenAI server e2e 冒烟）。
 - `benchmark/baseline/`：正式基线归档（可读命名 `<模型>_<环境>_<场景>_<说明>.json`）；`benchmark/results/` 为运行期临时输出（不入库）。
 - `llama.cpp/`：上游框架（独立 git 仓库，根仓库不跟踪）；KV 优化改动在其中实施并内部提交。
 - `models/download_models.sh`：可复现模型拉取。
 
 ## Conventions
 
-- **沙盒内禁止自动运行 llama-server / benchmark**：当前开发沙盒无 NVIDIA 驱动（无法调用 GPU），且跑 benchmark 耗时极长。需要运行验证时，给出确切命令让用户亲手执行，不要自己启动 server 或跑脚本。
+- **运行 llama-server / benchmark 需用户明确授权**：沙盒历史上一度无 GPU 驱动，现已确认宿主机可访问 GPU（RTX 4060 8GB，驱动 610.43.03）；用户授权后可直接运行。注意耗时（all 场景约 5–10 分钟、long_life 40 轮约 10–20 分钟）与显存（4B 模型约占 3.2GB，8GB 卡需留意并行 slots 与 ctx 大小）。未经授权不要自动启动。
+- **pkill/pgrep -f 会匹配 bash 作业自身命令行**：`bash -c` 把整条命令文本（含启动 llama-server 的命令）放入进程 cmdline，`pkill -f "llama-server ..."` 或 `pgrep -af "build-cuda/bin/llama-server"` 会匹配到执行该命令的 bash 作业自身，导致"自杀"（把自己杀掉，新 server 也随之未启动；2026-08-06 bash-4 事故）。避免方法：① 杀进程用 `pkill -x llama-server`（精确进程名，不匹配命令行文本）；② 查询进程用 `pgrep -x llama-server`；③ "先杀 → 确认无残留 → 再单独启动"必须拆成独立命令/作业，绝不在同一 bash 命令行里既 pkill 又启动同一模式的服务。
 - **GPU 显存采样仅宿主机有效**：容器内 pynvml 报 `NVMLError_DriverNotLoaded`，`peak_gpu_mb` 返回 null 属正常降级，不是 bug；别据此判定脚本异常。
 - **实验结果归档**：正式结果移入 `benchmark/baseline/` 并改可读文件名；`results/` 只留临时输出（.gitignore 已忽略）。
 - **git**：`llama.cpp/` 独立仓库不纳入根仓库；`models/*.gguf`、`build*/`、`.venv/` 不入库；根仓库提交需用户授权（用户常要求"先不要提交"）。
@@ -49,4 +57,5 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40   # 长生命
 
 ## Notes
 
-（后续补充：阶段 2 优化实现细节、4B 正式基线数据、技术方案文档位置等）
+- E0（Benchmark 基础设施重构）已完成：`framework/ workload/ metrics/ runner/ report/ configs/` + 42 个 pytest（不依赖 GPU/server）；详见 `docs/E0_IMPLEMENTATION_REPORT.md`。
+- 阶段 1（llama.cpp 可观测性）、阶段 2（KV 优化）未开始；详见 `docs/benchmark_implementation_plan.md`。
