@@ -271,9 +271,11 @@ cache_n=20/21 全命中，而单 slot 覆盖时仅 10——**这是全部候选�
 
 ## 附注：执行记录
 
-- git 提交：本阶段完成后提交根仓库（报告/脚本/测试）；llama.cpp 无改动。
+- git 提交：根仓库 `c00e167`（docs: validate E2 lifecycle strategy feasibility）；
+  llama.cpp 本阶段无改动（干净）。
 - 实验产物：`benchmark/results/e205/`（独立基线 10 配置 + 候选 A probe +
-  text hashes + summary CSV/JSON）、`benchmark/results/e205_diag/`（保真诊断）；
+  text hashes + summary CSV/JSON）、`benchmark/results/e205_diag/`（保真诊断），
+  均被 git 忽略，不入库；
 - 脚本：`benchmark/scripts/e2_scan_independent.sh` / `e2_candidate_a_probe.py`
   / `e2_diag_retention.sh` / `e2_summarize.py`；
 - 测试：`benchmark/tests/test_replicate_protocol.py`（5 例）、
