@@ -64,11 +64,24 @@ class Runner:
         print(f"== {SCENARIO_TITLES.get(workload.name, workload.name)} "
               f"(params={params}) ==")
 
+        # KV probe（若启用）：warmup 阶段暂停采集，正式 run 打 run_id 边界
+        probe = getattr(self.driver, "kv_probe", None)
+
+        if probe is not None:
+            probe.set_collecting(False)
         # warmup：结果丢弃（不计入统计）
         for _ in range(self.config.warmup):
             self._run_once(workload, spec)
+        if probe is not None:
+            probe.set_collecting(True)
 
-        runs = [self._run_once(workload, spec) for _ in range(self.config.repeat)]
+        runs = []
+        for i in range(self.config.repeat):
+            if probe is not None:
+                probe.begin_run(f"{workload.name}_{i}")
+            runs.append(self._run_once(workload, spec))
+            if probe is not None:
+                probe.end_run()
         if self.config.repeat == 1:
             return runs[0]
         return {"runs": runs}

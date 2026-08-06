@@ -34,14 +34,32 @@ class KVProbe:
         self.schema_version: Optional[int] = None
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        # run 作用域（E1 收尾）：None = 全局快照（start/end/periodic 在 run 外时）；
+        # 具体 run_id 表示快照属于某次正式 run
+        self._run_id: Optional[str] = None
+        # 采集开关：warmup 阶段关闭，正式 run 开启（warmup 的 KV 快照不进入结果）
+        self._collecting = True
+
+    # ---- run 作用域 ----
+    def begin_run(self, run_id: str) -> None:
+        """进入正式 run 上下文；此后快照标记 run_id。"""
+        self._run_id = run_id
+
+    def end_run(self) -> None:
+        """离开 run 上下文（恢复全局快照语义）。"""
+        self._run_id = None
+
+    def set_collecting(self, collecting: bool) -> None:
+        """开关采集（False 用于 warmup 阶段，其 KV 快照不进入结果）。"""
+        self._collecting = collecting
 
     # ---- 单次快照 ----
     def snapshot(self, tag: str = "") -> Optional[Dict[str, Any]]:
-        """采集一次 KV 快照并记录；endpoint 不可用时降级并记录失败。
+        """采集一次 KV 快照并记录；endpoint 不可用或未在采集阶段时降级。
 
-        返回原始快照 dict（含 tag/ts/data），失败返回 None。
+        返回原始快照 dict（含 ts/tag/run_id/data），失败返回 None。
         """
-        if not self.enabled:
+        if not self.enabled or not self._collecting:
             return None
         ts = time.time()
         data = self._fetch()
@@ -50,7 +68,7 @@ class KVProbe:
             return None
         if self.schema_version is None:
             self.schema_version = data.get("schema_version")
-        sample = {"ts": round(ts, 3), "tag": tag, "data": data}
+        sample = {"ts": round(ts, 3), "tag": tag, "run_id": self._run_id, "data": data}
         self.samples.append(sample)
         return sample
 
@@ -99,25 +117,50 @@ class KVProbe:
             "enabled": self.enabled,
             "schema_version": self.schema_version,
             "samples": self.samples,
+            "runs": self.run_aggregate(),
             "failures": self.failures,
             "last_error": self.last_error,
         }
 
-    def peak(self, field: str) -> Optional[float]:
-        """samples 中某数值字段的峰值（无样本或非数值返回 None）。"""
-        vals = [s["data"].get(field) for s in self.samples
-                if isinstance(s.get("data"), dict)
-                and isinstance(s["data"].get(field), (int, float))]
+    def run_aggregate(self) -> Dict[str, Any]:
+        """按 run_id 聚合：每个正式 run 的 used_cells first/last/peak 与样本数。
+
+        run_id=None 的样本（start/end/periodic 全局快照）不计入 run 聚合。
+        """
+        runs: Dict[str, Dict[str, Any]] = {}
+        for s in self.samples:
+            rid = s.get("run_id")
+            if not rid:
+                continue
+            r = runs.setdefault(rid, {"samples": 0, "first_used_cells": None,
+                                      "last_used_cells": None, "peak_used_cells": None})
+            r["samples"] += 1
+            v = s["data"].get("used_cells") if isinstance(s.get("data"), dict) else None
+            if isinstance(v, (int, float)):
+                if r["first_used_cells"] is None:
+                    r["first_used_cells"] = v
+                r["last_used_cells"] = v
+                r["peak_used_cells"] = max(r["peak_used_cells"] or 0, v)
+        return runs
+
+    def _field_vals(self, field: str, run_id: Optional[str] = None) -> List[float]:
+        vals = []
+        for s in self.samples:
+            if run_id is not None and s.get("run_id") != run_id:
+                continue
+            if isinstance(s.get("data"), dict) and isinstance(s["data"].get(field), (int, float)):
+                vals.append(s["data"][field])
+        return vals
+
+    def peak(self, field: str, run_id: Optional[str] = None) -> Optional[float]:
+        """samples 中某数值字段的峰值（可按 run_id 过滤；无样本或非数值返回 None）。"""
+        vals = self._field_vals(field, run_id)
         return max(vals) if vals else None
 
-    def first(self, field: str) -> Optional[float]:
-        for s in self.samples:
-            if isinstance(s.get("data"), dict) and isinstance(s["data"].get(field), (int, float)):
-                return s["data"][field]
-        return None
+    def first(self, field: str, run_id: Optional[str] = None) -> Optional[float]:
+        vals = self._field_vals(field, run_id)
+        return vals[0] if vals else None
 
-    def last(self, field: str) -> Optional[float]:
-        for s in reversed(self.samples):
-            if isinstance(s.get("data"), dict) and isinstance(s["data"].get(field), (int, float)):
-                return s["data"][field]
-        return None
+    def last(self, field: str, run_id: Optional[str] = None) -> Optional[float]:
+        vals = self._field_vals(field, run_id)
+        return vals[-1] if vals else None
