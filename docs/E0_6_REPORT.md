@@ -109,4 +109,4 @@ long_life repeat=3（warmup 1 次不计入）：
 
 E0.6 全部目标达成：实验现在具备 **warmup 预热、repeat 重复、mean/std/p50/p95 统计、完整 metadata（模型哈希/llama.cpp commit/GPU）、ctx-size 语义告警**，以及 long_life 的 **state_retention_rate** 主指标。可进入下一阶段（E1：KV Cache 生命周期管理评测；E0.6 的 metadata 与统计机制可直接支撑正式实验的 warmup≥1、repeat≥5、同硬件复现要求）。
 
-未提交 git（等待人工确认）。
+已提交 git（根仓库 commit `b7e1d75`，含 E0.6 可靠性增强与 E0.5 driver 兜底修复）。
