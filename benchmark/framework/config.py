@@ -53,6 +53,8 @@ class BenchmarkConfig:
     # ---- driver ----
     enable_thinking: bool = False       # 固定 no-think，保证可比（旧脚本固定 False）
     timings_per_token: bool = False     # 请求 timings_per_token（旧脚本未开启）
+    kv_probe_enabled: bool = False      # E1：启用 /metrics/kv 快照采集（默认关，不改变现有行为）
+    kv_probe_interval: float = 0.0      # E1：KV 周期采样间隔秒（0 = 不周期采样，仅请求前后快照）
     extra: Dict[str, Any] = field(default_factory=dict)   # 保留未知配置键（向前兼容）
 
     # ---- 构造与校验 ----

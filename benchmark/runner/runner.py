@@ -196,6 +196,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
                     help="生成 markdown 实验报告到指定路径")
     ap.add_argument("--timings-per-token", action="store_true", default=None,
                     help="请求 timings_per_token（llama-server 扩展字段）")
+    ap.add_argument("--kv-probe", action="store_true", default=None,
+                    help="E1：启用 /metrics/kv 快照采集（请求前后 + 开始/结束）")
+    ap.add_argument("--kv-probe-interval", type=float, default=None,
+                    help="E1：KV 周期采样间隔秒（0 = 不周期采样，默认）")
     return ap
 
 
@@ -216,11 +220,35 @@ def cli_main(argv: Optional[List[str]] = None) -> int:
         "output_dir": args.output_dir, "report_path": args.report,
         "timings_per_token": args.timings_per_token,
         "model_path": args.model_path, "parallel": args.parallel,
+        "kv_probe_enabled": args.kv_probe, "kv_probe_interval": args.kv_probe_interval,
     }
     config = config.merge_cli(cli_vals)
 
-    runner = Runner(config)
+    # E1：KV probe（可选，endpoint 不可用时自动降级，不阻塞实验）
+    probe = None
+    if config.kv_probe_enabled:
+        from framework.kv_probe import KVProbe
+        probe = KVProbe(config.base_url)
+        probe.snapshot(tag="start")
+        probe.start_periodic(config.kv_probe_interval)
+        driver = Driver(
+            base_url=config.base_url,
+            model=config.model,
+            host=config.host,
+            port=config.port,
+            enable_thinking=config.enable_thinking,
+            timings_per_token=config.timings_per_token,
+            kv_probe=probe,
+        )
+        runner = Runner(config, driver=driver)
+    else:
+        runner = Runner(config)
+
     result = runner.run()
+    if probe is not None:
+        probe.snapshot(tag="end")
+        probe.stop()
+        result["kv_observations"] = probe.to_dict()
     # E0.6：实验 metadata（模型哈希 / llama.cpp commit / GPU / ctx 语义检查）
     from framework.metadata import collect_metadata, probe_server
     server_info = probe_server(config.base_url)

@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 from openai import OpenAI
 
 from . import sampler
+from .kv_probe import KVProbe
 
 
 class Driver:
@@ -32,19 +33,29 @@ class Driver:
         enable_thinking: bool = False,
         timings_per_token: bool = False,
         max_retry: int = 3,
+        kv_probe: Optional[KVProbe] = None,
     ) -> None:
-        """封装 OpenAI 兼容客户端；建连时定位 server PID（按端口过滤）。"""
+        """封装 OpenAI 兼容客户端；建连时定位 server PID（按端口过滤）。
+
+        ``kv_probe`` 可选：非 None 时在每次请求前后各采集一次 KV 快照
+        （E1 可观测性，职责与进程采样分离）。
+        """
         self.base_url = base_url
         self.model = model
         self.enable_thinking = enable_thinking
         self.timings_per_token = timings_per_token
         self.max_retry = max_retry
+        self.kv_probe = kv_probe
+        self._req_count = 0
         self.client = OpenAI(base_url=base_url, api_key=api_key)
         sampler.set_server_pid(sampler.find_server_pid(host, port))
 
     # ---- 请求 ----
     def chat(self, messages: List[dict], _retry: int = 0) -> Dict[str, Any]:
         """调用 chat.completions 并记录指标；返回行与旧脚本一致并追加 timings。"""
+        if self.kv_probe is not None:
+            self._req_count += 1
+            self.kv_probe.snapshot(tag=f"req_{self._req_count}_start")
         try:
             t0 = time.perf_counter()
             resp = self.client.chat.completions.create(
@@ -56,7 +67,7 @@ class Driver:
             u = resp.usage
             ptd = getattr(u, "prompt_tokens_details", None)
             cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
-            return {
+            row = {
                 "text": resp.choices[0].message.content or "",
                 "prompt_tokens": u.prompt_tokens,
                 "completion_tokens": u.completion_tokens,
@@ -67,6 +78,9 @@ class Driver:
                 "gpu_mb": sampler.find_server_gpu_mb(sampler.get_server_pid()),
                 "timings": self._extract_timings(resp),
             }
+            if self.kv_probe is not None:
+                self.kv_probe.snapshot(tag=f"req_{self._req_count}_end")
+            return row
         except Exception as e:
             # 400: 请求超出 ctx —— 兜底：丢弃最早的非 system 消息后重试
             if (

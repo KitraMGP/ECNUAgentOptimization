@@ -42,7 +42,20 @@ def _make_body(n: int) -> dict:
 
 class _Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path.startswith("/props"):
+        if self.path.startswith("/metrics/kv"):
+            body = {
+                "schema_version": 1,
+                "capacity_bytes": 104857600,
+                "used_bytes": 20971520,
+                "used_bytes_valid": True,
+                "capacity_cells": 1024,
+                "used_cells": 256,
+                "active_sequences": 2,
+                "shared_cells": 0,
+                "physical_sharing": False,
+                "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)",
+            }
+        elif self.path.startswith("/props"):
             body = {
                 "model_path": "models/mock-model.gguf",
                 "total_slots": 4,
