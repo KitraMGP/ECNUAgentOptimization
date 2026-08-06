@@ -273,8 +273,8 @@ pressure 事件 + purge 恢复 + oracle 充分性 + active 保护 + non-unified
   `benchmark/scripts/e31_summarize.py`、`benchmark/tests/test_e31_probe.py`、
   `docs/E3_1_A1_A4_UNIFIED_LIFECYCLE_FEASIBILITY_REPORT.md`；
 - llama.cpp：本阶段无改动（`2f851c4b4` 保持）；
-- 根仓库提交：`docs: gate unified idle sequence lifecycle candidate`
-  （hash 见最终汇报）；提交后两仓库 `git status --short` 均为空；
+- 根仓库提交：`063f0b6`（docs: gate unified idle sequence lifecycle
+  candidate，4 文件 +781 行）；提交后两仓库 `git status --short` 均为空；
 - 实际执行命令摘要：`e31_unified_pressure_probe.py`（4 场景）、
   `e31_summarize.py`、`uv run pytest -q`（107 passed）、
   `pytest unit/test_slot_routing.py --noconftest`（10/10）、
