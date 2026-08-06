@@ -21,7 +21,7 @@
 
 ## 2. 修改文件
 
-### llama.cpp（独立仓库，改动未提交）
+### llama.cpp（独立仓库，已提交 commit `b69773a1e`）
 | 文件 | 改动 |
 |---|---|
 | `include/llama.h` | 新增 `struct llama_kv_stats` + `llama_memory_get_kv_stats()` 公开 API |
@@ -148,6 +148,38 @@ LLAMA_API bool llama_memory_get_kv_stats(llama_memory_t mem, struct llama_kv_sta
 | ctx 语义 warning | `--parallel 2` 平分总 ctx（2048→1024 slot），warning 正常输出并记入 metadata |
 
 **工作负载行为不变**：multi_turn 3 轮与 E0.6 行为一致（token/延迟/cached 字段语义未变），验证 `--kv-probe` 不影响 workload 结果。
+
+### 9.1 复现与验证命令（供独立复现）
+
+```bash
+# 1) 编译（llama.cpp/ 内；CPU 或 GPU 二选一）
+cmake -B build -DGGML_CUDA=OFF -G Ninja && cmake --build build -j16 --target llama-server        # CPU
+cmake -B build-cuda -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=89 -G Ninja \
+  && cmake --build build-cuda -j16 --target llama-server                                          # GPU
+
+# 2) 启动 server（GPU 正式；--parallel 会平分总 ctx，触发 ctx 语义检查）
+./llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
+  --host 127.0.0.1 --port 8080 -ngl 99 -c 2048 --parallel 2
+
+# 3) 验证 endpoint（空 cache / 请求前后 / 多 sequence / 只读性）
+curl -s http://127.0.0.1:8080/metrics/kv | python3 -m json.tool
+curl -s http://127.0.0.1:8080/completion -d '{"prompt":"The capital of France is","n_predict":8,"temperature":0,"id_slot":0}'
+curl -s http://127.0.0.1:8080/completion -d '{"prompt":"The capital of Japan is","n_predict":8,"temperature":0,"id_slot":1}'
+curl -s http://127.0.0.1:8080/metrics/kv   # 期望 active_sequences=2
+
+# 4) Benchmark 自动采集（benchmark/ 内；--kv-probe 启用 KV 快照）
+cd benchmark && uv sync
+uv run python agent_bench.py --scenario multi_turn --rounds 3 --ctx-size 2048 \
+  --kv-probe --kv-probe-interval 0.5
+# 结果 JSON 顶层含 kv_observations（samples/failures/schema_version）
+
+# 5) Python 单元测试（无 GPU/真实模型依赖，mock server 提供 /metrics/kv）
+uv run pytest -q          # 68 passed
+
+# 6) llama.cpp server 集成测试（需 tinyllama 模型，由 CI 或本地模型环境执行）
+#    （llama.cpp/ 内，tools/server/tests/unit 的现有 pytest 框架）
+python -m pytest tools/server/tests/unit/test_metrics_kv.py
+```
 
 ## 10. 与 E0.6 的兼容性
 
