@@ -38,6 +38,8 @@ def _scenario_table(name: str, summary: Dict[str, Any]) -> str:
         f"| cached_tokens | {_fmt(summary.get('cached_tokens'))} |",
         f"| cache_hit_rate | {_fmt(summary.get('cache_hit_rate'))} |",
         f"| recompute_tokens | {_fmt(summary.get('recompute_tokens'))} |",
+        f"| throughput_tps | {_fmt(summary.get('throughput_tps'))} |",
+        f"| decode_tps | {_fmt(summary.get('decode_tps'))} |",
         f"| avg_latency_ms | {_fmt(summary.get('avg_latency_ms'))} |",
         f"| p50_latency_ms | {_fmt(summary.get('p50_latency_ms'))} |",
         f"| p95_latency_ms | {_fmt(summary.get('p95_latency_ms'))} |",
@@ -81,11 +83,52 @@ def generate_markdown_report(result: Dict[str, Any],
     ]
     for name, sm in summary.items():
         lines.append(_scenario_table(name, sm))
+    if result.get("metadata"):
+        lines.append("## 3. 实验 metadata")
+        lines.append("")
+        lines.append(_metadata_table(result["metadata"]))
+        lines.append("")
     if baseline is not None:  # pragma: no cover — E0 预留
-        lines.append("## 3. Baseline 对比（预留）")
+        lines.append("## 4. Baseline 对比（预留）")
         lines.append("_对比功能将在后续阶段实现（--compare）。_")
         lines.append("")
     return "\n".join(lines)
+
+
+def _metadata_table(meta: Dict[str, Any]) -> str:
+    """metadata 展示：model / llama.cpp / gpu / server / experiment / warnings。"""
+    rows: list[str] = []
+    model = meta.get("model") or {}
+    llama = meta.get("llama.cpp") or {}
+    gpu = meta.get("gpu") or {}
+    server = meta.get("server") or {}
+    exp = meta.get("experiment") or {}
+    entries = [
+        ("模型路径", model.get("path")),
+        ("模型 sha256", (model.get("sha256") or "-")[:16] + "…" if model.get("sha256") else "-"),
+        ("模型大小 (MB)", round(model["size_bytes"] / 1048576, 1) if model.get("size_bytes") else "-"),
+        ("llama.cpp commit", llama.get("commit")),
+        ("llama.cpp dirty", llama.get("dirty")),
+        ("build_info", llama.get("build_info")),
+        ("GPU", gpu.get("name")),
+        ("GPU 显存 (MB)", gpu.get("memory_total_mb")),
+        ("GPU 驱动", gpu.get("driver_version")),
+        ("server base_url", server.get("base_url")),
+        ("server total_slots (parallel)", server.get("total_slots")),
+        ("server slot n_ctx", server.get("slot_n_ctx")),
+        ("配置 ctx_size", server.get("ctx_size_config")),
+        ("temperature", exp.get("temperature")),
+        ("seed", exp.get("seed")),
+        ("repeat", exp.get("repeat")),
+        ("warmup", exp.get("warmup")),
+    ]
+    for k, v in entries:
+        rows.append(f"| {k} | {_fmt(v)} |")
+    warnings = meta.get("warnings") or []
+    if warnings:
+        for w in warnings:
+            rows.append(f"| ⚠️ warning | {w} |")
+    return "| 项 | 值 |\n|---|---|\n" + "\n".join(rows)
 
 
 def write_report(path: str, result: Dict[str, Any],

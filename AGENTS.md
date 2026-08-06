@@ -50,7 +50,7 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40   # 长生命
 - **pkill/pgrep -f 会匹配 bash 作业自身命令行**：`bash -c` 把整条命令文本（含启动 llama-server 的命令）放入进程 cmdline，`pkill -f "llama-server ..."` 或 `pgrep -af "build-cuda/bin/llama-server"` 会匹配到执行该命令的 bash 作业自身，导致"自杀"（把自己杀掉，新 server 也随之未启动；2026-08-06 bash-4 事故）。避免方法：① 杀进程用 `pkill -x llama-server`（精确进程名，不匹配命令行文本）；② 查询进程用 `pgrep -x llama-server`；③ "先杀 → 确认无残留 → 再单独启动"必须拆成独立命令/作业，绝不在同一 bash 命令行里既 pkill 又启动同一模式的服务。
 - **GPU 显存采样仅宿主机有效**：容器内 pynvml 报 `NVMLError_DriverNotLoaded`，`peak_gpu_mb` 返回 null 属正常降级，不是 bug；别据此判定脚本异常。
 - **实验结果归档**：正式结果移入 `benchmark/baseline/` 并改可读文件名；`results/` 只留临时输出（.gitignore 已忽略）。
-- **git**：`llama.cpp/` 独立仓库不纳入根仓库；`models/*.gguf`、`build*/`、`.venv/` 不入库；根仓库提交需用户授权（用户常要求"先不要提交"）。
+- **git**：`llama.cpp/` 独立仓库不纳入根仓库；`models/*.gguf`、`build*/`、`.venv/` 不入库；根仓库提交需用户授权（用户当前会主动要求提交：授权后执行提交，并同步更新相关文档中的 git 提交状态说明；未经授权不提交）。
 - **commit message 格式**：标题 `<feat|fix|chore|docs|refactor，可多个用 & 连接如 feat&fix>: <摘要>`，空一行后分点（`- ` 开头）详细描述改动内容。
 - **模型能力限制**：Qwen3.5-0.8B 指令遵循不稳定（工具参数可能填错）；默认 `--no-think`/`enable_thinking:false` 防思考循环。
 - **AGENTS.md 必须及时更新**：当命令、目录结构、约定或架构发生变化时，本文件应在该变更落地后立即同步更新，保持准确——这是每个 agent 与协作者的职责，不要等到项目结束时才补。

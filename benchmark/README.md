@@ -79,6 +79,10 @@ uv run python agent_bench.py --config configs/example.json \
 | `--warmup` | 0 | 预热轮数（不计入统计） |
 | `--seed` | 42 | 确定性种子（配合 temperature=0） |
 | `--temperature` | 0.0 | 推理温度（正式实验默认 0） |
+| `--repeat N` | 1 | 正式重复 N 次；>1 时 summary 数值键聚合为 mean/std/p50/p95，evaluation 判据（如 state_retention_rate）跨 run 取均值 |
+| `--warmup N` | 0 | 预热 N 次场景运行（不计入统计） |
+| `--model-path PATH` | 自动探测 | GGUF 模型文件路径（用于哈希；空则从 server `/props` 探测） |
+| `--parallel N` | 自动探测 | server 并行 slot 数（与 `--ctx-size` 平分语义相关，用于 ctx 检查） |
 | `--report PATH` | 无 | 生成 markdown 实验报告 |
 | `--ctx-size` | 2048 | 需与 llama-server `--ctx-size` 一致（long_life 场景触发 KV 回收） |
 
@@ -101,6 +105,23 @@ uv run pytest -q        # 42 个用例：config/driver/metrics/workloads/runner/
 
 测试不依赖 GPU / 真实 llama-server：Driver 走 mock（单测）与本地 mock HTTP server（e2e，含
 llama-server 风格 `timings` 字段的解析验证）。
+
+## 实验结果结构（E0.6）
+
+每次实验的 JSON 含四个顶层键：
+
+```json
+{
+  "config":   {...},   // 实验配置（旧 CLI 键 + E0.6 新键的超集）
+  "metadata": {...},   // E0.6：model 路径/sha256、llama.cpp commit、GPU、server slot ctx、warnings
+  "summary":  {...},   // 每场景：tokens/延迟(p50/p95/std)/吞吐/缓存命中/任务判据
+  "scenarios": {...}   // 每场景原始行（repeat>1 时为 {"runs": [...], "aggregate": ...}）
+}
+```
+
+- **吞吐指标**：`throughput_tps`（端到端 = total_tokens/总耗时）、`decode_tps`（decode 吞吐均值）。
+- **长期状态保持**：long_life 场景的 `state_retention_rate`（主指标，secret 召回率；跨 repeat 取均值）；`task_success` 仅作保真约束参考。
+- **ctx-size 语义检查**：若 server 实际 slot n_ctx 与配置 `--ctx-size` 不一致（如 `--parallel 4` 把 2048 平分为 4×512），打印 `[WARNING]` 并记入 `metadata.warnings`。
 
 ## E0 与旧脚本的已知差异
 

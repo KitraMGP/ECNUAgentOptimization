@@ -76,3 +76,29 @@ def test_summarize_none_memory():
     sm = summarize([default_row(rss_mb=None, gpu_mb=None)])
     assert sm["peak_rss_mb"] is None
     assert sm["peak_gpu_mb"] is None
+
+
+def test_summarize_throughput():
+    rows = [
+        default_row(total_tokens=120, latency_ms=1000.0,
+                    timings={"predicted_per_second": 50.0}),
+        default_row(total_tokens=230, latency_ms=3000.0,
+                    timings={"predicted_per_second": 30.0}),
+    ]
+    sm = summarize(rows)
+    # 端到端吞吐 = (120+230) tokens / 4s
+    assert sm["throughput_tps"] == round(350 / 4.0, 2)
+    # decode 吞吐 = timings.predicted_per_second 均值
+    assert sm["decode_tps"] == 40.0
+
+
+def test_summarize_throughput_no_timings():
+    rows = [default_row(total_tokens=100, latency_ms=1000.0, timings=None)]
+    sm = summarize(rows)
+    assert sm["throughput_tps"] == round(100 / 1.0, 2)
+    assert sm["decode_tps"] is None
+
+
+def test_throughput_stats_empty():
+    from metrics.metrics import throughput_stats
+    assert throughput_stats([]) == {"throughput_tps": None, "decode_tps": None}

@@ -83,18 +83,46 @@ class Runner:
                 summarize(workload.rows_for_summary(r)) for r in result["runs"]
             ]
             summary = self._aggregate_summaries(run_summaries)
-        # 任务判据（evaluate）：repeat>1 时取最后一次 run 判定
-        eval_result = result if self.config.repeat == 1 else result["runs"][-1]
+        # 任务判据（evaluate）：repeat>1 时对每个 run 分别判定并聚合数值键
         spec = workload.generate(workload.params_from_config(self.config))
-        summary["evaluation"] = workload.evaluate(eval_result, spec)
+        if self.config.repeat == 1:
+            summary["evaluation"] = workload.evaluate(result, spec)
+        else:
+            evals = [workload.evaluate(r, spec) for r in result["runs"]]
+            summary["evaluation"] = self._aggregate_evaluations(evals)
         # long_life 旧字段：task_success / cached_tokens_total / truncations（顶层，保持旧格式）
         if workload.name == "long_life":
             summary["task_success"] = summary["evaluation"]["task_success"]
             summary["truncations"] = summary["evaluation"].get("truncations", 0)
             if self.config.repeat == 1:
-                rows = workload.rows_for_summary(eval_result)
+                rows = workload.rows_for_summary(result)
                 summary["cached_tokens_total"] = sum(r.get("cached_tokens", 0) for r in rows)
         return summary
+
+    @staticmethod
+    def _aggregate_evaluations(evals: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """repeat>1 时：对多次运行的 evaluation 数值键聚合（mean/std/p50/p95）。
+
+        用于 state_retention_rate 等 0/1 判据：跨 repeat 取均值即"率"。
+        """
+        if not evals:
+            return {}
+        agg: Dict[str, Any] = {}
+        keys = list(evals[0].keys())
+        for k in keys:
+            vals = [e[k] for e in evals if e.get(k) is not None]
+            if not vals:
+                agg[k] = None
+            elif all(isinstance(v, (int, float)) for v in vals):
+                agg[k] = {
+                    "mean": round(mean(vals), 4),
+                    "std": round(std(vals), 4),
+                    "p50": round(p50(vals), 4),
+                    "p95": round(p95(vals), 4),
+                }
+            else:
+                agg[k] = vals[0]
+        return agg
 
     @staticmethod
     def _aggregate_summaries(run_summaries: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -156,6 +184,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--long-secret", default=None)
     ap.add_argument("--ctx-size", type=int, default=None,
                     help="llama-server 的上下文长度（需与 server --ctx-size 一致）")
+    ap.add_argument("--model-path", default=None, help="GGUF 模型文件路径（空则从 /props 探测）")
+    ap.add_argument("--parallel", type=int, default=None,
+                    help="server 并行 slot 数（0 = 探测；与 ctx-size 平分语义相关）")
     ap.add_argument("--repeat", type=int, default=None, help="正式重复次数（默认 1 = 旧行为）")
     ap.add_argument("--warmup", type=int, default=None, help="预热轮数（默认 0）")
     ap.add_argument("--seed", type=int, default=None)
@@ -184,11 +215,18 @@ def cli_main(argv: Optional[List[str]] = None) -> int:
         "seed": args.seed, "temperature": args.temperature,
         "output_dir": args.output_dir, "report_path": args.report,
         "timings_per_token": args.timings_per_token,
+        "model_path": args.model_path, "parallel": args.parallel,
     }
     config = config.merge_cli(cli_vals)
 
     runner = Runner(config)
     result = runner.run()
+    # E0.6：实验 metadata（模型哈希 / llama.cpp commit / GPU / ctx 语义检查）
+    from framework.metadata import collect_metadata, probe_server
+    server_info = probe_server(config.base_url)
+    result["metadata"] = collect_metadata(config, server_info)
+    for w in result["metadata"].get("warnings", []):
+        print(f"  [WARNING] {w}")
     out = runner.save(result)
     print("\n== 汇总 ==")
     print(json.dumps(result["summary"], ensure_ascii=False, indent=2))

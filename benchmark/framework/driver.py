@@ -78,7 +78,18 @@ class Driver:
                 rest = [m for m in messages if m["role"] != "system"]
                 # 一次丢弃约 1/3 的非 system 消息，加速收敛
                 drop = max(1, len(rest) // 3)
-                messages = body + rest[drop:]
+                dropped = rest[:drop]
+                candidate = body + rest[drop:]
+                # Qwen3.5 chat template（multi_step_tool 分支）要求消息中存在至少一条
+                # "非 <tool_response> 的 user 消息"（真正的用户查询），否则 server 端
+                # raise 'No user query found in messages'（500）。若丢弃的早期消息里
+                # 包含真实用户查询，找回最早一条插入 system 之后，保证重试可渲染。
+                if not any(self._is_real_user_query(m) for m in candidate):
+                    for m in dropped:
+                        if self._is_real_user_query(m):
+                            candidate.insert(len(body), m)
+                            break
+                messages = candidate
                 print(
                     f"    [chat 400 兜底] 丢弃 {drop} 条最早消息后重试 "
                     f"(第 {_retry + 1}/{self.max_retry} 次)"
@@ -94,6 +105,22 @@ class Driver:
         if self.timings_per_token:
             body["timings_per_token"] = True
         return body
+
+    @staticmethod
+    def _is_real_user_query(m: dict) -> bool:
+        """判断是否为"真正的用户查询"（非 <tool_response> 回填）。
+
+        Qwen3.5 chat template 的 multi_step_tool 分支要求消息中存在至少一条
+        非 tool_response 的 user 消息，否则 server 端 500（'No user query
+        found in messages'）。400 兜底丢弃早期消息时必须保证其存在。
+        """
+        if m.get("role") != "user":
+            return False
+        content = (m.get("content") or "").strip()
+        return not (
+            content.startswith("<tool_response>")
+            and content.endswith("</tool_response>")
+        )
 
     @staticmethod
     def _extract_timings(resp: Any) -> Optional[Dict[str, Any]]:

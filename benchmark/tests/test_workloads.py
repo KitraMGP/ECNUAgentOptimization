@@ -111,9 +111,20 @@ def test_long_life_secret_recall_success():
     spec = wl.generate({"rounds": 5, "secret": "9527", "ctx_size": 2048})
     result = {"rows": [], "meta": {"task_success": True, "truncations": 1}}
     ev = wl.evaluate(result, spec)
+    # E0.6：state_retention_rate 为主指标；task_success 保留作保真约束
+    assert ev["state_retention_rate"] == 1.0
     assert ev["task_success"] is True
     assert ev["secret_recall"] == 1.0
     assert ev["truncations"] == 1
+
+
+def test_long_life_state_retention_failure():
+    wl = get_workload("long_life")
+    spec = wl.generate({"rounds": 5, "secret": "9527", "ctx_size": 2048})
+    result = {"rows": [], "meta": {"task_success": False, "truncations": 0}}
+    ev = wl.evaluate(result, spec)
+    assert ev["state_retention_rate"] == 0.0
+    assert ev["task_success"] is False
 
 
 def test_spec_fingerprint_deterministic():

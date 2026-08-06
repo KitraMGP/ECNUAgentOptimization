@@ -88,6 +88,33 @@ def test_chat_retry_on_ctx_overflow(driver_with_mock_client):
     assert second_msgs[0]["role"] == "system"
 
 
+def test_chat_retry_keeps_real_user_query(driver_with_mock_client):
+    """400 兜底丢弃早期消息后，若剩余全是 <tool_response> user（Qwen3.5
+    template 会 500 'No user query found'），必须找回真实的用户查询。"""
+    drv, client = driver_with_mock_client
+    # 消息结构：真实查询在最前，其后全是 tool_response 回填
+    msgs = [{"role": "system", "content": "sys"},
+            {"role": "user", "content": "请查询订单"},
+            {"role": "assistant", "content": "ACTION: search_orders(cid)"},
+            {"role": "user", "content": "<tool_response>\n{\"ids\": [1,2,3]}\n</tool_response>"},
+            {"role": "assistant", "content": "ACTION: get_detail(id1)"},
+            {"role": "user", "content": "<tool_response>\n{\"order\": 1}\n</tool_response>"},
+            {"role": "assistant", "content": "ACTION: get_detail(id2)"},
+            {"role": "user", "content": "<tool_response>\n{\"order\": 2}\n</tool_response>"}]
+    client.chat.completions.create.side_effect = [
+        Exception("exceed_context_size_error ..."),  # 触发兜底
+        make_fake_resp(text="ok"),
+    ]
+    row = drv.chat(msgs)
+    assert row["text"] == "ok"
+    second_msgs = client.chat.completions.create.call_args.kwargs["messages"]
+    # 兜底后仍存在真实用户查询（非 tool_response）
+    real_users = [m for m in second_msgs
+                  if m["role"] == "user"
+                  and not (str(m["content"]).startswith("<tool_response>"))]
+    assert len(real_users) >= 1, "兜底后丢失了真实用户查询"
+
+
 def test_chat_gives_up_after_max_retry(driver_with_mock_client):
     drv, client = driver_with_mock_client
     client.chat.completions.create.side_effect = [

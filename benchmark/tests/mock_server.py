@@ -41,6 +41,27 @@ def _make_body(n: int) -> dict:
 
 
 class _Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path.startswith("/props"):
+            body = {
+                "model_path": "models/mock-model.gguf",
+                "total_slots": 4,
+                "build_info": "b3-mockcommit",
+            }
+        elif self.path.startswith("/slots"):
+            body = [{"id": 0, "n_ctx": 512, "is_processing": False, "speculative": False},
+                    {"id": 1, "n_ctx": 512, "is_processing": False, "speculative": False}]
+        else:
+            self.send_response(404)
+            self.end_headers()
+            return
+        data = json.dumps(body).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         self.rfile.read(length)

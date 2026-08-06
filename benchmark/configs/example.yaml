@@ -4,6 +4,8 @@ port: 8080
 server_url: ""            # 为空则由 host:port 推导
 model: bench               # llama-server 不校验模型名
 ctx_size: 2048             # 需与 llama-server --ctx-size 一致
+model_path: ""             # GGUF 模型文件路径（空则从 /props 探测，用于哈希与 metadata）
+parallel: 0                # server 并行 slot 数（0 = 探测；与 ctx-size 平分语义相关）
 scenario: all              # multi_turn / tool_call / branch / long_life / all
 repeat: 1                  # 正式重复次数（1 = 与旧脚本行为一致）
 warmup: 0                  # 预热轮数（不计入统计）

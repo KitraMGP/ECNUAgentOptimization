@@ -144,7 +144,7 @@ openai SDK 经 `model_extra` 透出，`Driver._extract_timings` 解析成功，�
 - ✅ 未大规模重构已有代码：`agent_bench.py` 保留为兼容入口；场景逻辑按迁移方式移植（常量、打印、结果结构一致）
 - ✅ 新增 README（`benchmark/README.md`）与测试（42 个，无 GPU/server 依赖）
 - ✅ 根 `AGENTS.md` 已同步目录结构变化（按约定及时更新）
-- ✅ 未提交 git（等待人工确认）
+- ✅ 已提交git
 
 ## 6. 未做事项（下一阶段，未开始）
 

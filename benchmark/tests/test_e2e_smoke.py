@@ -48,9 +48,15 @@ def test_cli_main_end_to_end(tmp_path):
     assert len(files) == 1
     with open(os.path.join(out_dir, files[0]), encoding="utf-8") as f:
         result = json.load(f)
-    assert set(result) == {"config", "summary", "scenarios"}
+    # E0.6：结果含 metadata 顶层键（模型哈希 / llama.cpp commit / GPU / ctx 检查）
+    assert set(result) == {"config", "metadata", "summary", "scenarios"}
     assert set(result["scenarios"]) == {"multi_turn"}
     assert result["summary"]["multi_turn"]["rounds"] == 3
+    # metadata：mock server 探测到 slot n_ctx=512，且 config ctx=2048 → warning
+    meta = result["metadata"]
+    assert meta["server"]["slot_n_ctx"] == 512
+    assert meta["server"]["total_slots"] == 4
+    assert any("slot n_ctx" in w for w in meta["warnings"])
     # config 含旧 CLI 键
     for k in ["host", "port", "scenario", "rounds", "ctx_size"]:
         assert k in result["config"]

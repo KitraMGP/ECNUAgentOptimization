@@ -54,6 +54,20 @@ def test_run_repeat_and_warmup(fake_driver):
     assert "mean" in sm["total_tokens"]
 
 
+def test_run_repeat_evaluation_aggregated(fake_driver):
+    """repeat>1 时 evaluation 数值键（如 state_retention_rate）跨 run 聚合。"""
+    cfg = BenchmarkConfig(scenario="long_life", long_rounds=5, ctx_size=2048, repeat=3)
+    result = Runner(cfg, driver=fake_driver).run()
+    ev = result["summary"]["long_life"]["evaluation"]
+    # 默认 FakeDriver 回答不含 secret → 3 次 run 均 0.0
+    assert ev["state_retention_rate"] == {"mean": 0.0, "std": 0.0, "p50": 0.0, "p95": 0.0}
+    assert ev["task_success"] == {"mean": 0.0, "std": 0.0, "p50": 0.0, "p95": 0.0}
+    assert "truncations" in ev
+    # long_life 顶层旧字段保留
+    sm = result["summary"]["long_life"]
+    assert "task_success" in sm and "truncations" in sm
+
+
 def test_save_writes_json(tmp_path, fake_driver):
     cfg = BenchmarkConfig(scenario="multi_turn", rounds=2, output_dir=str(tmp_path))
     runner = Runner(cfg, driver=fake_driver)

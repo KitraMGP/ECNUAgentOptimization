@@ -63,3 +63,11 @@ def _no_server_pid():
 @pytest.fixture
 def fake_driver():
     return FakeDriver()
+
+
+@pytest.fixture
+def mock_openai_server():
+    """真实 HTTP mock OpenAI server（/props、/slots、/chat/completions）。"""
+    from tests.mock_server import MockOpenAIServer
+    with MockOpenAIServer() as srv:
+        yield srv

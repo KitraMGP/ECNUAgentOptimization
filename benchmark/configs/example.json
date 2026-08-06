@@ -4,6 +4,8 @@
   "server_url": "",
   "model": "bench",
   "ctx_size": 2048,
+  "model_path": "",
+  "parallel": 0,
   "scenario": "all",
   "repeat": 1,
   "warmup": 0,

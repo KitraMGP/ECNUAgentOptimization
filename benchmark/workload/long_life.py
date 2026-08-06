@@ -114,10 +114,22 @@ class LongLifeWorkload(Workload):
         return {"rows": rows, "meta": {"task_success": success, "truncations": truncations}}
 
     def evaluate(self, results: Dict[str, Any], spec: WorkloadSpec) -> Dict[str, Any]:
+        """长期 Agent 关键状态保持评估（E0.6）。
+
+        - ``state_retention_rate``：主指标。会话注入的关键状态（secret）在
+          最终询问中被正确召回的比例。单次运行取 0 或 1；跨 repeat 运行由
+          runner 聚合为均值（即统计意义上的"保持率"）。
+        - ``task_success``：仅作保真约束参考（不作为主指标），与
+          state_retention_rate 等价（均基于 secret 召回）。
+        - ``truncations``：应用层截断次数（上下文窗口管理压力）。
+        """
         secret = spec.expected.get("secret", spec.params.get("secret", "9527"))
         meta = results.get("meta", {})
+        recalled = bool(meta.get("task_success", False))
+        retention = 1.0 if recalled else 0.0
         return {
-            "task_success": bool(meta.get("task_success", False)),
-            "secret_recall": 1.0 if meta.get("task_success") else 0.0,
+            "state_retention_rate": retention,
+            "task_success": recalled,
+            "secret_recall": retention,
             "truncations": meta.get("truncations", 0),
         }

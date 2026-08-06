@@ -3,7 +3,8 @@
 - ``summarize(rows)`` 保持旧 agent_bench.py 的输出字段（prompt_tokens /
   completion_tokens / total_tokens / rounds / avg_latency_ms / max_latency_ms /
   peak_rss_mb / peak_gpu_mb），并追加 E0 新指标（p50/p95/std latency、
-  cached_tokens、cache_hit_rate、recompute_tokens）。
+  cached_tokens、cache_hit_rate、recompute_tokens）与 E0.6 新指标
+  （throughput_tps / decode_tps）。
 - 纯函数、无外部依赖（不用 numpy），可直接单测。
 """
 from __future__ import annotations
@@ -73,6 +74,22 @@ def cache_stats(rows: List[dict]) -> Dict[str, Any]:
     }
 
 
+def throughput_stats(rows: List[dict]) -> Dict[str, Any]:
+    """吞吐统计（E0.6）：
+    - throughput_tps：端到端吞吐 = total_tokens / 总耗时（秒）；
+    - decode_tps：decode 吞吐（timings.predicted_per_second 的均值，不可用时为 None）。
+    """
+    total_tokens = sum(r.get("total_tokens", 0) for r in rows)
+    total_ms = sum(r.get("latency_ms", 0) or 0 for r in rows)
+    decodes = [r["timings"]["predicted_per_second"]
+               for r in rows if isinstance(r.get("timings"), dict)
+               and isinstance(r["timings"].get("predicted_per_second"), (int, float))]
+    return {
+        "throughput_tps": round(total_tokens / (total_ms / 1000.0), 2) if total_ms > 0 else None,
+        "decode_tps": round(mean(decodes), 2) if decodes else None,
+    }
+
+
 def summarize(rows: List[dict]) -> Dict[str, Any]:
     """场景行汇总：旧字段 + E0 新字段（不破坏旧字段名）。"""
     totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
@@ -83,6 +100,7 @@ def summarize(rows: List[dict]) -> Dict[str, Any]:
         **totals,
         "rounds": len(rows),
         **latency_stats(rows),
+        **throughput_stats(rows),
         "peak_rss_mb": max((r["rss_mb"] for r in rows if r.get("rss_mb")), default=None),
         "peak_gpu_mb": max((r["gpu_mb"] for r in rows if r.get("gpu_mb")), default=None),
         **cache_stats(rows),

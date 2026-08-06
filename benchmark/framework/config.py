@@ -33,6 +33,8 @@ class BenchmarkConfig:
     server_url: str = ""            # 显式 base_url；为空则由 host:port 推导
     model: str = "bench"            # llama-server 不校验模型名
     ctx_size: int = 2048            # llama-server 的上下文长度（需与 server --ctx-size 一致）
+    model_path: str = ""            # GGUF 模型文件路径（可覆盖；空则从 /props 探测）
+    parallel: int = 0               # server 并行 slot 数（0 = 从 /props 探测；与 ctx 平分语义相关）
     # ---- 实验控制 ----
     scenario: str = "all"           # multi_turn / tool_call / branch / long_life / all
     repeat: int = 1                 # 正式重复次数（repeat=1 时输出结构与旧脚本一致）
@@ -58,6 +60,8 @@ class BenchmarkConfig:
         self.host = str(self.host)
         self.port = int(self.port)
         self.ctx_size = int(self.ctx_size)
+        self.parallel = int(self.parallel)
+        self.model_path = str(self.model_path)
         self.repeat = int(self.repeat)
         self.warmup = int(self.warmup)
         self.seed = int(self.seed)
