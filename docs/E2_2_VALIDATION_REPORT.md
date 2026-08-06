@@ -237,7 +237,8 @@ logical prefix reuse 作为主指标（两者间无差异，故不宣称逻辑�
 - 结果：`benchmark/results/e22/`（summary.json/csv + manifest.json + 4 个
   probe JSON + server 日志）；复用 `results/e21/`（10 配置 + 2 个 5-rep probe）；
   manifest 含命令、参数、模型/binary hash、commit、时间与协议；
-- 提交：根仓库 `docs/E2_2_VALIDATION_REPORT.md` + 脚本（hash 见最终汇报）；
-  llama.cpp 本阶段**无生产代码改动**（仅测试与 probe 在根仓库侧），不创建空提交；
+- 提交：根仓库 `22f5348`（docs: validate A2 hybrid and branch workload
+  results）；llama.cpp 本阶段**无生产代码改动**（无空提交），HEAD 仍为
+  `0217843bd`；两仓库提交后均干净；
 - 测试：根 pytest 83 passed；llama.cpp `test_slot_routing` 8/8、
   `test_metrics_kv` 5/5；可运行子集 43 passed（8 failed 预存环境问题，记录）。
