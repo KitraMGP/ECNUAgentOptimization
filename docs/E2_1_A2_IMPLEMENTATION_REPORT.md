@@ -305,7 +305,8 @@ task_success 均 1.0。
 
 ## 附注：执行记录与提交状态
 
-- 本阶段完成后提交：llama.cpp 独立提交 + 根仓库提交（hash 见最终汇报）；
+- git 提交：llama.cpp `0217843bd`（feat: add bounded prefix-aware slot routing）；
+  根仓库 `2a4ce4d`（feat: add bounded prefix-aware slot routing + 报告/脚本）；两仓库均干净；
 - 实验产物：`benchmark/results/e21/`（10 配置矩阵 + 4 个 branch probe +
   manifest），git 忽略不入库；
 - 测试：llama.cpp `test_slot_routing.py` 8/8、E1 `test_metrics_kv` 5/5、
