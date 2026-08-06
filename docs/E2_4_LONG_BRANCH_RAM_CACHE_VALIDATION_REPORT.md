@@ -265,8 +265,9 @@ TinyLlama bc2，3 reps（逐 rep 一致）：
 
 - 结果：`benchmark/results/e24/`（summary.json/csv + manifest.json + 5 个
   probe JSON + server 日志）；复用 e21/e22/e23；
-- 提交：根仓库 `docs: validate long branch and RAM cache boundaries`（报告 +
-  脚本 + 测试，hash 见最终汇报）；llama.cpp 本阶段**无源码修改**（不建空提交）；
+- 提交：根仓库 `0a83014`（docs: validate long branch and RAM cache boundaries，
+  4 文件 +580 行）；llama.cpp 本阶段**无源码修改**（保持 `2f851c4b4`，不建空提交）；
+  提交后两仓库 `git status --short` 均为空；
 - 测试：根 pytest（新增 `test_long_branch_probe.py` 6 例）→ **89 passed**；
   llama.cpp `test_slot_routing` 10/10、E1 5/5、可运行子集 43 passed
   （8 failed 预存环境问题）；
