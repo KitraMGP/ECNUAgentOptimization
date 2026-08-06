@@ -160,7 +160,9 @@ TinyLlama bc2，3 reps（逐 rep 一致）：
   lcp_similarity + active=1 + cached 高值）设置；不依据延迟单独推断；
 - **口径**：clean 断言只清 KV（erase），**RAM prompt cache 跨 replicate 保留**
   （bc4 rep1/2 首访 cached=138 的成因）——RAM on 场景的 cached 含恢复成分，
-  已在报告中标注。
+  已在报告中标注。**明确声明：slot erase 不清除 RAM prompt cache；E2.4
+  RAM-on 结果为路径快速验证，E2.5 使用 server-per-replicate 协议提供
+  独立正式证据。**
 
 ---
 
