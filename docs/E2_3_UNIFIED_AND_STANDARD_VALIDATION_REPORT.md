@@ -268,9 +268,9 @@ cached=111 为 A+X 全量 token 数。）
 
 - 结果：`benchmark/results/e23/`（summary.json/csv + manifest.json + 4B unified
   smoke + tinyllama 7 个 probe JSON + server 日志）；复用 `e21/`、`e22/`；
-- 提交：llama.cpp `fix: validate prefix-aware routing across memory modes`（修复
-  + 测试，hash 见最终汇报）；根仓库 `docs: validate A2 unified and standard
-  architecture results`（报告 + 脚本，hash 见最终汇报）；提交后两仓库干净；
+- 提交：llama.cpp `2f851c4b4`（fix: validate prefix-aware routing across memory
+  modes——修复 + 2 测试）；根仓库 `cf6a3d3`（docs: validate A2 unified and
+  standard architecture results——报告 + 脚本）；提交后两仓库干净；
 - 实际执行命令摘要：
   - `ninja -C build llama-server` / `ninja -C build-cuda llama-server`
   - `python3 -m pytest unit/test_slot_routing.py --noconftest`（10/10）
