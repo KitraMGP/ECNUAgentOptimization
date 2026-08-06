@@ -325,9 +325,9 @@
 - 新文件（根）：`benchmark/scripts/e32_unified_lifecycle_value_probe.py`、
   `e32_scan.sh`、`e32_summarize.py`、`benchmark/tests/test_e32_lifecycle.py`、
   `docs/E3_2_A1_A4_UNIFIED_LIFECYCLE_DECISION_GATE_REPORT.md`；
-- llama.cpp 提交：`feat: add unified idle lifecycle victim policy`
-  （hash 见最终汇报）；根仓库提交：`feat: implement and gate unified idle
-  lifecycle policy`（hash 见最终汇报）；
+- llama.cpp 提交：`049872f59`（feat: add unified idle lifecycle victim
+  policy，5 文件 +316 行）；根仓库提交：`f1f2e57`（feat: implement and
+  gate unified idle lifecycle policy，5 文件 +1026 行）；
 - 提交后两仓库 `git status --short` 均为空；
 - 实际执行命令摘要：`e32_unified_lifecycle_value_probe.py`（5 场景矩阵）、
   `e32_summarize.py`、`uv run pytest -q`（115）、
