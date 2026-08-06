@@ -402,7 +402,7 @@
 
 ## 附注：执行记录
 
-- 本阶段**未执行任何 git commit**（遵守提交规则）；实验产物仅写入 `benchmark/results/e20/`（临时，不入库）；报告写入 `docs/`。
+- 本阶段执行顺序：只读核对 → 回归 → 扫描 → 报告。git 提交状态：根仓库 `d946ddf`（docs: E2.0 设计报告）；llama.cpp 仓库本阶段无改动（干净）。实验产物仅写入 `benchmark/results/e20/`（临时，不入库）；临时脚本位于 `llama.cpp/tmp/`（git 忽略）。
 - 实际执行命令摘要：
   - `cmake -B build-cuda -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=89` + `ninja build-cuda llama-server`（E1 HEAD 重建 binary）
   - `python3 tmp/run_e1_manual.py`（test_metrics_kv 5/5）
