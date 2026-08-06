@@ -223,4 +223,4 @@ python -m pytest tools/server/tests/unit/test_metrics_kv.py
 | 2 | `n_cmpl>1` 被 server 限制为 1（当前配置），多 sequence 场景改用 `--parallel 2` 双 slot 验证 | 验证 `active_sequences=2` |
 | 3 | 编译期 json 三元表达式类型不匹配、`ERROR_TYPE_INTERNAL` 枚举不存在 | 修正为 `json(stats.used_bytes)` 与 `ERROR_TYPE_SERVER` |
 
-已提交 git：llama.cpp 内部 commit `b69773a1e`（E1 可观测性实现），根仓库 commit `15658d4`（benchmark 采集与报告）。
+已提交 git：llama.cpp 内部 commit `b69773a1e`（E1 可观测性实现），根仓库 commit `15658d4`（benchmark 采集与报告）与 `a0c77cc`（报告补充复现命令）。
