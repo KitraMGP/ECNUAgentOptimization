@@ -205,11 +205,13 @@ def run_replicate(scenario: str, policy: str, n_sessions: int, rounds: int,
     rec["kv_peak_utilization"] = round(peak_used / cap, 4) if cap else None
     rec["gpu_mem_peak_mb"] = gpu_memory_mb() or 0.0
     rec["rss_peak_mb"] = rss_mb() or 0.0
-    # truncation/400 检测（从日志）
+    # truncation/400 检测（结构化：仅匹配真实截断标志/400 错误，
+    # 禁止宽泛匹配 "truncated = 0" 字段）
     try:
         with open(log_path, "r", errors="replace") as f:
             log = f.read()
-        rec["truncations"] = log.count("shift") + log.count("truncat")
+        # 真实截断：server 截断消息（truncated = 1 / shift 主动触发）
+        rec["truncations"] = len(re.findall(r"truncated\s*=\s*1\b", log))
         rec["http_400"] = log.count("exceeds the available context size")
     except FileNotFoundError:
         pass
