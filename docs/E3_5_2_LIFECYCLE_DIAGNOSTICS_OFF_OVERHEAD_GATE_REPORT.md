@@ -155,8 +155,8 @@
 - 结果：`benchmark/results/e352/`（manifest/summary/abba_results.csv/
   placebo_results.csv + 140 per-block JSON）；
 - llama.cpp：**无新提交**（B 保持 `aba4b26a`；静态审计无必要修复）；
-- 根仓库提交：`test: verify disabled lifecycle diagnostics overhead`
-  （hash 见最终汇报）；
+- 根仓库提交：`4455799`（test: verify disabled lifecycle diagnostics
+  overhead，6 文件 +722 行）；llama.cpp 无新提交（B 保持 `aba4b26a`）；
 - 测试：根 pytest **154 passed**（含 test_e352_overhead 6 例）；llama.cpp
   lifecycle trace 7/7 + unified lifecycle 5/5 + slot routing 10/10 + E1 5/5
   （复用，无改动）；
