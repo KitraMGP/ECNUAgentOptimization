@@ -305,8 +305,8 @@ branch_pressure ✓、RAM smoke ✓、default ✓——**全 PASS**。
   `benchmark/tests/test_e33_integration.py`、
   `docs/E3_3_A1_A4_EXISTING_WORKLOAD_INTEGRATION_DECISION_GATE_REPORT.md`；
 - llama.cpp：**本阶段无改动**（`049872f59` 保持，不建空提交）；
-- 根仓库提交：`test: validate unified idle lifecycle on existing workloads`
-  （hash 见最终汇报）；提交后两仓库 `git status --short` 均为空；
+- 根仓库提交：`5c5ebf2`（test: validate unified idle lifecycle on existing
+  workloads，6 文件 +1111 行）；提交后两仓库 `git status --short` 均为空；
 - 测试：根 pytest **123 passed**（含 test_e33_integration 8 例）；llama.cpp
   `test_unified_idle_lifecycle` 5/5 + `test_slot_routing` 10/10 + E1 5/5
   （复用 E3.2 基线，零改动）；
