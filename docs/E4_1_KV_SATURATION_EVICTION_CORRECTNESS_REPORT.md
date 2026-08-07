@@ -133,6 +133,6 @@ S4 与 active 均完成。
 - 结果：`benchmark/results/e41/`（prereg_manifest/summary/saturation_results.csv/
   eviction_events.jsonl + 24 per-scenario JSON）；
 - llama.cpp：**无新提交**（`aba4b26a` 保持）；
-- 根仓库提交：`test: validate KV saturation and eviction correctness`
-  （hash 见最终汇报）；
+- 根仓库提交：`99b9a91`（test: validate KV saturation and eviction
+  correctness，9 文件 +784 行）；llama.cpp 无新提交（`aba4b26a` 保持）；
 - 提交后两仓库 `git status --short` 均为空。
