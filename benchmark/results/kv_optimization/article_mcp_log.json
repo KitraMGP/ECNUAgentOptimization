@@ -1,0 +1,16 @@
+{
+  "article_mcp_status": "AVAILABLE_BUT_LIMITED",
+  "note": "search_literature/get_article_details 工具可用且返回 success；但 Europe PMC/PubMed/OpenAlex 数据源对计算机系统类论文（PagedAttention/H2O/KIVI 等）覆盖不足：精确标题检索 4 组中 3 组返回 0 结果，arXiv 源返回按时间排序的最新条目而非相关性排序。符合指令 12.4：记录后改用 arXiv/官方页面获取全文。",
+  "calls": [
+    {"tool": "search_literature", "query": "KV cache management large language model inference", "search_type": "fast", "result": "success, 5 hits (europe_pmc), 含 vPID(SnapLLM, RTX4060 同款硬件) 等", "ts": "2026-08-07T00:00:00Z"},
+    {"tool": "search_literature", "query": "PagedAttention vLLM paged KV cache block allocation LLM serving", "search_type": "comprehensive", "result": "success, 30 hits (arxiv 最新条目, 相关性低)", "ts": "2026-08-07T00:00:00Z"},
+    {"tool": "search_literature", "query": "KV cache eviction H2O heavy hitter token retention inference", "search_type": "comprehensive", "result": "success, 30 hits (arxiv 噪音)", "ts": "2026-08-07T00:00:00Z"},
+    {"tool": "search_literature", "query": "KV cache quantization KIVI KVQuant mixed precision inference memory", "search_type": "comprehensive", "result": "success, 30 hits (arxiv 噪音)", "ts": "2026-08-07T00:00:00Z"},
+    {"tool": "search_literature", "query": "radix cache prefix sharing copy-on-write KV cache scheduling", "search_type": "comprehensive", "result": "success, 30 hits (arxiv 噪音)", "ts": "2026-08-07T00:00:00Z"},
+    {"tool": "search_literature", "query": "PagedAttention efficient memory management large language model serving", "search_type": "fast", "result": "success, europe_pmc 无直接命中", "ts": "2026-08-07T00:00:00Z"},
+    {"tool": "search_literature", "query": "H2O heavy hitter oracle efficient context sculpting large language models", "search_type": "fast", "result": "success, 0 hits (系统论文不在 PMC)", "ts": "2026-08-07T00:00:00Z"},
+    {"tool": "search_literature", "query": "KIVI plug-and-play 2bit KV cache quantization", "search_type": "fast", "result": "success, 0 hits", "ts": "2026-08-07T00:00:00Z"},
+    {"tool": "search_literature", "query": "SnapKV LLM knows what you are looking for", "search_type": "fast", "result": "success, 0 hits", "ts": "2026-08-07T00:00:00Z"}
+  ],
+  "fallback": "arXiv 官方页面 + 正式会议页（SOSP/OSDI/MLSys/NeurIPS/ICML/ICLR）+ ACM DL 用于核验与全文获取"
+}
