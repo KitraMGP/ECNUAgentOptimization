@@ -228,9 +228,9 @@ trace_event + 4 事件点）、`common/common.h`、`common/arg.cpp`、
 
 - 结果：`benchmark/results/e35/`（manifest/summary/csv + 36 per-replicate
   JSON + sample_trace.json）；
-- llama.cpp 提交：`feat: add opt-in lifecycle attribution tracing`（hash 见
-  最终汇报）；根仓库提交：`test: validate lifecycle attribution and trace
-  replay readiness`（hash 见最终汇报）；
+- llama.cpp 提交：`40948c938`（feat: add opt-in lifecycle attribution
+  tracing，14 文件 +391 行）；根仓库提交：`ba75c86`（test: validate
+  lifecycle attribution and trace replay readiness，7 文件 +947 行）；
 - 测试：根 pytest **139 passed**（含 test_e35_trace 7 例）；llama.cpp
   `test_lifecycle_trace` 5/5 + `test_unified_idle_lifecycle` 5/5 +
   `test_slot_routing` 10/10 + E1 5/5；
