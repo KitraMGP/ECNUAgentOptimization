@@ -121,8 +121,8 @@ GPU 的 boost 时钟在负载温度爬升期间大幅跳变**（±15% wall 波�
 - 结果：`benchmark/results/e353/`（prereg_manifest/environment_
   qualification.json + 44 per-measurement JSON（预热 4 + placebo 40））；
 - llama.cpp：**无新提交**（`aba4b26a` 保持）；
-- 根仓库提交：`test: verify disabled lifecycle diagnostics in stable crossover`
-  （hash 见最终汇报）；
+- 根仓库提交：`3f78c6d`（test: verify disabled lifecycle diagnostics in
+  stable crossover，6 文件 +643 行）；llama.cpp 无新提交（`aba4b26a` 保持）；
 - 测试：根 pytest（含 test_e353_qualify）；llama.cpp 22 + E1 5/5（复用）；
 - 提交后两仓库 `git status --short` 均为空（llama-baseline/llama-candidate
   worktree 为 detached 不入库，提交后清理）。
