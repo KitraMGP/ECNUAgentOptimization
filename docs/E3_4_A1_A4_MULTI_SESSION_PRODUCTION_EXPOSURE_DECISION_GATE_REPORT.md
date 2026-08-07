@@ -283,8 +283,9 @@ no-pressure 计入正确性/成本 ✓。
   `benchmark/tests/test_e34_gate.py`、
   `docs/E3_4_A1_A4_MULTI_SESSION_PRODUCTION_EXPOSURE_DECISION_GATE_REPORT.md`；
 - llama.cpp：**本阶段无改动**（`049872f59` 保持，不建空提交）；
-- 根仓库提交：`test: validate unified idle lifecycle on multi-session workloads`
-  （hash 见最终汇报）；提交后两仓库 `git status --short` 均为空；
+- 根仓库提交：`585c9fe`（test: validate unified idle lifecycle on
+  multi-session workloads，6 文件 +1082 行）；提交后两仓库
+  `git status --short` 均为空；
 - 测试：根 pytest **132 passed**（含 test_e34_gate 9 例）；llama.cpp
   `test_unified_idle_lifecycle` 5/5 + `test_slot_routing` 10/10 + E1 5/5
   （复用基线，零改动）；
