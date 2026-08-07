@@ -117,8 +117,8 @@
 
 - 结果：`benchmark/results/e4/`（manifest/summary/csv + 34 per-replicate）；
 - llama.cpp：**无新提交**（`aba4b26a` 保持）；
-- 根仓库提交：`test: validate memory capacity and concurrency gate`
-  （hash 见最终汇报）；
+- 根仓库提交：`2a6ba48`（test: validate memory capacity and concurrency
+  gate，5 文件 +595 行）；llama.cpp 无新提交（`aba4b26a` 保持）；
 - 测试：根 pytest **167 passed**（含 test_e4_capacity 6 例）；llama.cpp
   22 + E1 5/5（复用）；
 - 提交后两仓库 `git status --short` 均为空。
