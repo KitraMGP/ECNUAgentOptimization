@@ -153,4 +153,4 @@ llama.cpp（独立仓库）：
   `e42_admission_gate.py`、`e42_churn_reclamation.py`、`e42_summarize.py`
 - `benchmark/results/e42/`：contract/prereg/summary/manifest（git 忽略部分）
 - 提交：`8e8ab4b`（test: validate active pressure admission and reclamation）
-- 本文件状态说明二次提交：<待回填>
+- 本文件状态说明二次提交：`8fdfa6a`（docs: update E4.2 report commit status）
