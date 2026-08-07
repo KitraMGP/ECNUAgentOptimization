@@ -1,0 +1,157 @@
+{
+  "experiment_id": "e6_c1_paired_bench",
+  "candidate_id": "C1_RADIX_PREFIX_SHARING",
+  "variant": "paired",
+  "workload_id": "C1_PAIRED_bench",
+  "git_commit": "568b87336b81e1142b81c31a6251a501f562aa3a",
+  "model": "tinyllama stories260K (standard attention-only, real KV path)",
+  "reps": 5,
+  "off": {
+    "results": [
+      {
+        "repetition": 0,
+        "req1_prompt_n": 227,
+        "req1_cache_n_past": 0,
+        "req2_prompt_n": 229,
+        "req2_cache_n_past": 0,
+        "req2_recompute_tokens": 229,
+        "req2_output": " \nThe owl was",
+        "req2_output_sha256": "e5bfbea7cb8d5f5a3572f1bc9f987fe8ba3f868f38ff883667bbb2e3081daa5c",
+        "kv_used_cells": 470,
+        "kv_shared_cells": 0,
+        "kv_active_sequences": 2
+      },
+      {
+        "repetition": 1,
+        "req1_prompt_n": 227,
+        "req1_cache_n_past": 0,
+        "req2_prompt_n": 229,
+        "req2_cache_n_past": 0,
+        "req2_recompute_tokens": 229,
+        "req2_output": " \nThe owl was",
+        "req2_output_sha256": "e5bfbea7cb8d5f5a3572f1bc9f987fe8ba3f868f38ff883667bbb2e3081daa5c",
+        "kv_used_cells": 470,
+        "kv_shared_cells": 0,
+        "kv_active_sequences": 2
+      },
+      {
+        "repetition": 2,
+        "req1_prompt_n": 227,
+        "req1_cache_n_past": 0,
+        "req2_prompt_n": 229,
+        "req2_cache_n_past": 0,
+        "req2_recompute_tokens": 229,
+        "req2_output": " \nThe owl was",
+        "req2_output_sha256": "e5bfbea7cb8d5f5a3572f1bc9f987fe8ba3f868f38ff883667bbb2e3081daa5c",
+        "kv_used_cells": 470,
+        "kv_shared_cells": 0,
+        "kv_active_sequences": 2
+      },
+      {
+        "repetition": 3,
+        "req1_prompt_n": 227,
+        "req1_cache_n_past": 0,
+        "req2_prompt_n": 229,
+        "req2_cache_n_past": 0,
+        "req2_recompute_tokens": 229,
+        "req2_output": " \nThe owl was",
+        "req2_output_sha256": "e5bfbea7cb8d5f5a3572f1bc9f987fe8ba3f868f38ff883667bbb2e3081daa5c",
+        "kv_used_cells": 470,
+        "kv_shared_cells": 0,
+        "kv_active_sequences": 2
+      },
+      {
+        "repetition": 4,
+        "req1_prompt_n": 227,
+        "req1_cache_n_past": 0,
+        "req2_prompt_n": 229,
+        "req2_cache_n_past": 0,
+        "req2_recompute_tokens": 229,
+        "req2_output": " \nThe owl was",
+        "req2_output_sha256": "e5bfbea7cb8d5f5a3572f1bc9f987fe8ba3f868f38ff883667bbb2e3081daa5c",
+        "kv_used_cells": 470,
+        "kv_shared_cells": 0,
+        "kv_active_sequences": 2
+      }
+    ],
+    "req2_recompute_median": 229
+  },
+  "on": {
+    "results": [
+      {
+        "repetition": 0,
+        "req1_prompt_n": 227,
+        "req1_cache_n_past": 0,
+        "req2_prompt_n": 24,
+        "req2_cache_n_past": 205,
+        "req2_recompute_tokens": 24,
+        "req2_output": " \nThe owl was",
+        "req2_output_sha256": "e5bfbea7cb8d5f5a3572f1bc9f987fe8ba3f868f38ff883667bbb2e3081daa5c",
+        "kv_used_cells": 265,
+        "kv_shared_cells": 205,
+        "kv_active_sequences": 2
+      },
+      {
+        "repetition": 1,
+        "req1_prompt_n": 227,
+        "req1_cache_n_past": 0,
+        "req2_prompt_n": 24,
+        "req2_cache_n_past": 205,
+        "req2_recompute_tokens": 24,
+        "req2_output": " \nThe owl was",
+        "req2_output_sha256": "e5bfbea7cb8d5f5a3572f1bc9f987fe8ba3f868f38ff883667bbb2e3081daa5c",
+        "kv_used_cells": 265,
+        "kv_shared_cells": 205,
+        "kv_active_sequences": 2
+      },
+      {
+        "repetition": 2,
+        "req1_prompt_n": 227,
+        "req1_cache_n_past": 0,
+        "req2_prompt_n": 24,
+        "req2_cache_n_past": 205,
+        "req2_recompute_tokens": 24,
+        "req2_output": " \nThe owl was",
+        "req2_output_sha256": "e5bfbea7cb8d5f5a3572f1bc9f987fe8ba3f868f38ff883667bbb2e3081daa5c",
+        "kv_used_cells": 265,
+        "kv_shared_cells": 205,
+        "kv_active_sequences": 2
+      },
+      {
+        "repetition": 3,
+        "req1_prompt_n": 227,
+        "req1_cache_n_past": 0,
+        "req2_prompt_n": 24,
+        "req2_cache_n_past": 205,
+        "req2_recompute_tokens": 24,
+        "req2_output": " \nThe owl was",
+        "req2_output_sha256": "e5bfbea7cb8d5f5a3572f1bc9f987fe8ba3f868f38ff883667bbb2e3081daa5c",
+        "kv_used_cells": 265,
+        "kv_shared_cells": 205,
+        "kv_active_sequences": 2
+      },
+      {
+        "repetition": 4,
+        "req1_prompt_n": 227,
+        "req1_cache_n_past": 0,
+        "req2_prompt_n": 24,
+        "req2_cache_n_past": 205,
+        "req2_recompute_tokens": 24,
+        "req2_output": " \nThe owl was",
+        "req2_output_sha256": "e5bfbea7cb8d5f5a3572f1bc9f987fe8ba3f868f38ff883667bbb2e3081daa5c",
+        "kv_used_cells": 265,
+        "kv_shared_cells": 205,
+        "kv_active_sequences": 2
+      }
+    ],
+    "req2_recompute_median": 24
+  },
+  "lossless_output_identical": true,
+  "recompute_reduction_pct": 89.52,
+  "threshold_12_11": "exact-prefix recompute tokens >=25% reduction",
+  "verdict": "PASS_OPTIMIZATION_GAIN",
+  "notes": [
+    "TinyLlama 标准架构（4B hybrid 上 C1 自动禁用）",
+    "on/off 相同输入/seed/budget，仅 kv-prefix-share 开关不同"
+  ]
+}
