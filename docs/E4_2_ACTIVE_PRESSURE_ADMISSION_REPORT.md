@@ -146,10 +146,11 @@ llama.cpp（独立仓库）：
 - `tools/server/server-context.cpp`：decode 失败分支（优先终止 prefill 中 slot、
   保留 active、return false 不 throw）
 - `tools/server/tests/unit/test_active_pressure.py`（新增 3 例）
-- 提交：`fix: preserve admitted requests under unified KV pressure` + 状态说明
+- 提交：`69711a2d6`（fix: preserve admitted requests under unified KV pressure）
 
 根仓库：
 - `benchmark/scripts/e42_contract.py`、`e42_prereg_manifest.py`、
   `e42_admission_gate.py`、`e42_churn_reclamation.py`、`e42_summarize.py`
 - `benchmark/results/e42/`：contract/prereg/summary/manifest（git 忽略部分）
-- 提交：`test: validate active pressure admission and reclamation` + 状态说明
+- 提交：`8e8ab4b`（test: validate active pressure admission and reclamation）
+- 本文件状态说明二次提交：<待回填>
