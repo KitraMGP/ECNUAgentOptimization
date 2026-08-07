@@ -1,0 +1,307 @@
+{
+  "experiment_id": "e6_c1_churn12",
+  "candidate_id": "C1_RADIX_PREFIX_SHARING",
+  "variant": "endurance_on",
+  "workload_id": "W16_churn",
+  "git_commit": "02541f720ec025d89c548f4de173e962cf02f833",
+  "cycles": 12,
+  "cycle_samples": [
+    {
+      "cycle": 0,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        }
+      ],
+      "kv": {
+        "used_cells": 232,
+        "shared_cells": 195,
+        "active_sequences": 2,
+        "used_bytes": 148480
+      }
+    },
+    {
+      "cycle": 1,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "5dbf7786f6ed9a6c45ee2112d0fe951b64d9035bfadc78c2de88b3926c1cbef2"
+        }
+      ],
+      "kv": {
+        "used_cells": 247,
+        "shared_cells": 210,
+        "active_sequences": 2,
+        "used_bytes": 158080
+      }
+    },
+    {
+      "cycle": 2,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "d5fb6cac1303d575027bbf256c2990285c11c97503d5c3161f7b463c8a4686c2"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "5dbf7786f6ed9a6c45ee2112d0fe951b64d9035bfadc78c2de88b3926c1cbef2"
+        }
+      ],
+      "kv": {
+        "used_cells": 262,
+        "shared_cells": 225,
+        "active_sequences": 2,
+        "used_bytes": 167680
+      }
+    },
+    {
+      "cycle": 3,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        }
+      ],
+      "kv": {
+        "used_cells": 232,
+        "shared_cells": 195,
+        "active_sequences": 2,
+        "used_bytes": 148480
+      }
+    },
+    {
+      "cycle": 4,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "5dbf7786f6ed9a6c45ee2112d0fe951b64d9035bfadc78c2de88b3926c1cbef2"
+        }
+      ],
+      "kv": {
+        "used_cells": 247,
+        "shared_cells": 210,
+        "active_sequences": 2,
+        "used_bytes": 158080
+      }
+    },
+    {
+      "cycle": 5,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "d5fb6cac1303d575027bbf256c2990285c11c97503d5c3161f7b463c8a4686c2"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "5dbf7786f6ed9a6c45ee2112d0fe951b64d9035bfadc78c2de88b3926c1cbef2"
+        }
+      ],
+      "kv": {
+        "used_cells": 262,
+        "shared_cells": 225,
+        "active_sequences": 2,
+        "used_bytes": 167680
+      }
+    },
+    {
+      "cycle": 6,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        }
+      ],
+      "kv": {
+        "used_cells": 232,
+        "shared_cells": 195,
+        "active_sequences": 2,
+        "used_bytes": 148480
+      }
+    },
+    {
+      "cycle": 7,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "5dbf7786f6ed9a6c45ee2112d0fe951b64d9035bfadc78c2de88b3926c1cbef2"
+        }
+      ],
+      "kv": {
+        "used_cells": 247,
+        "shared_cells": 210,
+        "active_sequences": 2,
+        "used_bytes": 158080
+      }
+    },
+    {
+      "cycle": 8,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "d5fb6cac1303d575027bbf256c2990285c11c97503d5c3161f7b463c8a4686c2"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "5dbf7786f6ed9a6c45ee2112d0fe951b64d9035bfadc78c2de88b3926c1cbef2"
+        }
+      ],
+      "kv": {
+        "used_cells": 262,
+        "shared_cells": 225,
+        "active_sequences": 2,
+        "used_bytes": 167680
+      }
+    },
+    {
+      "cycle": 9,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        }
+      ],
+      "kv": {
+        "used_cells": 232,
+        "shared_cells": 195,
+        "active_sequences": 2,
+        "used_bytes": 148480
+      }
+    },
+    {
+      "cycle": 10,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "5dbf7786f6ed9a6c45ee2112d0fe951b64d9035bfadc78c2de88b3926c1cbef2"
+        }
+      ],
+      "kv": {
+        "used_cells": 247,
+        "shared_cells": 210,
+        "active_sequences": 2,
+        "used_bytes": 158080
+      }
+    },
+    {
+      "cycle": 11,
+      "requests": [
+        {
+          "slot": 0,
+          "status": "ok",
+          "output_sha256": "d5fb6cac1303d575027bbf256c2990285c11c97503d5c3161f7b463c8a4686c2"
+        },
+        {
+          "slot": 1,
+          "status": "ok",
+          "output_sha256": "5dbf7786f6ed9a6c45ee2112d0fe951b64d9035bfadc78c2de88b3926c1cbef2"
+        }
+      ],
+      "kv": {
+        "used_cells": 262,
+        "shared_cells": 225,
+        "active_sequences": 2,
+        "used_bytes": 167680
+      }
+    }
+  ],
+  "final_kv_after_erase": {
+    "schema_version": 1,
+    "capacity_bytes": 327680,
+    "used_bytes": 0,
+    "used_bytes_valid": true,
+    "capacity_cells": 512,
+    "used_cells": 0,
+    "active_sequences": 0,
+    "shared_cells": 0,
+    "physical_sharing": false,
+    "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+  },
+  "errors": [],
+  "no_errors": true,
+  "used_cells_series": [
+    232,
+    247,
+    262,
+    232,
+    247,
+    262,
+    232,
+    247,
+    262,
+    232,
+    247,
+    262
+  ],
+  "shared_cells_series": [
+    195,
+    210,
+    225,
+    195,
+    210,
+    225,
+    195,
+    210,
+    225,
+    195,
+    210,
+    225
+  ],
+  "same_logic_state_drift": 0,
+  "reclaims_to_baseline": true,
+  "verdict": "PASS_ENDURANCE"
+}
