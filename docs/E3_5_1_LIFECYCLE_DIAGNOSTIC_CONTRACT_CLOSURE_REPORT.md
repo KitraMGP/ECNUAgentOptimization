@@ -203,8 +203,8 @@ strace task slot seq gen state policy last_used_tick used active [extra]`
 - 结果：`benchmark/results/e351/`（manifest/summary/csv + 36 per-replicate
   JSON + 40 overhead JSON）；
 - llama.cpp 提交：`aba4b26a`（fix: complete lifecycle attribution event
-  contract，4 文件 +142 行）；根仓库提交：`test: close lifecycle attribution
-  replay gate`（hash 见最终汇报）；
+  contract，4 文件 +142 行）；根仓库提交：`27faeab`（test: close lifecycle
+  attribution replay gate，4 文件 +774 行）；
 - 测试：根 pytest **146 passed**（含 test_e351_contract 9 例）；llama.cpp
   `test_lifecycle_trace` 7/7 + `test_unified_idle_lifecycle` 5/5 +
   `test_slot_routing` 10/10 + E1 5/5；
