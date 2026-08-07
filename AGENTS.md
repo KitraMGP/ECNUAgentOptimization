@@ -6,7 +6,7 @@
 
 - 目标：在保证推理效果前提下降低智能体推理的显存/内存占用与延迟（赛题要求优化前后同硬件对比）。
 - 技术栈：llama.cpp（C++ 推理框架，qwen35 架构）+ Python 3.13 / uv（benchmark）+ OpenAI 兼容 API。
-- 入口：`benchmark/agent_bench.py`（评测脚本）；核心优化代码位于 `llama.cpp/src/`（阶段 2 待实施）。
+- 入口：`benchmark/agent_bench.py`（兼容入口，委托 `runner.cli_main`）；核心优化代码位于 `llama.cpp/tools/server/`（slot 生命周期策略层）与 `llama.cpp/src/`（KV 统计接口）。
 - 模型：Qwen3.5-4B（GPU 正式）/ Qwen3.5-0.8B（CPU 开发）/ Qwen2.5-0.5B（最小验证），GGUF 在 `models/`（不入库）。
 
 ## Commands
@@ -20,9 +20,12 @@ cmake -B build-cuda -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=89 && cmake --buil
 ./download_models.sh          # 全部（0.5b/0.8b/4b）
 ./download_models.sh 4b       # 单个
 
-# 启动 llama-server（GPU 正式对比；ctx 小则触发 KV 回收）
+# 启动 llama-server（GPU 正式对比；优化机制开关）
 ./llama.cpp/build-cuda/bin/llama-server -m models/Qwen3.5-4B-Q4_K_M.gguf \
-  --host 127.0.0.1 --port 8080 -ngl 99 --ctx-size 2048
+  --host 127.0.0.1 --port 8080 -ngl 99 --ctx-size 8192 \
+  --kv-unified --parallel 4 \
+  --unified-idle-slot-policy default    # 或 lru（experimental：unified 价值感知淘汰）
+  --lifecycle-trace                     # 可选：归属诊断（默认关闭，debug-only）
 
 # 运行 benchmark（benchmark/ 内，uv 管理依赖）
 uv sync
@@ -59,4 +62,9 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40   # 长生命
 ## Notes
 
 - E0（Benchmark 基础设施重构）已完成：`framework/ workload/ metrics/ runner/ report/ configs/` + 42 个 pytest（不依赖 GPU/server）；详见 `docs/E0_IMPLEMENTATION_REPORT.md`。
-- 阶段 1（llama.cpp 可观测性）、阶段 2（KV 优化）未开始；详见 `docs/benchmark_implementation_plan.md`。
+- E1（llama.cpp 可观测性）已完成：`GET /metrics/kv`（KV 统计）+ KVProbe；详见 `docs/E1_*`。
+- E2（生命周期候选探索）已完成：A2 prefix-branch 路由实现后 REJECT 冻结；`--cache-ram` 默认 8192；详见 `docs/E2_*`。
+- E3（A1/A4 统一 idle-sequence 价值感知回收）已完成：`--unified-idle-slot-policy default|lru`（lru experimental，默认 default）+ `--lifecycle-stats` + `--lifecycle-trace`（归属诊断）；真实场景收益稀释 → KEEP_EXPERIMENTAL；性能门禁因 Laptop GPU 抖动 HOLD；详见 `docs/E3_*`。
+- E4（内存容量验证）已完成：并发承载 ≥8 session、OOM 边界 >96%（exploratory）；详见 `docs/E4_*`。
+- E3.6（真实流量回放）**未执行**：硬前置 = 用户提供且 validator（`benchmark/schemas/lifecycle_trace_v1.json`）通过的真实匿名 trace。
+- 关键结论：KV 预分配固定 → 生命周期策略不能降显存峰值；lru 价值在"池满防 OOM + 压力下保热点"。

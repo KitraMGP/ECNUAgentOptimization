@@ -1,11 +1,12 @@
-# Agent 工作流 Benchmark（E0 框架版）
+# Agent 工作流 Benchmark
 
 面向智能体的内存管理系统赛题的评测框架：在 llama-server 的 OpenAI 兼容 API 上，
-对多轮对话 / 工具调用 / 分支推理 / 长生命周期四类 agent 工作流做
-**KV 缓存、内存、延迟**指标的量化评测。
+对多轮对话 / 工具调用 / 分支推理 / 长生命周期 / 分支压力五类 agent 工作流做
+**KV 缓存、内存、延迟、并发承载**指标的量化评测。
 
-E0 阶段完成 benchmark 基础设施重构（配置 / workload / driver / metrics / runner / report），
-**不包含**任何 KV Cache 优化实现（见 `docs/benchmark_implementation_plan.md`）。
+E0 完成基础设施重构；E1-E4 逐步接入 KV 观测（`/metrics/kv`）、unified 价值感知
+淘汰（`--unified-idle-slot-policy lru`）、精确归属诊断（`--lifecycle-trace`）
+与内存容量/并发承载基准。各阶段结论见 `docs/E*` 报告。
 
 ## 目录结构
 
@@ -15,13 +16,17 @@ benchmark/
 ├── framework/           # 核心框架
 │   ├── config.py        #   Config 系统（JSON/YAML/dict/CLI，字段向后兼容）
 │   ├── driver.py        #   OpenAI 兼容 API 封装（400 兜底、timings 提取）
+│   ├── kv_probe.py      #   KV 观测（/metrics/kv + slot erase 清洁协议）
 │   ├── sampler.py       #   llama-server 进程采样（RSS + GPU 显存）
 │   └── workload.py      #   Workload 抽象（generate / run / evaluate）+ 注册表
 ├── workload/            # 场景实现（导入即注册）
 │   ├── multi_turn.py    #   多轮对话
 │   ├── tool_call.py     #   工具调用（文本 ACTION 协议）
 │   ├── branch.py        #   分支推理（公共前缀派生 A/B）
-│   └── long_life.py     #   长生命周期（秘密数字 + 应用层截断）
+│   ├── long_life.py     #   长生命周期（秘密数字 + 应用层截断）
+│   └── branch_pressure.py # 分支压力（E2.5：双分支 JSON evaluator）
+├── scripts/             # 各阶段实验 runner（e2-e4 系列 + 诊断/汇总）
+├── schemas/             # 匿名 lifecycle trace schema（E3.5）
 ├── metrics/             # 指标统计（mean/std/p50/p95/cache_hit_rate/summarize）
 ├── runner/              # 实验编排（场景 × repeat × warmup，结果落盘）
 ├── report/              # markdown 实验报告生成
