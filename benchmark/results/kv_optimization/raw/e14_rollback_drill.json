@@ -1,0 +1,21 @@
+{
+  "commands_exit_codes": [
+    0,
+    0
+  ],
+  "q8_0": {
+    "kv_type": "q8_0",
+    "health": true,
+    "per_cell": 17408,
+    "canary_leak": false,
+    "out_hash": "e969b7333ecebb8e"
+  },
+  "f16": {
+    "kv_type": "f16",
+    "health": true,
+    "per_cell": 32768,
+    "canary_leak": false,
+    "out_hash": "000465e3c1e32e01"
+  },
+  "rollback_ok": true
+}
