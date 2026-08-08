@@ -1,0 +1,29 @@
+# Qwen3.5-4B q8_0 validated deployment profile（E13.1 固化）
+# 状态：PASS_VALIDATED_DEPLOYMENT_PROFILE
+# 说明：上游既有参数组合（--cache-type-k/v q8_0）+ E10.3/E11.1 验收数据；
+#       非新算法实现。token-exact 仅限本验证矩阵。
+model:
+  path: models/qwen3-5-4B-Q4_K_M.gguf
+  sha256_prefix: de8e96cd0d0c3584
+kv:
+  cache_type_k: q8_0
+  cache_type_v: q8_0
+  kv_unified: true
+  ctx_size: 4096
+  parallel: 4
+  # 注：ctx 8192 未验证（8GB 卡显存限制）
+generation:
+  temperature: 0
+  seed: 42
+validation_scope:
+  workloads: [short_qa, long_code, long_summary, tool_json, system_retention,
+              canary, multi_turn, save_restore, long_prompt_1000]
+  protocol: { warmup: 5, formal: 20, paired: f16_vs_q8_0 }
+  boundaries:
+    token_exact: "仅限本矩阵（temp=0/seed=42/生成长度<=16 tokens）"
+    decode_max_regression_pct: 2.10
+    kv_capacity_change_pct: -47
+    gpu_peak_change_mb: -58
+    q4_0_status: NOT_VALIDATED
+    ctx_8192: NOT_VALIDATED
+expected_status: PASS_VALIDATED_DEPLOYMENT_PROFILE
