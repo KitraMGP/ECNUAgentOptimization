@@ -82,11 +82,13 @@
       "id": "radixattention_sglang",
       "title": "SGLang: Efficient Execution of Structured Language Model Programs (RadixAttention)",
       "arxiv": "2312.07104",
-      "venue": "SOSP 2024",
+      "venue": "NeurIPS 2024",
       "read_status": "FULL_TEXT_READ",
       "pdf_sha256": "161e0a0123a89cd8a57d68734ae704680b0e577fee41e1e7e1029c37a9d99b57",
       "notes": "notes/radixattention_sglang.md",
-      "candidate": "SELECTED (P0 lossless, server-layer radix tree)"
+      "candidate": "SELECTED (P0 lossless, server-layer radix tree)",
+      "venue_evidence": "ACM DL 10.5555/3737916.3739916 (38th NeurIPS); stanford theory page (NeurIPS 37); NeurIPS virtual poster 94872",
+      "venue_correction": "E8.1: 修正 E7.2 误标 SOSP 2024 → NeurIPS 2024（SGLang 主论文发表于 NeurIPS 2024，非 SOSP；此前 SOSP 标注无一级证据）"
     },
     {
       "id": "quest",
@@ -102,21 +104,25 @@
       "id": "chunkattention",
       "title": "ChunkAttention: Efficient Self-Attention with Prefix-Aware KV Cache",
       "arxiv": "2402.15220",
-      "venue": "VENUE_UNVERIFIED",
+      "venue": "ACL 2024 (Long Papers)",
       "read_status": "FULL_TEXT_READ",
       "pdf_sha256": "7201aa42e0f0020c",
       "notes": "notes/chunkattention.md",
-      "candidate": "PARTIAL (prefix dedup feasible, TPP kernel not)"
+      "candidate": "PARTIAL (prefix dedup feasible, TPP kernel not)",
+      "venue_evidence": "ACL Anthology 2024.acl-long.623; DOI 10.18653/v1/2024.acl-long.623; arXiv comments \"ACL 2024\"",
+      "venue_correction": "E8.1: 从 VENUE_UNVERIFIED 修正为 ACL 2024（ACL Anthology 一级来源）"
     },
     {
       "id": "infinigen",
       "title": "InfiniGen: Efficient Generative Inference with Dynamic KV Cache Management",
       "arxiv": "2406.19707",
-      "venue": "VENUE_UNVERIFIED",
+      "venue": "OSDI 2024",
       "read_status": "FULL_TEXT_READ",
       "pdf_sha256": "267d689a1ded953f",
       "notes": "notes/infinigen.md",
-      "candidate": "DEFERRED (long-term offload)"
+      "candidate": "DEFERRED (long-term offload)",
+      "venue_evidence": "USENIX OSDI 2024 official PDF (usenix.org/system/files/osdi24-lee.pdf)",
+      "venue_correction": "E8.1: 从 VENUE_UNVERIFIED 修正为 OSDI 2024（USENIX 官方 proceedings 一级来源）"
     },
     {
       "id": "cacheblend",
@@ -217,7 +223,9 @@
       "read_status": "FULL_TEXT_READ",
       "pdf_sha256": "77ca6902d34c3ab3",
       "notes": "notes/lminfinite.md",
-      "candidate": "DEFERRED (P2 lossy)"
+      "candidate": "DEFERRED (P2 lossy)",
+      "venue_evidence": "OpenReview forum pOujzgHIRY 存在（ICLR 2024 submission）但 decision 无法确认（验证墙）；arXiv v7 无 journal-ref",
+      "venue_correction": "E8.1: 保持 VENUE_UNVERIFIED（无一级来源确认接受；OpenReview decision 不可读）"
     },
     {
       "id": "vpid",
