@@ -15,7 +15,7 @@
 | attention KV 实际使用 | **32768 B/token（线性）** | 长度扫描：186 tok→6.3MB、842→27.8MB、1662→54.7MB |
 | recurrent state | **固定（不随 prompt 增长）**；不在 /metrics/kv 范围 | 长度扫描无 recurrent 增量 + 结构确认（E8.7）|
 | graph/compute buffer（parallel 增量）| p1→p4（c4096）GPU 2982→3132 MB（+150MB）| nvidia-smi |
-| KV type 支持 | **F16 仅默认；`--ctk/-ctv` 对 hybrid 无效**（`invalid argument: --ctk`）| 实测 |
+| KV type 支持 | **F16 默认；q8_0 实测可用**（`--cache-type-k/v q8_0`：per-cell 32768→**17408 B（-46.9%）**，输出 hash 与 F16 完全一致 39a0f0fc...）；q4_0 可加载 | 实测（E9.4 补测：E9.4 初版误报 -ctk 无效为参数名笔误 `--ctk`→`-ctk`，已修正）|
 
 ## 2. 容量边界（每 slot）
 
@@ -45,7 +45,7 @@
 
 ## 5. 对候选选择的影响
 
-- H1（attention KV type 优化）：`-ctk/-ctv` 无效 → 需评估 hybrid 的 attention KV 是否可量化（F16→Q8 可省 16KB/token → 长 prompt 容量翻倍潜力，但需新实现）
+- H1（attention KV type 优化）：**实测可行**——`--cache-type-k/v q8_0` 在 4B 上 per-cell 32768→17408 B（-46.9%），输出 hash 与 F16 完全一致（39a0f0fc...）→ 同容量 KV 翻倍潜力；**但为上游既有开关**（非新代码，E9.6 作 comparator 不冒充创新）
 - H2（prefix checkpoint restore）：recurrent 固定 + attention 32KB/token → checkpoint 大小 ≈ attention 前缀 bytes（大）；恢复收益 = 避免重复 prefill（decode 瓶颈下 prefill 占时比例低）
 - H3（recurrent 精度）：recurrent 固定小 → 收益有限
-- H4（clone/fork）：copy 成本 = attention 前缀 bytes（数据复制）vs 重复 prefill（计算）——prefill 280ms/678tokens vs copy 54MB 拷贝（PCIe/VRAM 内 ~ms 级）→ copy 可能更优（需实测）
+- H4（clone/fork）：copy 成本 = attention 前缀 bytes（数据复制）vs 重复 prefill（计算）——prefill 280ms/678tokens vs copy 54MB 拷贝（VRAM 内 ~ms 级）→ copy 可能更优（E9.7 prototype 实测）
