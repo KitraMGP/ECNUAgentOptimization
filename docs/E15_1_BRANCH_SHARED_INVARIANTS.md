@@ -267,11 +267,11 @@ python3 -m pytest unit/test_e15_branch_shared.py --noconftest -v
 
 # 2) benchmark 侧纯函数测试（不依赖 server/GPU）
 cd <repo-root>/benchmark
-.venv/bin/python -m pytest tests/test_e15_branch_concurrent.py -q
+uv run pytest tests/test_e15_branch_concurrent.py -q
 
 # 3) 分支并发 paired smoke（off/on × warmup=2 + reps=5；seed=42/temp=0）
 cd <repo-root>/benchmark
-.venv/bin/python runner/e15_branch_concurrent.py \
+uv run python runner/e15_branch_concurrent.py \
   --server-bin ../llama.cpp/build/bin/llama-server \
   --model ../llama.cpp/tmp/models--ggml-org--test-model-stories260K/snapshots/479896ec924af6d40fd419ab8f4d1eb2101de00d/stories260K-f32.gguf \
   --port 8091 --ctx-size 2048 --parallel 5 --cache-ram 0 --min-lcp 64 \
@@ -293,10 +293,12 @@ LLAMA_CACHE=<repo-root>/llama.cpp/tmp \
 python3 -m pytest unit/test_e15_branch_shared.py --noconftest -v
 ```
 
-  - **首次结果（2026-08-08，已勘误）**：`4 passed in 0.94s`，日志
-    `llama.cpp/tmp/e15_1_integ_20260808.log`。当时二进制为 version 8568（`f54930492`），
-    **早于 llama.cpp HEAD `4a699aaad`，缺少 `afbf375c6` 的 checkpoint guard**，
-    原记录"二进制与 HEAD 核心代码一致"**不成立**——审查发现后重建修正（见下）。
+  - **首次结果（2026-08-08，已勘误）**：终端输出报告 `4 passed in 0.94s`；留存日志
+    `llama.cpp/tmp/e15_1_integ_20260808.log` 复跑值为 `4 passed in 0.95s`（tee 复跑时
+    0.01s 级波动，两个数字分别与其各自记录一致）。当时二进制为 version 8568
+    （`f54930492`），**早于 llama.cpp HEAD `4a699aaad`，缺少 `afbf375c6` 的
+    checkpoint guard**，原记录"二进制与 HEAD 核心代码一致"**不成立**——审查发现后
+    重建修正（见下）。
   - **修正结果（2026-08-09，以本记录为准）**：`cmake --build build -j $(nproc)` 重建
     当前 HEAD 后，二进制 **version 8570（`4a699aaad`）**（`git log -1` 亦为 `4a699aaad`，
     与 HEAD 一致）；同命令重跑 → **`4 passed in 0.99s`**，日志
@@ -309,6 +311,11 @@ python3 -m pytest unit/test_e15_branch_shared.py --noconftest -v
     （`--offline` 从缓存加载，不联网）；每测试 autouse fixture 真实 Popen exec
     llama-server（`--kv-unified --kv-prefix-share` 等）并轮询 `/health` 就绪后执行
     真实并发请求。
+  - **日志不入库说明（已知限制）**：测试日志存于忽略目录 `llama.cpp/tmp/`
+    （`.gitignore` 忽略 `/tmp/`）不入库；长期可复核依据 = 已提交测试代码
+    （`llama.cpp/tools/server/tests/unit/test_e15_branch_shared.py`，commit
+    `4a699aaad`）、复现命令（§5）、HEAD/二进制版本（`4a699aaad` / version 8570）
+    与本小节记录输出；0.01s 级耗时波动不新建冗余证据目录。
 - **benchmark 侧**：`cd <repo-root>/benchmark && uv run pytest tests/test_e15_branch_concurrent.py -q`
   → `48 passed`；根全量 `cd <repo-root>/benchmark && uv run pytest -q` → `413 passed`（2026-08-08
   阶段 0 首次实测 14.72s；2026-08-09 修正重跑复验 14.78s，数字一致；后续新增测试以当时实测为准）。

@@ -149,9 +149,9 @@ token 减少（1）｜无重复/中文短块/短重复无收益 identity（3）�
 （off 旧字段 / on 压缩不污染 / 400 重试幂等 / fail-fast 传播，4）｜审计零明文（1）｜
 workload 默认路径 / Runner 默认 off/opt-in/非法值（2）。
 
-回归（接入未破坏既有行为）：
+回归（接入未破坏既有行为；同样从 `<repo-root>` 执行）：
 ```bash
-uv run pytest tests/test_driver.py tests/test_runner.py tests/test_config.py \
+cd <repo-root>/benchmark && uv run pytest tests/test_driver.py tests/test_runner.py tests/test_config.py \
   tests/test_workloads.py tests/test_e15_2_tool_payload_integration.py \
   tests/test_context_policy.py tests/test_e2e_smoke.py -q
 # 127 passed in 2.01s
@@ -237,13 +237,18 @@ multi_turn 的 `HOLD_NO_MEASURABLE_GAIN` 补充说明：真实智能体历史中
 ## 10. 复现命令
 
 ```bash
-# 单元测试
-cd benchmark && uv run pytest tests/test_prompt_preprocessor.py -q
+# 每条命令均从仓库根（<repo-root>）独立执行；server 与 benchmark 各自独立启动/运行
 
-# paired 门禁（需 GPU + 4B 模型）
+# 单元测试
+cd <repo-root>/benchmark && uv run pytest tests/test_prompt_preprocessor.py -q
+
+# paired 门禁（需 GPU + 4B 模型；server 以仓库根为 cwd 启动，-m 相对路径正确）
+cd <repo-root>
 ./llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
   --host 127.0.0.1 --port 8080 -ngl 99 --ctx-size 4096 --parallel 1 &
-cd benchmark
+
+# benchmark 侧（等待 server 就绪后独立执行）
+cd <repo-root>/benchmark
 uv run python runner/e15_3_b1_paired.py --scenario single   --output results/e15_3_b1_paired_single.json
 uv run python runner/e15_3_b1_paired.py --scenario multi_turn --rounds 12 --output results/e15_3_b1_paired_multiturn.json
 ```
