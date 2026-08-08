@@ -23,7 +23,7 @@
 | 文件 | 类型 | 内容 |
 |---|---|---|
 | `benchmark/framework/tool_payload.py` | 新增 | ToolPayloadStore 核心（纯 Python stdlib：hashlib/json/os/re/threading/dataclasses/types，无外部依赖） |
-| `benchmark/tests/test_tool_payload.py` | 新增 | 36 个纯 pytest 单元测试（无 GPU / 真实 server / workload 依赖） |
+| `benchmark/tests/test_tool_payload.py` | 新增 | 65 个纯 pytest 单元测试（无 GPU / 真实 server / workload 依赖；36 为 reviewer 修复前基线，修复后 65，阶段 0 实测 65 passed） |
 | `docs/E15_2_TOOL_PAYLOAD_STORE.md` | 新增 | 本报告 |
 
 ## 2. 公共接口

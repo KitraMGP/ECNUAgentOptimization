@@ -1,7 +1,8 @@
 """tool_payload —— E15.2 B 线核心：ToolPayloadStore（工具返回 payload 的进程内内容寻址存储）。
 
-设计定位（对应 `docs/E15_0_TECHNICAL_PLAN_AND_ACCEPTANCE.md`；本阶段仅交付**核心 + 纯 pytest**，
-**不接入 workload**，集成边界见 `docs/E15_2_TOOL_PAYLOAD_STORE.md` §6）：
+设计定位（对应 `docs/E15_0_TECHNICAL_PLAN_AND_ACCEPTANCE.md`）：核心 + workload 最小端到端
+集成已交付（E15.2.1，接入 `tool_call` / `long_life`，见 `docs/E15_2_TOOL_PAYLOAD_STORE.md`
+§6；**未跑真实模型 paired**，token/KV 收益待 4B greedy paired 对比）：
 - 目标：工具调用返回的大段 JSON（如订单详情）以**内容寻址**方式入库，resolve 时按
   ``ref + expected_hash`` 显式取回原文，避免把整段 payload 反复回填进模型上下文。
 - thread-scoped：store 绑定创建线程（``threading.get_ident``），任何跨线程访问 fail-fast

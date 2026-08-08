@@ -61,7 +61,7 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40   # 长生命
 
 ## Notes
 
-- E0（Benchmark 基础设施重构）已完成：`framework/ workload/ metrics/ runner/ report/ configs/` + 42 个 pytest（E0 阶段实测，见 `docs/E0_IMPLEMENTATION_REPORT.md`）；**当前全仓累计 pytest = 177**（E1-E4 阶段新增，`uv run pytest -q` 实测，不依赖 GPU/server）。
+- E0（Benchmark 基础设施重构）已完成：`framework/ workload/ metrics/ runner/ report/ configs/` + 42 个 pytest（E0 阶段实测，见 `docs/E0_IMPLEMENTATION_REPORT.md`）；**当前全仓累计 pytest = 413**（2026-08-08 阶段 0 实测：`cd benchmark && uv run pytest -q` → `413 passed`；177 为 E1-E4 基线，E15 系列**新增** 236 个：E15.1 branch_concurrent 48、E15.2 tool_payload 65 + 集成 21、E15.3 preprocessor 34、E15.4 context_policy 68——`test_workloads.py` 10 为原有回归不计新增；均在 benchmark/ 内，不依赖 GPU/server；注意必须在 `benchmark/` 目录下运行，否则 pytest 会收集到 `llama.cpp/` 子仓库的测试）。
 - E1（llama.cpp 可观测性）已完成：`GET /metrics/kv`（KV 统计）+ KVProbe；详见 `docs/E1_*`。
 - E2（生命周期候选探索）已完成：A2 prefix-branch 路由实现后 REJECT 冻结；`--cache-ram` 默认 8192；详见 `docs/E2_*`。
 - E3（A1/A4 统一 idle-sequence 价值感知回收）已完成：`--unified-idle-slot-policy default|lru`（lru experimental，默认 default）+ `--lifecycle-stats` + `--lifecycle-trace`（归属诊断）；真实场景收益稀释 → KEEP_EXPERIMENTAL；性能门禁因 Laptop GPU 抖动 HOLD；详见 `docs/E3_*`。

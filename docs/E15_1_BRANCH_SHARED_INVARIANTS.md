@@ -80,8 +80,9 @@ ThreadPoolExecutor + barrier）中**确定生效**：
 - `benchmark/runner/e15_branch_concurrent.py` —— E15 branch concurrent paired runner
   （纯函数：prompt 构造/输出提取/recompute/canary 检测/gate_verdict；server 生命周期；
   replicate 协议；并发执行；结果 JSON 落盘）
-- `benchmark/tests/test_e15_branch_concurrent.py` —— 35 个纯函数 pytest
-  （不依赖 server/GPU；gate_verdict 全部分支判定 + G0 数据完整性 + CLI 参数校验）
+- `benchmark/tests/test_e15_branch_concurrent.py` —— 48 个纯函数 pytest
+  （不依赖 server/GPU；gate_verdict 全部分支判定 + G0 数据完整性 + CLI 参数校验；
+  初始 35 个为 §4.5 第一轮修复状态，§4.7 第二轮修复补齐至 48 个，阶段 0 实测 48 passed）
 
 **新增（llama.cpp 独立 E15 test 文件，已提交 4a699aaad，未改任何核心代码）**：
 - `llama.cpp/tools/server/tests/unit/test_e15_branch_shared.py` —— 4 个真实 server
@@ -277,6 +278,31 @@ cd benchmark
 原始结果：`benchmark/results/e15_branch_smoke.json`（每 replicate 完整记录：
 HTTP/错误、prompt_n/cache_n、输出 token ids + 内容 sha256、latency、/metrics/kv 全字段、
 日志 shared 事件 delta、清空前后基线断言）。
+
+### 阶段 0 复核实测（2026-08-08）
+
+- **llama.cpp 侧 4 个集成测试**（真实 server，非空跑）：
+
+```bash
+cd llama.cpp/tools/server/tests
+LLAMA_SERVER_BIN_PATH=$PWD/../../build/bin/llama-server \
+LLAMA_CACHE=$PWD/../../tmp \
+python3 -m pytest unit/test_e15_branch_shared.py --noconftest -v
+```
+
+  - **结果**：`4 passed in 0.94s`（重跑一次留存日志
+    `llama.cpp/tmp/e15_1_integ_20260808.log`，结果一致）；
+    4/4 为 `test_concurrent_fanout_paired_off_on` / `test_erase_middle_target_releases_only_its_refs` /
+    `test_metrics_kv_contract_on_branch_scenario` / `test_concurrent_canary_no_cross_branch_leak`。
+  - **环境**：`build/bin/llama-server` version 8568（`f54930492`，E15.1 commit `4a699aaad`
+    仅新增测试文件未改核心代码，二进制与 HEAD 核心代码一致）；Python 3.14.6 / pytest
+    9.0.3（系统 python，非 .venv）；模型 `ggml-org/test-model-stories260K` 已缓存于
+    `llama.cpp/tmp/models--ggml-org--test-model-stories260K/.../stories260K-f32.gguf`
+    （`--offline` 从缓存加载，不联网）；每测试 autouse fixture 真实 Popen exec
+    llama-server（`--kv-unified --kv-prefix-share` 等）并轮询 `/health` 就绪后执行
+    真实并发请求。
+- **benchmark 侧**：`cd benchmark && uv run pytest tests/test_e15_branch_concurrent.py -q`
+  → `48 passed`；根全量 `cd benchmark && uv run pytest -q` → `413 passed`（14.72s）。
 
 ---
 
