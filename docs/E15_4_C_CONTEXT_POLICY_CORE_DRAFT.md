@@ -2,6 +2,7 @@
 
 > 状态：**DRAFT**（本阶段仅交付独立核心 + 纯函数测试；未集成 workload、未跑真实模型 paired）
 > 日期：2026-08-08 ｜ 对应计划：`docs/E15_0_TECHNICAL_PLAN_AND_ACCEPTANCE.md` 技术线 C（E15.4）
+> 提交状态（2026-08-08 收口）：已提交，根仓库 commit `c9c26ab`（核心 + 测试 + 本文档）。
 > 约束执行：只新增 `benchmark/framework/context_policy.py`、`benchmark/tests/test_context_policy.py` 与本文档；
 > 未修改 tool_call.py / long_life.py / config.py / runner.py / driver.py / workload.py / 现有测试 / llama.cpp；
 > 未提交、未安装依赖、未跑全量测试/格式化。

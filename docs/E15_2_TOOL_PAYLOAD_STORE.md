@@ -4,6 +4,7 @@
 > tool_call / long_life 集成 + 集成 pytest；**未跑真实模型 paired**（上下文占位替换的
 > token/KV 收益需 4B greedy paired 对比，见 §6，如实声明未做）。
 > 日期：2026-08-08 ｜ 对应计划：`docs/E15_0_TECHNICAL_PLAN_AND_ACCEPTANCE.md` 技术线 B（E15.2）
+> 提交状态（2026-08-08 收口）：已提交，根仓库 commit `a2e0558`（核心 + 集成 + 测试 + 本文档）。
 > 约束执行（CORE）：只新增 `benchmark/framework/tool_payload.py`、`benchmark/tests/test_tool_payload.py`
 > 与本文档；未修改 tool_call.py / long_life.py / config.py / runner.py / driver.py / workload.py /
 > 现有测试 / llama.cpp；未提交、未安装依赖、未跑全量测试/格式化（仅跑 `tests/test_tool_payload.py`）。

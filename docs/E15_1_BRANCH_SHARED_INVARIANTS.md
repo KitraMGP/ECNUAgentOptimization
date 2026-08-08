@@ -75,14 +75,14 @@ ThreadPoolExecutor + barrier）中**确定生效**：
 
 ## 2. 改动文件清单
 
-**新增（根仓库 benchmark/，未提交）**：
+**新增（根仓库 benchmark/，已提交 f357a42）**：
 - `benchmark/runner/e15_branch_concurrent.py` —— E15 branch concurrent paired runner
   （纯函数：prompt 构造/输出提取/recompute/canary 检测/gate_verdict；server 生命周期；
   replicate 协议；并发执行；结果 JSON 落盘）
 - `benchmark/tests/test_e15_branch_concurrent.py` —— 35 个纯函数 pytest
   （不依赖 server/GPU；gate_verdict 全部分支判定 + G0 数据完整性 + CLI 参数校验）
 
-**新增（llama.cpp 独立 E15 test 文件，未提交，未改任何核心代码）**：
+**新增（llama.cpp 独立 E15 test 文件，已提交 4a699aaad，未改任何核心代码）**：
 - `llama.cpp/tools/server/tests/unit/test_e15_branch_shared.py` —— 4 个真实 server
   集成测试（并发 fan-out off/on paired、12.13.8/9 中间态、metrics 契约、并发 canary）
 
@@ -244,7 +244,7 @@ ThreadPoolExecutor + barrier）中**确定生效**：
 target 实际串行进入处理循环（首版已注明，不影响共享链证据）；② 容量——off 模式 4 并发
 全量 KV 2022/2048，更大并发/更长 prompt 需按 §7.3 约束调参；③ 模型域——仅 TinyLlama
 attention-only，Qwen3.5-4B hybrid 由 capability gate 永久禁用共享，不在本阶段范围；
-④ 本阶段所有改动（根仓库 + llama.cpp）均未提交，等待用户授权。
+④ 本阶段所有改动（根仓库 + llama.cpp）均未提交，等待用户授权（2026-08-08 收口：已提交，根仓库 f357a42 / llama.cpp 4a699aaad）。
 
 ---
 
@@ -309,4 +309,4 @@ HTTP/错误、prompt_n/cache_n、输出 token ids + 内容 sha256、latency、/m
 5. **性能数值**：latency（off ~98ms vs on ~18-20ms/target）为 CPU f32 TinyLlama 数据，
    仅作共享行为的辅助证据，不作主模型性能声明；正式收益门槛按 12.11 recompute 指标判定。
 6. **未提交**：本阶段所有改动（根仓库 + llama.cpp）均未提交，等待用户授权（E6 §12.20
-   提交规则）。
+   提交规则；2026-08-08 收口：已提交，根仓库 f357a42 / llama.cpp 4a699aaad）。
