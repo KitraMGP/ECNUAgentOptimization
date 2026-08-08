@@ -1,0 +1,19 @@
+{
+  "mode": "LOCAL_DRY_RUN（无真实生产环境，不虚构灰度结果）",
+  "n_requests": 40,
+  "success": 40,
+  "4xx": 0,
+  "5xx": 0,
+  "p50_ms": 631.4,
+  "p95_ms": 685.0,
+  "p99_ms": 685.6,
+  "unique_hashes": 8,
+  "canary_leak": false,
+  "kv": {
+    "used_cells": 866,
+    "capacity_cells": 4096
+  },
+  "server_restart_crash": false,
+  "checkpoint_log_count": 0,
+  "schema_failures": 0
+}
