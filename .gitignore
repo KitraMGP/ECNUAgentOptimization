@@ -1,6 +1,9 @@
 # Reasonix 工具
 .reasonix/
 
+# 运行时 agent 会话产物（不入库）
+.agentteam/
+
 # 模型文件（大文件，不入库；用 models/download_models.sh 下载）
 models/*.gguf
 
