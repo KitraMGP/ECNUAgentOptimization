@@ -20,6 +20,7 @@ from openai import OpenAI
 
 from . import sampler
 from .kv_probe import KVProbe
+from .prompt_preprocessor import Preprocessor
 
 
 class Driver:
@@ -34,11 +35,17 @@ class Driver:
         timings_per_token: bool = False,
         max_retry: int = 3,
         kv_probe: Optional[KVProbe] = None,
+        preprocessor: Optional[Preprocessor] = None,
     ) -> None:
         """封装 OpenAI 兼容客户端；建连时定位 server PID（按端口过滤）。
 
         ``kv_probe`` 可选：非 None 时在每次请求前后各采集一次 KV 快照
         （E1 可观测性，职责与进程采样分离）。
+
+        ``preprocessor`` 可选（E15.3 B1）：非 None 时在**请求发送前**对
+        messages 做 deterministic structured-lossless 压缩（默认 off = None，
+        与旧行为完全一致）。压缩产生新消息列表，**不修改调用者 messages**；
+        审计字典 ``row["preprocessor"]`` 仅在启用时出现。
         """
         self.base_url = base_url
         self.model = model
@@ -46,13 +53,25 @@ class Driver:
         self.timings_per_token = timings_per_token
         self.max_retry = max_retry
         self.kv_probe = kv_probe
+        self.preprocessor = preprocessor
         self._req_count = 0
         self.client = OpenAI(base_url=base_url, api_key=api_key)
         sampler.set_server_pid(sampler.find_server_pid(host, port))
 
     # ---- 请求 ----
     def chat(self, messages: List[dict], _retry: int = 0) -> Dict[str, Any]:
-        """调用 chat.completions 并记录指标；返回行与旧脚本一致并追加 timings。"""
+        """调用 chat.completions 并记录指标；返回行与旧脚本一致并追加 timings。
+
+        E15.3 B1（preprocessor on）：请求发送前对 messages 做确定性结构化压缩。
+        - 压缩产生**新列表**（调用者 messages 零污染）；压缩幂等——400 重试路径
+          基于压缩后消息裁剪后递归调用时再次压缩无变化；
+        - 审计 ``row["preprocessor"]``（manifest.to_dict()，无原文）仅在启用时
+          出现；off（None）时本方法行为与旧版逐字节一致。
+        """
+        work: List[dict] = messages
+        pp_audit: Optional[Dict[str, Any]] = None
+        if self.preprocessor is not None:
+            work, pp_audit = self.preprocessor.process(messages)
         if self.kv_probe is not None:
             self._req_count += 1
             self.kv_probe.snapshot(tag=f"req_{self._req_count}_start")
@@ -60,7 +79,7 @@ class Driver:
             t0 = time.perf_counter()
             resp = self.client.chat.completions.create(
                 model=self.model,
-                messages=messages,
+                messages=work,
                 extra_body=self._extra_body(),
             )
             ms = (time.perf_counter() - t0) * 1000
@@ -78,6 +97,8 @@ class Driver:
                 "gpu_mb": sampler.find_server_gpu_mb(sampler.get_server_pid()),
                 "timings": self._extract_timings(resp),
             }
+            if pp_audit is not None:
+                row["preprocessor"] = pp_audit
             if self.kv_probe is not None:
                 self.kv_probe.snapshot(tag=f"req_{self._req_count}_end")
             return row

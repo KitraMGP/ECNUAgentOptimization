@@ -36,10 +36,10 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40   # 长生命
 ## Architecture
 
 - `benchmark/agent_bench.py`：兼容入口（E0 重构后为薄壳，委托 `runner.cli_main`；CLI 参数与输出格式向后兼容）。
-- `benchmark/framework/`：核心框架——`config.py`（JSON/YAML/dict 配置系统）、`driver.py`（OpenAI 兼容 API 封装，400 兜底 + timings 提取）、`sampler.py`（RSS/GPU 采样）、`workload.py`（Workload 抽象：`generate/run/evaluate` + 注册表）。
+- `benchmark/framework/`：核心框架——`config.py`（JSON/YAML/dict 配置系统）、`driver.py`（OpenAI 兼容 API 封装，400 兜底 + timings 提取；E15.3 起支持 `preprocessor=` 发送前结构化压缩）、`sampler.py`（RSS/GPU 采样）、`workload.py`（Workload 抽象：`generate/run/evaluate` + 注册表）、`prompt_preprocessor.py`（E15.3 B1：deterministic structured-lossless preprocessor，消息级完全重复去重 + protected 保留 + round-trip restore + fail-fast）、`tool_payload.py`（E15.2 ToolPayloadStore）、`context_policy.py`（E15.4 C 线核心）。
 - `benchmark/workload/`：四场景实现（multi_turn / tool_call / branch / long_life），导入即注册；结果结构与旧脚本一致（行内追加 `timings` 键）。
 - `benchmark/metrics/`：p50/p95/mean/std/cache_hit_rate/summarize（保留旧字段）。
-- `benchmark/runner/`：场景 × repeat × warmup 编排、结果落盘 `results/bench_<ts>.json`（`{config, summary, scenarios}`）。
+- `benchmark/runner/`：场景 × repeat × warmup 编排、结果落盘 `results/bench_<ts>.json`（`{config, summary, scenarios}`）；`e15_branch_concurrent.py`（E15.1 分支并发 paired）、`e15_3_b1_paired.py`（E15.3 B1 4B greedy paired 门禁）。
 - `benchmark/report/`：markdown 实验报告。
 - `benchmark/configs/`：示例配置（example.json / example.yaml）+ q8_0 配置（`qwen35_4b_q8_validated.yaml` 为 E13.1 固化；`qwen35_4b_q8_production.yaml` 为 E14.1 固化）。
 - `benchmark/tests/`：pytest（不依赖 GPU/真实 server，含 mock OpenAI server e2e 冒烟）。
@@ -70,5 +70,5 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40   # 长生命
 - E6-E8（KV 优化实施与复核）已完成：C1 attention-only KV 优化真实且正确（TinyLlama 收益），但主模型 Qwen3.5-4B（hybrid）无收益 → E7 起 `PARTIAL_KV_CORRECTNESS_NO_OPTIMIZATION`；tenant 限定 TRUSTED_SINGLE_TENANT；详见 `docs/E6_* / E7_* / E8_*`。
 - E9-E13（C1 关闭 + q8_0 生产化 + 主模型转向）已完成：C1_ATTENTION_ONLY_PASS；q8_0（`--cache-type-k/v q8_0`）部署 profile 固化 `PASS_VALIDATED_DEPLOYMENT_PROFILE`；checkpoint 主模型路径 E12 NO_GO_WITH_EVIDENCE（prototype 保留 experimental attention-only）；详见 `docs/E9_* / E10_* / E11_* / E12_* / E13_*`。
 - E14（发布/灰度/运维交接）已完成：`RELEASE_STATUS: READY_FOR_DEPLOYMENT`（q8_0 production profile，15 项验收 + 回滚演练通过）；**真实生产灰度未执行**（`PRODUCTION_ROLLOUT_STATUS: NOT_EXECUTED`，无生产环境，不虚构）；运维交接见 `docs/E14_5_OPERATIONS_HANDOFF.md`；详见 `docs/E14_*`。
-- E15（E14 后独立扩展，四技术线分阶段，方案见 `docs/E15_0_TECHNICAL_PLAN_AND_ACCEPTANCE.md`）：**E15.0** 方案已提交（根 `5dd6b79`）；**E15.1** 分支并发共享不变量加固 + 真实 fan-out 验证 **PASS**（根 `f357a42` / llama.cpp `4a699aaad`，零核心代码改动；未跑 4B——hybrid 由 capability gate 永久禁用共享）；**E15.2** ToolPayloadStore 外置存储 + workload 集成已提交（根 `a2e0558`；**未跑真实 4B paired**，收益待 §6 后续动作）；**E15.4** C 线上下文策略独立核心 **DRAFT** 已提交（根 `c9c26ab`；未集成 workload、未跑真实模型 paired）；**E15.3（deterministic prompt preprocessor）/ E15.5（有损摘要 oracle）/ E15.6（完整验证收口，含 4B 门禁）尚未完成**；详见 `docs/E15_*`。
+- E15（E14 后独立扩展，四技术线分阶段，方案见 `docs/E15_0_TECHNICAL_PLAN_AND_ACCEPTANCE.md`）：**E15.0** 方案已提交（根 `5dd6b79`）；**E15.1** 分支并发共享不变量加固 + 真实 fan-out 验证 **PASS**（根 `f357a42` / llama.cpp `4a699aaad`，零核心代码改动；未跑 4B——hybrid 由 capability gate 永久禁用共享）；**E15.2** ToolPayloadStore 外置存储 + workload 集成已提交（根 `a2e0558`；**未跑真实 4B paired**，收益待 §6 后续动作）；**E15.3** B1 deterministic structured-lossless preprocessor（消息级重复去重 + protected 保留 + restore/fail-fast，配置 `config.extra["preprocessor"]` 默认 off）已提交；**4B greedy paired 无损门禁不成立**（single 压缩生效但输出不一致 → `HOLD_NOT_VALIDATED` 降级有损转 E15.5；multi_turn 短中文块 token 无收益 → `HOLD_NO_MEASURABLE_GAIN`；restore 对照确认实验有效；llama.cpp 未改）；**E15.4** C 线上下文策略独立核心 **DRAFT** 已提交（根 `c9c26ab`；未集成 workload、未跑真实模型 paired）；**E15.5（有损摘要 oracle）/ E15.6（完整验证收口，含 4B 门禁）尚未完成**；详见 `docs/E15_*`。
 - 关键结论：KV 预分配固定 → 生命周期策略不能降显存峰值；lru 价值在"池满防 OOM + 压力下保热点"；q8_0 为上游既有参数组合（非新算法），不宣称主模型算法优化。
