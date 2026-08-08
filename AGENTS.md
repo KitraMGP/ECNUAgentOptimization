@@ -7,7 +7,7 @@
 - 目标：在保证推理效果前提下降低智能体推理的显存/内存占用与延迟（赛题要求优化前后同硬件对比）。
 - 技术栈：llama.cpp（C++ 推理框架，qwen35 架构）+ Python 3.13 / uv（benchmark）+ OpenAI 兼容 API。
 - 入口：`benchmark/agent_bench.py`（兼容入口，委托 `runner.cli_main`）；核心优化代码位于 `llama.cpp/tools/server/`（slot 生命周期策略层）与 `llama.cpp/src/`（KV 统计接口）。
-- 模型：Qwen3.5-4B（GPU 正式）/ Qwen3.5-0.8B（CPU 开发）/ Qwen2.5-0.5B（最小验证），GGUF 在 `models/`（不入库）。
+- 模型：Qwen3.5-4B（GPU 正式；GGUF `qwen3-5-4B-Q4_K_M.gguf`，当前已下载）/ Qwen3.5-0.8B（CPU 开发；`Qwen3.5-0.8B-Q4_K_M.gguf`，可脚本拉取）/ Qwen2.5-0.5B（最小验证；`qwen2.5-0.5b-instruct-q4_k_m.gguf`，可脚本拉取），GGUF 在 `models/`（不入库）。
 
 ## Commands
 
@@ -21,7 +21,7 @@ cmake -B build-cuda -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=89 && cmake --buil
 ./download_models.sh 4b       # 单个
 
 # 启动 llama-server（GPU 正式对比；优化机制开关）
-./llama.cpp/build-cuda/bin/llama-server -m models/Qwen3.5-4B-Q4_K_M.gguf \
+./llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
   --host 127.0.0.1 --port 8080 -ngl 99 --ctx-size 8192 \
   --kv-unified --parallel 4 \
   --unified-idle-slot-policy default    # 或 lru（experimental：unified 价值感知淘汰）
@@ -41,7 +41,7 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40   # 长生命
 - `benchmark/metrics/`：p50/p95/mean/std/cache_hit_rate/summarize（保留旧字段）。
 - `benchmark/runner/`：场景 × repeat × warmup 编排、结果落盘 `results/bench_<ts>.json`（`{config, summary, scenarios}`）。
 - `benchmark/report/`：markdown 实验报告。
-- `benchmark/configs/`：示例配置（example.json / example.yaml）。
+- `benchmark/configs/`：示例配置（example.json / example.yaml）+ q8_0 配置（`qwen35_4b_q8_validated.yaml` 为 E13.1 固化；`qwen35_4b_q8_production.yaml` 为 E14.1 固化）。
 - `benchmark/tests/`：pytest（不依赖 GPU/真实 server，含 mock OpenAI server e2e 冒烟）。
 - `benchmark/baseline/`：正式基线归档（可读命名 `<模型>_<环境>_<场景>_<说明>.json`）；`benchmark/results/` 为运行期临时输出（不入库）。
 - `llama.cpp/`：上游框架（独立 git 仓库，根仓库不跟踪）；KV 优化改动在其中实施并内部提交。
@@ -61,10 +61,13 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40   # 长生命
 
 ## Notes
 
-- E0（Benchmark 基础设施重构）已完成：`framework/ workload/ metrics/ runner/ report/ configs/` + 42 个 pytest（不依赖 GPU/server）；详见 `docs/E0_IMPLEMENTATION_REPORT.md`。
+- E0（Benchmark 基础设施重构）已完成：`framework/ workload/ metrics/ runner/ report/ configs/` + 42 个 pytest（E0 阶段实测，见 `docs/E0_IMPLEMENTATION_REPORT.md`）；**当前全仓累计 pytest = 177**（E1-E4 阶段新增，`uv run pytest -q` 实测，不依赖 GPU/server）。
 - E1（llama.cpp 可观测性）已完成：`GET /metrics/kv`（KV 统计）+ KVProbe；详见 `docs/E1_*`。
 - E2（生命周期候选探索）已完成：A2 prefix-branch 路由实现后 REJECT 冻结；`--cache-ram` 默认 8192；详见 `docs/E2_*`。
 - E3（A1/A4 统一 idle-sequence 价值感知回收）已完成：`--unified-idle-slot-policy default|lru`（lru experimental，默认 default）+ `--lifecycle-stats` + `--lifecycle-trace`（归属诊断）；真实场景收益稀释 → KEEP_EXPERIMENTAL；性能门禁因 Laptop GPU 抖动 HOLD；详见 `docs/E3_*`。
 - E4（内存容量验证）已完成：并发承载 ≥8 session、OOM 边界 >96%（exploratory）；详见 `docs/E4_*`。
 - E3.6（真实流量回放）**未执行**：硬前置 = 用户提供且 validator（`benchmark/schemas/lifecycle_trace_v1.json`）通过的真实匿名 trace。
-- 关键结论：KV 预分配固定 → 生命周期策略不能降显存峰值；lru 价值在"池满防 OOM + 压力下保热点"。
+- E6-E8（KV 优化实施与复核）已完成：C1 attention-only KV 优化真实且正确（TinyLlama 收益），但主模型 Qwen3.5-4B（hybrid）无收益 → E7 起 `PARTIAL_KV_CORRECTNESS_NO_OPTIMIZATION`；tenant 限定 TRUSTED_SINGLE_TENANT；详见 `docs/E6_* / E7_* / E8_*`。
+- E9-E13（C1 关闭 + q8_0 生产化 + 主模型转向）已完成：C1_ATTENTION_ONLY_PASS；q8_0（`--cache-type-k/v q8_0`）部署 profile 固化 `PASS_VALIDATED_DEPLOYMENT_PROFILE`；checkpoint 主模型路径 E12 NO_GO_WITH_EVIDENCE（prototype 保留 experimental attention-only）；详见 `docs/E9_* / E10_* / E11_* / E12_* / E13_*`。
+- E14（发布/灰度/运维交接）已完成：`RELEASE_STATUS: READY_FOR_DEPLOYMENT`（q8_0 production profile，15 项验收 + 回滚演练通过）；**真实生产灰度未执行**（`PRODUCTION_ROLLOUT_STATUS: NOT_EXECUTED`，无生产环境，不虚构）；运维交接见 `docs/E14_5_OPERATIONS_HANDOFF.md`；详见 `docs/E14_*`。
+- 关键结论：KV 预分配固定 → 生命周期策略不能降显存峰值；lru 价值在"池满防 OOM + 压力下保热点"；q8_0 为上游既有参数组合（非新算法），不宣称主模型算法优化。
