@@ -1,0 +1,170 @@
+{
+  "git": "8d1b2b1e144e72909d69b5f1a2c558a88acc4715",
+  "p1_t1": {
+    "save_code": 200,
+    "targets": [
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9247d733bc879c09",
+        "baseline_hash": "9247d733bc879c09"
+      }
+    ],
+    "match": true,
+    "kv_after": {
+      "used": 181,
+      "shared": 0,
+      "active": 1
+    }
+  },
+  "p1_t2": {
+    "save_code": 200,
+    "targets": [
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9247d733bc879c09",
+        "baseline_hash": "9247d733bc879c09"
+      },
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9247d733bc879c09",
+        "baseline_hash": "9247d733bc879c09"
+      }
+    ],
+    "match": true,
+    "kv_after": {
+      "used": 362,
+      "shared": 0,
+      "active": 2
+    }
+  },
+  "p1_t4": {
+    "save_code": 200,
+    "targets": [
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9247d733bc879c09",
+        "baseline_hash": "9247d733bc879c09"
+      },
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9247d733bc879c09",
+        "baseline_hash": "9247d733bc879c09"
+      },
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9247d733bc879c09",
+        "baseline_hash": "9247d733bc879c09"
+      },
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9247d733bc879c09",
+        "baseline_hash": "9247d733bc879c09"
+      }
+    ],
+    "match": true,
+    "kv_after": {
+      "used": 724,
+      "shared": 0,
+      "active": 4
+    }
+  },
+  "p4_t1": {
+    "save_code": 200,
+    "targets": [
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9b2d8db944c65020",
+        "baseline_hash": "9b2d8db944c65020"
+      }
+    ],
+    "match": true,
+    "kv_after": {
+      "used": 649,
+      "shared": 0,
+      "active": 1
+    }
+  },
+  "p4_t2": {
+    "save_code": 200,
+    "targets": [
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9b2d8db944c65020",
+        "baseline_hash": "9b2d8db944c65020"
+      },
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9b2d8db944c65020",
+        "baseline_hash": "9b2d8db944c65020"
+      }
+    ],
+    "match": true,
+    "kv_after": {
+      "used": 1298,
+      "shared": 0,
+      "active": 2
+    }
+  },
+  "p4_t4": {
+    "save_code": 200,
+    "targets": [
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9b2d8db944c65020",
+        "baseline_hash": "9b2d8db944c65020"
+      },
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9b2d8db944c65020",
+        "baseline_hash": "9b2d8db944c65020"
+      },
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9b2d8db944c65020",
+        "baseline_hash": "9b2d8db944c65020"
+      },
+      {
+        "code": 200,
+        "prompt_n": 24,
+        "hash": "9b2d8db944c65020",
+        "baseline_hash": "9b2d8db944c65020"
+      }
+    ],
+    "match": true,
+    "kv_after": {
+      "used": 2596,
+      "shared": 0,
+      "active": 4
+    }
+  },
+  "source_deleted_restore": {
+    "code": 200,
+    "prompt_n": 16
+  },
+  "prefix_mismatch": {
+    "code": 200,
+    "prompt_n": 35
+  },
+  "kv_after_s2": {
+    "used": 211,
+    "shared": 0,
+    "active": 2
+  },
+  "restart_pool_cleared": {
+    "code": 200,
+    "prompt_n": 166
+  }
+}
