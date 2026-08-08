@@ -2,7 +2,7 @@
 
 > 状态：**调研完成 + 详细设计（DESIGN ONLY）；未实现 workload 代码、未运行正式 benchmark**。
 > 日期：2026-08-09 ｜ 对应路线：M0（阶段 0 通过后第一条后续路线）｜ 实施建议：**GO**（见 §8）。
-> 修订：2026-08-09 v2（矩阵/预算/层数/架构/接口合同/回收观测）；v3（精确 token 计数、矩阵手算修正、driver 合同、门禁语义）；v4（driver `_retry` 位置参数兼容、thinking 字段生效实证、G-M0-1 与矩阵完全分离、RS 日志行号、CLI 临时目录）；v5（G-M0-1 口径统一、可提交证据、token parity 门禁、verdict 规则）；v6（INVALID 谓词 OR 语义、verdict/gates 值域映射、add_special 归因、parity 校准协议）；**v7（终审闭环——parity 失败独立前置 HOLD_NOT_VALIDATED 不再挂 G-M0-7、G-M0-1 gate status 仅由专用验证决定（fallback 为独立聚合条件不写 FAIL）、schema/meta 完整化（parity_ok/parity_compensation/token_count_method）、qpt2→gpt2 与 BOS/EOS 完整归因、预算超限 preflight 拒绝不生成 verdict、max_tokens=1 校准豁免 INVALID 谓词并每桶 P/B 分别校准、确定性聚合伪代码、交叉引用与行号统一）**，见各节。
+> 修订：2026-08-09 v2（矩阵/预算/层数/架构/接口合同/回收观测）；v3（精确 token 计数、矩阵手算修正、driver 合同、门禁语义）；v4（driver `_retry` 位置参数兼容、thinking 字段生效实证、G-M0-1 与矩阵完全分离、RS 日志行号、CLI 临时目录）；v5（G-M0-1 口径统一、可提交证据、token parity 门禁、verdict 规则）；v6（INVALID 谓词 OR 语义、verdict/gates 值域映射、add_special 归因、parity 校准协议）；v7（gate/verdict 分层、parity 前置、schema 完整化、聚合定稿）；**v8（preflight/schema 闭环——专用合法率 <100% → G-M0-1=FAIL → HOLD_NOT_VALIDATED 统一表述、preflight/formal 两 phase 合法 schema 变体（唯一顶层键集 meta/modes/gates/verdict/notes，G-M0-7 仅 formal 评估）、/apply-template|/tokenize 不可用 → parity_ok=false → 落盘 preflight HOLD（chars/2.0 仅诊断不允许绕过 parity）、any_fallback 行 G-M0-1 保持专用验证原值、rep 级 INVALID_DECISION 与顶层 verdict 枚举分离、对齐 E15 限定顶层键/落盘习惯）**，见各节。
 > 约束：本阶段只调研与设计，不实现代码、不运行长 GPU benchmark；不改 E6–E15 历史 raw/结论。
 > 探针（§1.3/§7）：仅"启动 server → 读取内存分配日志与 /metrics/kv → 退出"，未做任何推理请求。
 
@@ -108,7 +108,7 @@
 | 路径 | tokens |
 |---|---|
 | `/apply-template` → `/tokenize`（`add_special:false`） | 46 |
-| `/apply-template` → `/tokenize`（`add_special:true`） | 46（**幂等归因（v6 修正）**：该 GGUF `tokenizer.ggml.add_bos_token=false` 且 `bos_token_id=None`（无 BOS token）→ add_special 无可加；**仅对本模型/配置成立，换模型必须重验**，GGUF 元数据实测见下） |
+| `/apply-template` → `/tokenize`（`add_special:true`） | 46（**幂等归因（v7 完整措辞）**：该 GGUF `tokenizer.ggml.add_bos_token=false`、`bos_token_id` 缺失、`add_eos_token` 字段缺失（默认 false）→ 无 BOS token 可加，add_special 无可加；**仅对本模型/配置成立，换模型必须重验**，GGUF 元数据实测见下） |
 | 真实 `/v1/chat/completions`（max_tokens=1, temp=0, seed=42, no-think）`usage.prompt_tokens` | 46（finish_reason=length） |
 
 → **parity 成立、偏差 0**：M0 一致性门禁 = 比较 chat `usage.prompt_tokens` vs apply-template→tokenize(`add_special:false`)（§4.2 步骤 2/3）。**GGUF 元数据实测（2026-08-09）**：`tokenizer.ggml.add_bos_token=false`、`tokenizer.ggml.bos_token_id` 缺失（None）、`tokenizer.ggml.add_eos_token` 字段缺失（默认 false）、`eos_token_id=248046`、`tokenizer.ggml.model="gpt2"`——**add_special 幂等的真实原因是无 BOS token 可加（add_bos_token=false 且无 bos_token_id）**；**结论仅限本 GGUF/配置，换模型必须重验**。
@@ -141,9 +141,9 @@ ACTION: branch(b1|b2|b3|b4|b5|b6|b7|b8)
 - 决策点 prompt 采用枚举式约束（"只能输出上述 ACTION 之一，不得输出其他内容"），规避自由文本指令漂移；
 - `temperature=0, seed=42` 固定 → 分支选择在**给定公共上下文下确定性**；用 0.8B（CPU）离线校准决策点 prompt 的合法输出率，4B（GPU）正式；
 - **fallback 与判定（审查修订 v4：专用验证与正式矩阵分离）**：
-  - **专用稳定性验证**（G-M0-1 数据源）：4B 决策点合法输出率 <100%（2 次独立会话 × ≥10 次，无 ACTION 或 `finish_reason=length` 均计 INVALID）→ 触发固定映射 fallback，该数据判定 **`NOT_VALIDATED`/HOLD**——**不称真实决策 PASS**；
-  - **正式矩阵**：单 rep 决策失败**只记录该 rep INVALID**，并使用**固定路由 fallback**（脚本按固定规则选分支）**继续内存压力实验**（不中断、不重试），该 rep **不计入 G-M0-1**（G-M0-1 只用专用验证数据）；fallback 触发时在结果 schema `decision_fallback: true` 与顶层 `verdict` 显式标记（§5.1），报告不得宣称真实决策。
-  - **INVALID 谓词（v6 定稿，可直接编码，三处同一）**：`decision_invalid ⇔ (finish_reason == "length") OR (输出不含合法 ACTION)` —— **任一条件即 INVALID**；即使截断文本（length）已含合法 ACTION 也判 INVALID（截断输出不可信）。专用验证与正式矩阵均用同一谓词。
+  - **专用稳定性验证**（G-M0-1 数据源）：4B 决策点合法输出率 <100%（2 次独立会话 × ≥10 次，无 ACTION 或 `finish_reason=length` 均计 INVALID_DECISION）→ **G-M0-1 = FAIL → 顶层 `HOLD_NOT_VALIDATED`**（§5.1 verdict 规则 #4）——**不称真实决策 PASS**；
+  - **正式矩阵**：单 rep 决策失败**只记录该 rep `status=INVALID_DECISION`**（rep 级字段，**不是顶层 verdict**，顶层 verdict 仅用 §5.1 五值枚举），并使用**固定路由 fallback**（脚本按固定规则选分支）**继续内存压力实验**（不中断、不重试），该 rep **不计入 G-M0-1**（G-M0-1 只用专用验证数据）；fallback 触发时在结果 schema `decision_fallback: true` 与顶层 `verdict` 显式标记（§5.1），报告不得宣称真实决策。
+  - **INVALID_DECISION 谓词（v8 定稿，可直接编码，三处同一）**：`decision_invalid ⇔ (finish_reason == "length") OR (输出不含合法 ACTION)` —— **任一条件即 rep 判定 `INVALID_DECISION`**（rep 级，非顶层 verdict）；即使截断文本（length）已含合法 ACTION 也判 INVALID_DECISION（截断输出不可信）。专用验证与正式矩阵均用同一谓词。
 - 分支语义稳定：分支 prompt = 公共上下文 + 决策点输出 + 分支专属任务 + 分支专属 canary；分支任务**不依赖模型继续决策**（后续轮次为固定后续推理/工具调用）。
 
 **分支-工具-回收流**：
@@ -174,7 +174,7 @@ ACTION: branch(b1|b2|b3|b4|b5|b6|b7|b8)
 |---|---|
 | 统一接口 | **OAI `/v1/chat/completions`**（`driver.chat`）——决策点与分支请求同一接口；**thinking 合同（v5 实证，§1.4 证据）**：server 默认 **thinking 开启**（apply-template 不传时渲染 `<|im_start|>assistant\n<think>\n`），必须显式 `chat_template_kwargs.enable_thinking=false` 才渲染空 think 块（`<think>\n\n</think>`）实现 no-think——该字段经 `oaicompat_chat_params_parse` 解析**实际生效**（`server-common.cpp:1095-1102` 覆盖默认；可复核证据 `benchmark/baseline/m0_probe_thinking_token_parity_20260809.json`）；M0 沿用 `driver._extra_body`（`driver.py:135-142`）显式 false，并以 token parity 一致性门禁（§4.2 步骤 3）执行验证；原生 `/completion` 仅为 e15 对照既有路径，M0 不用 |
 | 确定性 | `temperature=0, seed=42`；`--n-predict`：**决策点 16（v3：由 8 上调，保证 `ACTION: branch(bX)` 输出完整且留边界）**、分支轮 64（CLI 可配 `--decision-n-predict/--branch-n-predict`） |
-| 停止判定 | OAI `finish_reason`（stop/length）；**INVALID 谓词（v6）**：`(finish_reason=="length") OR (输出不含合法 ACTION)` → 任一即该 rep INVALID（length 截断即使含 ACTION 也不可信），走固定路由 fallback（§3.1）、**不计入 G-M0-1**（G-M0-1 仅用专用 2 会话×10 请求数据，§8） |
+| 停止判定 | OAI `finish_reason`（stop/length）；**INVALID_DECISION 谓词（v8）**：`(finish_reason=="length") OR (输出不含合法 ACTION)` → 任一即该 rep `status=INVALID_DECISION`（rep 级，非顶层 verdict；length 截断即使含 ACTION 也不可信），走固定路由 fallback（§3.1）、**不计入 G-M0-1**（G-M0-1 仅用专用 2 次独立会话 × 每次 ≥10 请求（总数 ≥20）数据，§8） |
 | 可比性 | 同 seed/temp 下输出 `tokens` 数组 + `content_sha256` 逐字节比较（e15 G1 模式）；决策点与分支均在请求级记录 prompt_tokens/completion_tokens/timings |
 | slot 控制 | 默认不强制 `id_slot`（server 自动调度）；若需确定性 slot 映射（决策点 slot 0、分支 1..N），经 `extra_body["id_slot"]` 透传（见下方 driver 扩展，默认缺省保持旧行为） |
 | timings | `driver._extract_timings`（`:160-180`）；TTFT 代理 = `timings.prompt_ms`（`server-context.cpp:571`），见 §5.1 |
@@ -225,13 +225,13 @@ def chat(
   2. `POST /tokenize`（`server.cpp:261`；`server-context.cpp:5828+`）：body `{content: <prompt>, add_special: false}` → 响应 `{"tokens": [id, ...]}`，`P/B = len(tokens)`；
   3. **一致性门禁（v7：token parity + 校准/清理协议）**：
      - **执行时机（独立前置校准）**：正式矩阵开始前、server 就绪后，**对每个长度桶分别校准两个模板**：公共决策点 P 模板与分支 B/工具观测模板（各自 messages 构造）；比较真实 chat 请求（`max_tokens=1, temp=0, seed=42`, no-think）的 `usage.prompt_tokens` 与 `/apply-template`→`/tokenize(add_special:false)` 的 token 数；
-     - **max_tokens=1 校准请求豁免决策 INVALID 谓词（v7）**：校准请求仅用于 parity 计数，**不进入任何 rep/gate、不触发决策 INVALID 判定**（其 `finish_reason=length` 是预期的）；
+     - **max_tokens=1 校准请求豁免决策 INVALID_DECISION 谓词（v8）**：校准请求仅用于 parity 计数，**不进入任何 rep/gate、不触发决策 INVALID_DECISION 判定**（其 `finish_reason=length` 是预期的）；
      - **允许偏差 0**（实测成立，§1.4；add_special 幂等归因 = 该 GGUF 无 BOS token，**换模型必须重验**）；
      - **偏差非零 → 前置 `HOLD_NOT_VALIDATED` 并停止正式矩阵**（不产生矩阵结果，verdict 规则 #1），不做未经验证的自动补偿；若确需补偿，必须写入 `meta.parity_compensation`（含确定公式）并有对应单测（当前策略 `parity_compensation=null`）；
      - **校准后状态清理**：校准完成后 `erase` 全部 slot 并确认 `/metrics/kv` `used_cells==0 && active_sequences==0`（attention 回基线），**之后才采集正式基线**；
      - **mock 测试只校验请求参数一致性**（messages、thinking=false、temperature、seed、max_tokens），不声称比较渲染结果；
   - 探针实测（2026-08-09，4B，中文为主）：chars/2.5 估算**低估**真实 token 数 **7.4%（short）→ 12.6%（medium）→ 16.3%（long）**（真实 chars/token ≈ 2.1–3.1，中文 1 字常 1–2 token）——**long 边界下 est=3400 实际可达 ~3944 > 3481 预算**，故 chars/2.5 不得作为门禁唯一依据。
-- **失败降级**：`/apply-template` 或 `/tokenize` 不可用（HTTP 非 200/schema 不符）→ **保守 fallback = `chars/2.0`**（比实测最差 2.1 chars/token 更保守，高估 token → 安全侧）+ 记录 warning；**注意：chars/2.0 仅对该次实测语料（中文为主）相对保守，不宣称对任意文本绝对保守**——fallback 之后仍以 budget fail-fast 兜底（`budget > 3481` 拒绝），且 fallback 路径在结果 meta 标记（`token_count_method: "chars/2.0-fallback"`）；
+- **失败降级（v8 定稿）**：`/apply-template` 或 `/tokenize` 不可用（HTTP 非 200/schema 不符）→ **parity 无法执行 → `parity_ok=false` → 落盘 preflight HOLD 结果（§5.1 phase=preflight 变体，`verdict=HOLD_NOT_VALIDATED`）并停止，不进入正式矩阵**；`chars/2.0` 仅作为**诊断预算估计**写入 meta（`token_count_method: "chars/2.0-diagnostic"`），**不允许绕过 parity 开始正式矩阵**；预算校验仍 fail-fast（`budget > 3481` preflight 拒绝，不生成正式 verdict）。
 - **运行前校准**：runner 在 server 就绪后、正式运行前，先对各桶 prompt 执行一次 apply-template+tokenize 得真实 P/B → 预算校验 → 合法才运行（预算表由函数计算，**单测断言合法/非法组合表，避免手工常量漂移**）。
 
 **长度桶（token 目标值，实测校准；v3 收紧 long）**：
@@ -280,7 +280,17 @@ def chat(
 }
 ```
 
-每 replicate 行字段（§5.2）：含 **`decision_fallback: bool`（v5：该 rep 是否触发固定路由 fallback）**；KV 观测经 `KVProbe.run_aggregate`（first/last/peak_used_cells）。
+每 replicate 行字段（§5.2）：含 **`decision_fallback: bool`（v5：该 rep 是否触发固定路由 fallback）** 与 **`status`（rep 级，取值 `OK | INVALID_DECISION | ERROR`；`INVALID_DECISION` 不是顶层 verdict）**；KV 观测经 `KVProbe.run_aggregate`（first/last/peak_used_cells）。
+
+**两个 phase 的合法 schema 变体（v8 定稿）**——唯一顶层键集始终为 `{meta, modes, gates, verdict, notes}`：
+
+| phase | 触发 | meta 关键字段 | modes | gates | verdict | G-M0-7 |
+|---|---|---|---|---|---|---|
+| `preflight` | parity 失败（偏差≠0 或 /apply-template、/tokenize 不可用）或预算超限 | `phase="preflight"`, `parity_ok=false`（预算超限时 `parity_ok` 可缺省或 false）, `token_count_method="chars/2.0-diagnostic"`（仅预算超限/parity 不可用路径写） | `{}`（无矩阵运行） | `{}`（不评估任何 gate） | `HOLD_NOT_VALIDATED`（parity 失败）或**不生成文件**（预算超限：CLI 直接拒绝，§6） | **不评估**（仅 formal 评估） |
+| `formal` | parity 通过且预算通过 | `phase="formal"`, `parity_ok=true`, `token_count_method="apply-template+tokenize"` | `{off:{...}, on:{...}}` | `G-M0-1..7`（G-M0-3b 恒 NOT_APPLICABLE） | §5.1 verdict 规则五值 | 评估（缺键 → FAIL → INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE） |
+
+- **schema 判定规则（可编码）**：`phase=preflight` ⇔ `modes={} ∧ gates={} ∧ verdict=HOLD_NOT_VALIDATED`；`phase=formal` ⇔ `modes 非空 ∧ gates 非空`；任何文件若 `phase=preflight` 且 `gates≠{}` 或 `verdict≠HOLD_NOT_VALIDATED` → 判定为非法 schema；
+- **测试要求**：① preflight 变体单测（parity 失败 → 上述字段精确匹配）；② formal 变体单测（全 gate status 三值枚举、verdict 五值枚举、`gates["G-M0-7"].status` 仅在 formal 存在）；③ 非法 schema 检测单测（preflight 携带 gates → 报错）；④ **verdict 必须有持久化证据**：preflight 文件即该阶段持久化输出（含 `parity_ok=false` 与失败原因），不丢证据。
 
 **verdict 确定规则（v7 定稿：gate 与顶层分层，确定性聚合）**：
 
@@ -293,7 +303,7 @@ def chat(
 |---|---|---|---|
 | 1 | **前置：parity 校准失败**（§4.2 步骤 3，偏差非零）→ 停止矩阵，不产生正式结果 | gates 不存在（无结果） | `HOLD_NOT_VALIDATED` |
 | 2 | **前置：预算超限**（§4.2 fail-fast）→ preflight 拒绝，不运行、不产生正式结果 | gates 不存在（无结果） | （不生成 verdict；CLI 直接拒绝该组合） |
-| 3 | 任一正式矩阵 rep `decision_fallback:true`（聚合 `any_fallback=true`） | **G-M0-1 = PASS（不变）** | `HOLD_NOT_VALIDATED` |
+| 3 | 任一正式矩阵 rep `decision_fallback:true`（聚合 `any_fallback=true`） | **G-M0-1 保持专用验证原值**（不因 fallback 改写） | `HOLD_NOT_VALIDATED` |
 | 4 | 专用验证合法率 <100% | G-M0-1 = FAIL | `HOLD_NOT_VALIDATED` |
 | 5 | G-M0-2 隔离失败（canary 泄漏 >0）或 G-M0-5 对照失效（shared_cells≠0 / 缺 rejected 日志） | 对应 gate = FAIL | `REJECT_CORRECTNESS_OR_ISOLATION` |
 | 6 | G-M0-3a 回收失败（erase 后 used_cells≠0） | G-M0-3a = FAIL | `REJECT_CORRECTNESS_OR_ISOLATION` |
@@ -359,7 +369,7 @@ def aggregate_verdict(parity_ok, budget_ok, any_fallback, g):   # g = gates.stat
 
 **不改**：`config.py`、`runner.py`、`workload/`。
 
-CLI 合同（v4 收紧）：`--server-bin --model --port --ctx-size 4096 --fanout {2,4,8} --prefix-len {short,medium,long} --branch-len {short,medium,long} --ctk q8_0 --ctv q8_0 --decision-n-predict 16 --branch-n-predict 64 --tool-rounds M --warmup 2 --reps 5 --out <path> [--tmp-dir <dir>]`；`--parallel` 由 runner 按 `fanout+2` 计算（不接受手工覆盖）。**临时目录合同（对齐 E15 + M0 增强）**：`--tmp-dir` 为**可选用户参数**（缺省时 runner 用 `tempfile.mkdtemp()` 创建、退出时 `shutil.rmtree` 清理——**此"创建并主动清理"是 M0 相对 E15 的增强**，E15 runner 接受 `--tmp-dir` 但清理语义未承诺）；`--slot-save-path` **不作为独立用户参数**，由 runner 内部绑定为同一临时目录（`--slot-save-path <tmp-dir>`）传给 server——保证 `POST /slots/:id?action=erase` 可用（slot erase 依赖该路径，`e15_branch_concurrent.py:548-560` 先例）且生命周期随 runner 清理。预算 fail-fast：`budget(P,B,N) > 3481` → **preflight 拒绝该组合（不生成正式 verdict，CLI 直接报错退出）**（§4.2，P/B 来自 tokenize 实测）。
+CLI 合同（v4 收紧）：`--server-bin --model --port --ctx-size 4096 --fanout {2,4,8} --prefix-len {short,medium,long} --branch-len {short,medium,long} --ctk q8_0 --ctv q8_0 --decision-n-predict 16 --branch-n-predict 64 --tool-rounds M --warmup 2 --reps 5 --out <path> [--tmp-dir <dir>]`；`--parallel` 由 runner 按 `fanout+2` 计算（不接受手工覆盖）。**临时目录合同（落盘/顶层键习惯对齐 E15；gates 子结构为 M0 自有）**：`--tmp-dir` 为**可选用户参数**（缺省时 runner 用 `tempfile.mkdtemp()` 创建、退出时 `shutil.rmtree` 清理——**此"创建并主动清理"是 M0 相对 E15 的增强**，E15 runner 接受 `--tmp-dir` 但清理语义未承诺）；`--slot-save-path` **不作为独立用户参数**，由 runner 内部绑定为同一临时目录（`--slot-save-path <tmp-dir>`）传给 server——保证 `POST /slots/:id?action=erase` 可用（slot erase 依赖该路径，`e15_branch_concurrent.py:548-560` 先例）且生命周期随 runner 清理。**"对齐 E15"仅指**：结果落盘位置（`results/`）与顶层键集 `{meta, modes, gates, verdict, notes}`（`e15_branch_concurrent.py:795-831`）；`gates` 子结构（§5.1 三值 status 与 G-M0-1..7 定义）为 M0 自有，不沿用 E15 的 gate 字段。预算 fail-fast：`budget(P,B,N) > 3481` → **preflight 拒绝该组合（不生成正式 verdict，CLI 直接报错退出）**（§4.2，P/B 来自 tokenize 实测）。
 
 测试计划：纯函数 pytest（决策点解析边界/确定性/canary/**预算函数合法与非法组合表**/tokenize 客户端 mock（HTTP 失败→chars/2.0 fallback）/gate_verdict 分支/CLI 校验/fail-fast）+ mock OpenAI server e2e（现有 `tests/mock_server.py` 模式）+ 可选 TinyLlama CPU smoke（**仅冒烟，不宣称 4B 结论**）。
 
@@ -381,7 +391,7 @@ CLI 合同（v4 收紧）：`--server-bin --model --port --ctx-size 4096 --fanou
 可量化验收标准（M0 实现阶段）：
 | 门禁 | 标准 |
 |---|---|
-| G-M0-1 决策确定性（v6：专用验证协议，与矩阵分离） | **专用稳定性验证，与正式矩阵数据完全分离**：**2 次独立 server 会话，每次 ≥10 请求（总数 ≥20）**，temp=0/seed=42 下 4B 决策点合法 `ACTION: branch(bX)` 输出率 **100%**；**INVALID 谓词（三处同一）**：`(finish_reason=="length") OR (输出不含合法 ACTION)` → 任一即 INVALID（length 截断即使含 ACTION 也不可信）；**<100% → `NOT_VALIDATED`/HOLD**；**正式矩阵单 rep 决策失败仅记录该 rep INVALID 并走固定路由 fallback 继续内存压力实验，不计入 G-M0-1，不宣称真实决策 PASS**；fallback 触发 → `decision_fallback: true` + verdict 标记（§5.1） |
+| G-M0-1 决策确定性（v8：专用验证协议，与矩阵分离） | **专用稳定性验证，与正式矩阵数据完全分离**：**2 次独立 server 会话，每次 ≥10 请求（总数 ≥20）**，temp=0/seed=42 下 4B 决策点合法 `ACTION: branch(bX)` 输出率 **100%**；**INVALID_DECISION 谓词（三处同一）**：`(finish_reason=="length") OR (输出不含合法 ACTION)` → 任一即该 rep `status=INVALID_DECISION`（rep 级，非顶层 verdict；length 截断即使含 ACTION 也不可信）；**合法率 <100% → G-M0-1 = FAIL → 顶层 `HOLD_NOT_VALIDATED`**；**正式矩阵单 rep 决策失败仅记录 `status=INVALID_DECISION` 并走固定路由 fallback 继续内存压力实验，不计入 G-M0-1，不宣称真实决策 PASS**；fallback 触发 → `decision_fallback: true` + verdict 标记（§5.1） |
 | G-M0-2 隔离 | canary 跨分支泄漏率 **0**（全部 reps×branches 输出） |
 | G-M0-3 回收（v3：不形成伪门禁） | **G-M0-3a（门禁）**：每 rep 末 `erase` 后 `/metrics/kv` `used_cells==0 && active_sequences==0` —— **仅证明 attention cells 回收**；**G-M0-3b（smoke，非门禁）**：全部 reps 完成后 nvidia-smi `used` 回落至空载基线（±50 MiB）—— **只做显存泄漏 smoke，不证明 recurrent state 回收**；recurrent 回收**保持不可观测缺口**（无运行期接口，§5.1），M0 不承诺、不验收 |
 | G-M0-4 内存归因（v4：启动日志精确值门禁） | **主门禁**：启动日志 `RS buffer size`（`llama-memory-recurrent.cpp:115`）精确值 vs 公式 `24×548864×4×parallel` 对账 **误差 ≤5%**；attention KV 同理（`llama_kv_cache` 分配日志 68/128 MiB vs `8×8×128×2×elem×4096`）；**GPU used 差分只作总量 sanity**（阈值 ±10%，口径 = nvidia-smi `memory.used` 增量，探针观测 run-to-run 波动 <10%） |
