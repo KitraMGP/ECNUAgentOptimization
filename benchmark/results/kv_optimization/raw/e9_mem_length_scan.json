@@ -1,0 +1,32 @@
+[
+  {
+    "units": 2,
+    "code": 200,
+    "prompt_n": 186,
+    "used_bytes": 6324224,
+    "used_cells": 193,
+    "capacity_bytes": 67108864,
+    "prefill_tps": 1741.524114491166,
+    "decode_tps": 77.13222391484602
+  },
+  {
+    "units": 10,
+    "code": 200,
+    "prompt_n": 842,
+    "used_bytes": 27820032,
+    "used_cells": 849,
+    "capacity_bytes": 67108864,
+    "prefill_tps": 2687.494214865482,
+    "decode_tps": 77.4720858390711
+  },
+  {
+    "units": 20,
+    "code": 200,
+    "prompt_n": 1662,
+    "used_bytes": 54689792,
+    "used_cells": 1669,
+    "capacity_bytes": 67108864,
+    "prefill_tps": 2871.294483901229,
+    "decode_tps": 76.513289401953
+  }
+]

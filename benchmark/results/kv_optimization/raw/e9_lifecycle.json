@@ -1,0 +1,62 @@
+{
+  "save_restore": {
+    "on": {
+      "scenario": "save_restore",
+      "checks": [
+        {
+          "step": "completion",
+          "code": 200
+        },
+        {
+          "step": "save",
+          "code": 200,
+          "filename": "e9_slot0"
+        },
+        {
+          "step": "restore",
+          "code": 200
+        },
+        {
+          "step": "post_restore_req",
+          "code": 200
+        }
+      ],
+      "kv": {
+        "used_cells": 357,
+        "shared_cells": 0,
+        "active": 1
+      },
+      "shared_log_count": 0,
+      "server_exit": 0
+    },
+    "off": {
+      "scenario": "save_restore",
+      "checks": [
+        {
+          "step": "completion",
+          "code": 200
+        },
+        {
+          "step": "save",
+          "code": 200,
+          "filename": "e9_slot0"
+        },
+        {
+          "step": "restore",
+          "code": 200
+        },
+        {
+          "step": "post_restore_req",
+          "code": 200
+        }
+      ],
+      "kv": {
+        "used_cells": 357,
+        "shared_cells": 0,
+        "active": 1
+      },
+      "shared_log_count": 0,
+      "server_exit": 0
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "off": {
+    "mode": "off",
+    "git": "795eb372fe2beb9af52d2c10ea2766d565f26331",
+    "server_ok": true,
+    "req1": {
+      "code": 200,
+      "prompt_n": 942,
+      "prompt_ms": 361.555,
+      "hash": "39a0f0fcb23be72cb9c2af26b39d5b222d77206d4672c62f6c16789550abf0fd"
+    },
+    "req2": {
+      "code": 200,
+      "prompt_n": 942,
+      "prompt_ms": 350.181,
+      "hash": "343265dd7cf80af8500fdcb994c157ef4779bee9949db52eb9d22bee734395c8"
+    },
+    "kv": {
+      "used_cells": 1898,
+      "shared_cells": 0,
+      "active": 2,
+      "used_bytes": 62193664
+    },
+    "capability_log": [],
+    "shared_log_count": 0
+  },
+  "on": {
+    "mode": "on",
+    "git": "795eb372fe2beb9af52d2c10ea2766d565f26331",
+    "server_ok": true,
+    "req1": {
+      "code": 200,
+      "prompt_n": 942,
+      "prompt_ms": 363.459,
+      "hash": "39a0f0fcb23be72cb9c2af26b39d5b222d77206d4672c62f6c16789550abf0fd"
+    },
+    "req2": {
+      "code": 200,
+      "prompt_n": 942,
+      "prompt_ms": 347.865,
+      "hash": "343265dd7cf80af8500fdcb994c157ef4779bee9949db52eb9d22bee734395c8"
+    },
+    "kv": {
+      "used_cells": 1898,
+      "shared_cells": 0,
+      "active": 2,
+      "used_bytes": 62193664
+    },
+    "capability_log": [
+      "0.01.314.120 W srv    load_model: E8-C1: capability rejected: memory implementation does not support cross-slot prefix metadata sharing (only standard unified attention KV is audited)"
+    ],
+    "shared_log_count": 0
+  },
+  "_consistency": {
+    "hash_match": true,
+    "shared_zero": true,
+    "capability_rejected": true
+  }
+}

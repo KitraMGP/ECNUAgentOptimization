@@ -1,0 +1,2041 @@
+{
+  "git_commit": "f5837427b5c5bb4d572d2e0061833f6adc3cc82d",
+  "model": "tinyllama stories260K",
+  "reps": 5,
+  "scenarios": {
+    "M01_2slot_shared_prefix": {
+      "off": {
+        "recompute_median": 209,
+        "recompute_values": [
+          209,
+          209,
+          209,
+          209,
+          209
+        ],
+        "latency_median_ms": 9.55,
+        "latency_p95_ms": 9.58,
+        "shared_log_count": 0
+      },
+      "on": {
+        "recompute_median": 14,
+        "recompute_values": [
+          14,
+          14,
+          14,
+          14,
+          14
+        ],
+        "latency_median_ms": 2.46,
+        "latency_p95_ms": 2.64,
+        "shared_log_count": 5,
+        "shared_cells_samples": [
+          195,
+          195,
+          195,
+          195,
+          195
+        ]
+      },
+      "recompute_reduction_pct": 93.3,
+      "lossless_output_identical": true,
+      "canary_leak": false,
+      "expect_shared": true,
+      "off_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 10.960102081298828,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 209,
+                "latency_ms": 9.28044319152832,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 427,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.919239044189453,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 209,
+                "latency_ms": 9.582996368408203,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 427,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 9.083271026611328,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 209,
+                "latency_ms": 8.833646774291992,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 427,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 9.334325790405273,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 209,
+                "latency_ms": 9.549379348754883,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 427,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 9.423971176147461,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 209,
+                "latency_ms": 10.290861129760742,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 427,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 0,
+        "exit_code": 0
+      },
+      "on_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 10.238170623779297,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 14,
+                "latency_ms": 2.643585205078125,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 232,
+            "kv_shared_cells": 195,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.458614349365234,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 14,
+                "latency_ms": 2.762317657470703,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 232,
+            "kv_shared_cells": 195,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.87298583984375,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 14,
+                "latency_ms": 2.3789405822753906,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 232,
+            "kv_shared_cells": 195,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.40306282043457,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 14,
+                "latency_ms": 2.3140907287597656,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 232,
+            "kv_shared_cells": 195,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.33749771118164,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 14,
+                "latency_ms": 2.464771270751953,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 232,
+            "kv_shared_cells": 195,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 5,
+        "exit_code": 0
+      }
+    },
+    "M02_3slot_multi_target": {
+      "off": {
+        "recompute_median": 208.5,
+        "recompute_values": [
+          209,
+          208,
+          209,
+          208,
+          209,
+          208,
+          209,
+          208,
+          209,
+          208
+        ],
+        "latency_median_ms": 9.24,
+        "latency_p95_ms": 9.96,
+        "shared_log_count": 0
+      },
+      "on": {
+        "recompute_median": 13.0,
+        "recompute_values": [
+          14,
+          12,
+          14,
+          12,
+          14,
+          12,
+          14,
+          12,
+          14,
+          12
+        ],
+        "latency_median_ms": 2.32,
+        "latency_p95_ms": 2.54,
+        "shared_log_count": 10,
+        "shared_cells_samples": [
+          196,
+          196,
+          196,
+          196,
+          196
+        ]
+      },
+      "recompute_reduction_pct": 93.76,
+      "lossless_output_identical": true,
+      "canary_leak": false,
+      "expect_shared": true,
+      "off_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 9.344100952148438,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 209,
+                "latency_ms": 8.885383605957031,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              },
+              {
+                "slot": 2,
+                "status": "ok",
+                "prompt_n": 208,
+                "latency_ms": 9.855508804321289,
+                "output": " Mia was",
+                "output_sha256": "695ff4096039095fad06c0b90c6530e4ae13bff1471d870a6ae7ee966e1dcbff"
+              }
+            ],
+            "kv_used_cells": 423,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.755207061767578,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 209,
+                "latency_ms": 8.888483047485352,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              },
+              {
+                "slot": 2,
+                "status": "ok",
+                "prompt_n": 208,
+                "latency_ms": 9.513378143310547,
+                "output": " Mia was",
+                "output_sha256": "695ff4096039095fad06c0b90c6530e4ae13bff1471d870a6ae7ee966e1dcbff"
+              }
+            ],
+            "kv_used_cells": 423,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.923768997192383,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 209,
+                "latency_ms": 8.707523345947266,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              },
+              {
+                "slot": 2,
+                "status": "ok",
+                "prompt_n": 208,
+                "latency_ms": 9.645223617553711,
+                "output": " Mia was",
+                "output_sha256": "695ff4096039095fad06c0b90c6530e4ae13bff1471d870a6ae7ee966e1dcbff"
+              }
+            ],
+            "kv_used_cells": 423,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.764505386352539,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 209,
+                "latency_ms": 8.965253829956055,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              },
+              {
+                "slot": 2,
+                "status": "ok",
+                "prompt_n": 208,
+                "latency_ms": 9.963274002075195,
+                "output": " Mia was",
+                "output_sha256": "695ff4096039095fad06c0b90c6530e4ae13bff1471d870a6ae7ee966e1dcbff"
+              }
+            ],
+            "kv_used_cells": 423,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 9.50765609741211,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 209,
+                "latency_ms": 8.97359848022461,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              },
+              {
+                "slot": 2,
+                "status": "ok",
+                "prompt_n": 208,
+                "latency_ms": 9.995460510253906,
+                "output": " Mia was",
+                "output_sha256": "695ff4096039095fad06c0b90c6530e4ae13bff1471d870a6ae7ee966e1dcbff"
+              }
+            ],
+            "kv_used_cells": 423,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 0,
+        "exit_code": 0
+      },
+      "on_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 10.980606079101562,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 14,
+                "latency_ms": 2.5386810302734375,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              },
+              {
+                "slot": 2,
+                "status": "ok",
+                "prompt_n": 12,
+                "latency_ms": 2.307891845703125,
+                "output": " Mia was",
+                "output_sha256": "695ff4096039095fad06c0b90c6530e4ae13bff1471d870a6ae7ee966e1dcbff"
+              }
+            ],
+            "kv_used_cells": 247,
+            "kv_shared_cells": 196,
+            "kv_active_sequences": 3
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 9.079694747924805,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 14,
+                "latency_ms": 2.6619434356689453,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              },
+              {
+                "slot": 2,
+                "status": "ok",
+                "prompt_n": 12,
+                "latency_ms": 2.212047576904297,
+                "output": " Mia was",
+                "output_sha256": "695ff4096039095fad06c0b90c6530e4ae13bff1471d870a6ae7ee966e1dcbff"
+              }
+            ],
+            "kv_used_cells": 247,
+            "kv_shared_cells": 196,
+            "kv_active_sequences": 3
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.726358413696289,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 14,
+                "latency_ms": 2.328634262084961,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              },
+              {
+                "slot": 2,
+                "status": "ok",
+                "prompt_n": 12,
+                "latency_ms": 2.105712890625,
+                "output": " Mia was",
+                "output_sha256": "695ff4096039095fad06c0b90c6530e4ae13bff1471d870a6ae7ee966e1dcbff"
+              }
+            ],
+            "kv_used_cells": 247,
+            "kv_shared_cells": 196,
+            "kv_active_sequences": 3
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.857250213623047,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 14,
+                "latency_ms": 2.370595932006836,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              },
+              {
+                "slot": 2,
+                "status": "ok",
+                "prompt_n": 12,
+                "latency_ms": 2.1467208862304688,
+                "output": " Mia was",
+                "output_sha256": "695ff4096039095fad06c0b90c6530e4ae13bff1471d870a6ae7ee966e1dcbff"
+              }
+            ],
+            "kv_used_cells": 247,
+            "kv_shared_cells": 196,
+            "kv_active_sequences": 3
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.543014526367188,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 14,
+                "latency_ms": 2.391338348388672,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              },
+              {
+                "slot": 2,
+                "status": "ok",
+                "prompt_n": 12,
+                "latency_ms": 2.0074844360351562,
+                "output": " Mia was",
+                "output_sha256": "695ff4096039095fad06c0b90c6530e4ae13bff1471d870a6ae7ee966e1dcbff"
+              }
+            ],
+            "kv_used_cells": 247,
+            "kv_shared_cells": 196,
+            "kv_active_sequences": 3
+          }
+        ],
+        "shared_log_count": 10,
+        "exit_code": 0
+      }
+    },
+    "M03_partial_prefix": {
+      "off": {
+        "recompute_median": 125,
+        "recompute_values": [
+          125,
+          125,
+          125,
+          125,
+          125
+        ],
+        "latency_median_ms": 4.88,
+        "latency_p95_ms": 4.99,
+        "shared_log_count": 0
+      },
+      "on": {
+        "recompute_median": 31,
+        "recompute_values": [
+          31,
+          31,
+          31,
+          31,
+          31
+        ],
+        "latency_median_ms": 2.5,
+        "latency_p95_ms": 2.6,
+        "shared_log_count": 5,
+        "shared_cells_samples": [
+          94,
+          94,
+          94,
+          94,
+          94
+        ]
+      },
+      "recompute_reduction_pct": 75.2,
+      "lossless_output_identical": true,
+      "canary_leak": false,
+      "expect_shared": true,
+      "off_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 12.417316436767578,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 125,
+                "latency_ms": 4.876852035522461,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 343,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 9.247541427612305,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 125,
+                "latency_ms": 5.084514617919922,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 343,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 7.858037948608398,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 125,
+                "latency_ms": 4.421710968017578,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 343,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 7.874250411987305,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 125,
+                "latency_ms": 4.396915435791016,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 343,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.191823959350586,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 125,
+                "latency_ms": 4.98509407043457,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 343,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 0,
+        "exit_code": 0
+      },
+      "on_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 11.316776275634766,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 31,
+                "latency_ms": 2.852201461791992,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 249,
+            "kv_shared_cells": 94,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.352279663085938,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 31,
+                "latency_ms": 2.347230911254883,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 249,
+            "kv_shared_cells": 94,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.311986923217773,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 31,
+                "latency_ms": 2.4242401123046875,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 249,
+            "kv_shared_cells": 94,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.07046890258789,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 31,
+                "latency_ms": 2.503633499145508,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 249,
+            "kv_shared_cells": 94,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.82720947265625,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 31,
+                "latency_ms": 2.5992393493652344,
+                "output": "\nMia",
+                "output_sha256": "9247d733bc879c09ee7b619d9c2a3375b3fa4d36eff21a71e646bb07e72a46b0"
+              }
+            ],
+            "kv_used_cells": 249,
+            "kv_shared_cells": 94,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 5,
+        "exit_code": 0
+      }
+    },
+    "M04_no_shared_prefix": {
+      "off": {
+        "recompute_median": 135,
+        "recompute_values": [
+          135,
+          135,
+          135,
+          135,
+          135
+        ],
+        "latency_median_ms": 5.48,
+        "latency_p95_ms": 5.64,
+        "shared_log_count": 0
+      },
+      "on": {
+        "recompute_median": 135,
+        "recompute_values": [
+          135,
+          135,
+          135,
+          135,
+          135
+        ],
+        "latency_median_ms": 5.05,
+        "latency_p95_ms": 5.16,
+        "shared_log_count": 0,
+        "shared_cells_samples": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "recompute_reduction_pct": 0.0,
+      "lossless_output_identical": true,
+      "canary_leak": false,
+      "expect_shared": false,
+      "off_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 9.167671203613281,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 135,
+                "latency_ms": 5.464315414428711,
+                "output": "\nAs ",
+                "output_sha256": "0b097e1ade07fca25d4e3cf3cfc8fec113ad6cd734962fd623be9615dd17b75d"
+              }
+            ],
+            "kv_used_cells": 353,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 9.051322937011719,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 135,
+                "latency_ms": 5.803108215332031,
+                "output": "\nAs ",
+                "output_sha256": "0b097e1ade07fca25d4e3cf3cfc8fec113ad6cd734962fd623be9615dd17b75d"
+              }
+            ],
+            "kv_used_cells": 353,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.908510208129883,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 135,
+                "latency_ms": 5.18798828125,
+                "output": "\nAs ",
+                "output_sha256": "0b097e1ade07fca25d4e3cf3cfc8fec113ad6cd734962fd623be9615dd17b75d"
+              }
+            ],
+            "kv_used_cells": 353,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 9.112358093261719,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 135,
+                "latency_ms": 5.477428436279297,
+                "output": "\nAs ",
+                "output_sha256": "0b097e1ade07fca25d4e3cf3cfc8fec113ad6cd734962fd623be9615dd17b75d"
+              }
+            ],
+            "kv_used_cells": 353,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.350849151611328,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 135,
+                "latency_ms": 5.636453628540039,
+                "output": "\nAs ",
+                "output_sha256": "0b097e1ade07fca25d4e3cf3cfc8fec113ad6cd734962fd623be9615dd17b75d"
+              }
+            ],
+            "kv_used_cells": 353,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 0,
+        "exit_code": 0
+      },
+      "on_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 10.141134262084961,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 135,
+                "latency_ms": 5.048990249633789,
+                "output": "\nAs ",
+                "output_sha256": "0b097e1ade07fca25d4e3cf3cfc8fec113ad6cd734962fd623be9615dd17b75d"
+              }
+            ],
+            "kv_used_cells": 353,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.246421813964844,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 135,
+                "latency_ms": 4.973888397216797,
+                "output": "\nAs ",
+                "output_sha256": "0b097e1ade07fca25d4e3cf3cfc8fec113ad6cd734962fd623be9615dd17b75d"
+              }
+            ],
+            "kv_used_cells": 353,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.271217346191406,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 135,
+                "latency_ms": 5.295038223266602,
+                "output": "\nAs ",
+                "output_sha256": "0b097e1ade07fca25d4e3cf3cfc8fec113ad6cd734962fd623be9615dd17b75d"
+              }
+            ],
+            "kv_used_cells": 353,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.170366287231445,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 135,
+                "latency_ms": 4.927396774291992,
+                "output": "\nAs ",
+                "output_sha256": "0b097e1ade07fca25d4e3cf3cfc8fec113ad6cd734962fd623be9615dd17b75d"
+              }
+            ],
+            "kv_used_cells": 353,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 212,
+            "src_latency_ms": 8.283376693725586,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 135,
+                "latency_ms": 5.16200065612793,
+                "output": "\nAs ",
+                "output_sha256": "0b097e1ade07fca25d4e3cf3cfc8fec113ad6cd734962fd623be9615dd17b75d"
+              }
+            ],
+            "kv_used_cells": 353,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 0,
+        "exit_code": 0
+      }
+    },
+    "M05_long_code": {
+      "off": {
+        "recompute_median": 227,
+        "recompute_values": [
+          227,
+          227,
+          227,
+          227,
+          227
+        ],
+        "latency_median_ms": 10.09,
+        "latency_p95_ms": 10.19,
+        "shared_log_count": 0
+      },
+      "on": {
+        "recompute_median": 75,
+        "recompute_values": [
+          75,
+          75,
+          75,
+          75,
+          75
+        ],
+        "latency_median_ms": 6.25,
+        "latency_p95_ms": 6.31,
+        "shared_log_count": 5,
+        "shared_cells_samples": [
+          152,
+          152,
+          152,
+          152,
+          152
+        ]
+      },
+      "recompute_reduction_pct": 66.96,
+      "lossless_output_identical": true,
+      "canary_leak": false,
+      "expect_shared": true,
+      "off_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 206,
+            "src_latency_ms": 9.366989135742188,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 227,
+                "latency_ms": 10.193347930908203,
+                "output": "\"Well",
+                "output_sha256": "8fdfc7244d64b36500f6721f2a93421f80cac373016b0b34f17f935eff64524f"
+              }
+            ],
+            "kv_used_cells": 439,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 206,
+            "src_latency_ms": 7.798910140991211,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 227,
+                "latency_ms": 10.032892227172852,
+                "output": "\"Well",
+                "output_sha256": "8fdfc7244d64b36500f6721f2a93421f80cac373016b0b34f17f935eff64524f"
+              }
+            ],
+            "kv_used_cells": 439,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 206,
+            "src_latency_ms": 7.866382598876953,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 227,
+                "latency_ms": 9.902000427246094,
+                "output": "\"Well",
+                "output_sha256": "8fdfc7244d64b36500f6721f2a93421f80cac373016b0b34f17f935eff64524f"
+              }
+            ],
+            "kv_used_cells": 439,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 206,
+            "src_latency_ms": 7.712841033935547,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 227,
+                "latency_ms": 10.219097137451172,
+                "output": "\"Well",
+                "output_sha256": "8fdfc7244d64b36500f6721f2a93421f80cac373016b0b34f17f935eff64524f"
+              }
+            ],
+            "kv_used_cells": 439,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 206,
+            "src_latency_ms": 7.941484451293945,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 227,
+                "latency_ms": 10.088682174682617,
+                "output": "\"Well",
+                "output_sha256": "8fdfc7244d64b36500f6721f2a93421f80cac373016b0b34f17f935eff64524f"
+              }
+            ],
+            "kv_used_cells": 439,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 0,
+        "exit_code": 0
+      },
+      "on_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 206,
+            "src_latency_ms": 10.159015655517578,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 75,
+                "latency_ms": 6.247282028198242,
+                "output": "\"Well",
+                "output_sha256": "8fdfc7244d64b36500f6721f2a93421f80cac373016b0b34f17f935eff64524f"
+              }
+            ],
+            "kv_used_cells": 287,
+            "kv_shared_cells": 152,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 206,
+            "src_latency_ms": 8.333921432495117,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 75,
+                "latency_ms": 6.310701370239258,
+                "output": "\"Well",
+                "output_sha256": "8fdfc7244d64b36500f6721f2a93421f80cac373016b0b34f17f935eff64524f"
+              }
+            ],
+            "kv_used_cells": 287,
+            "kv_shared_cells": 152,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 206,
+            "src_latency_ms": 8.177042007446289,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 75,
+                "latency_ms": 6.800413131713867,
+                "output": "\"Well",
+                "output_sha256": "8fdfc7244d64b36500f6721f2a93421f80cac373016b0b34f17f935eff64524f"
+              }
+            ],
+            "kv_used_cells": 287,
+            "kv_shared_cells": 152,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 206,
+            "src_latency_ms": 8.193254470825195,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 75,
+                "latency_ms": 5.454301834106445,
+                "output": "\"Well",
+                "output_sha256": "8fdfc7244d64b36500f6721f2a93421f80cac373016b0b34f17f935eff64524f"
+              }
+            ],
+            "kv_used_cells": 287,
+            "kv_shared_cells": 152,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 206,
+            "src_latency_ms": 7.581472396850586,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 75,
+                "latency_ms": 5.800724029541016,
+                "output": "\"Well",
+                "output_sha256": "8fdfc7244d64b36500f6721f2a93421f80cac373016b0b34f17f935eff64524f"
+              }
+            ],
+            "kv_used_cells": 287,
+            "kv_shared_cells": 152,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 5,
+        "exit_code": 0
+      }
+    },
+    "M06_long_summary": {
+      "off": {
+        "recompute_median": 425,
+        "recompute_values": [
+          425,
+          425,
+          425,
+          425,
+          425
+        ],
+        "latency_median_ms": 25.9,
+        "latency_p95_ms": 26.66,
+        "shared_log_count": 0
+      },
+      "on": {
+        "recompute_median": 43,
+        "recompute_values": [
+          43,
+          43,
+          43,
+          43,
+          43
+        ],
+        "latency_median_ms": 6.27,
+        "latency_p95_ms": 6.46,
+        "shared_log_count": 5,
+        "shared_cells_samples": [
+          382,
+          382,
+          382,
+          382,
+          382
+        ]
+      },
+      "recompute_reduction_pct": 89.88,
+      "lossless_output_identical": true,
+      "canary_leak": false,
+      "expect_shared": true,
+      "off_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 427,
+            "src_latency_ms": 28.95355224609375,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 425,
+                "latency_ms": 25.900602340698242,
+                "output": " And they",
+                "output_sha256": "84c524b7b95c9db93ffff6e3b7fa12afebef0291edbab42aeafc95a247fe0776"
+              }
+            ],
+            "kv_used_cells": 428,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 1
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 427,
+            "src_latency_ms": 26.54266357421875,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 425,
+                "latency_ms": 25.71892738342285,
+                "output": " And they",
+                "output_sha256": "84c524b7b95c9db93ffff6e3b7fa12afebef0291edbab42aeafc95a247fe0776"
+              }
+            ],
+            "kv_used_cells": 428,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 1
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 427,
+            "src_latency_ms": 25.487422943115234,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 425,
+                "latency_ms": 25.574922561645508,
+                "output": " And they",
+                "output_sha256": "84c524b7b95c9db93ffff6e3b7fa12afebef0291edbab42aeafc95a247fe0776"
+              }
+            ],
+            "kv_used_cells": 428,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 1
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 427,
+            "src_latency_ms": 34.84344482421875,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 425,
+                "latency_ms": 26.999235153198242,
+                "output": " And they",
+                "output_sha256": "84c524b7b95c9db93ffff6e3b7fa12afebef0291edbab42aeafc95a247fe0776"
+              }
+            ],
+            "kv_used_cells": 428,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 1
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 427,
+            "src_latency_ms": 27.76312828063965,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 425,
+                "latency_ms": 26.660919189453125,
+                "output": " And they",
+                "output_sha256": "84c524b7b95c9db93ffff6e3b7fa12afebef0291edbab42aeafc95a247fe0776"
+              }
+            ],
+            "kv_used_cells": 428,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 1
+          }
+        ],
+        "shared_log_count": 0,
+        "exit_code": 0
+      },
+      "on_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 427,
+            "src_latency_ms": 33.83898735046387,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 43,
+                "latency_ms": 6.270885467529297,
+                "output": " And they",
+                "output_sha256": "84c524b7b95c9db93ffff6e3b7fa12afebef0291edbab42aeafc95a247fe0776"
+              }
+            ],
+            "kv_used_cells": 476,
+            "kv_shared_cells": 382,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 427,
+            "src_latency_ms": 34.55710411071777,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 43,
+                "latency_ms": 6.667613983154297,
+                "output": " And they",
+                "output_sha256": "84c524b7b95c9db93ffff6e3b7fa12afebef0291edbab42aeafc95a247fe0776"
+              }
+            ],
+            "kv_used_cells": 476,
+            "kv_shared_cells": 382,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 427,
+            "src_latency_ms": 27.663469314575195,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 43,
+                "latency_ms": 6.134033203125,
+                "output": " And they",
+                "output_sha256": "84c524b7b95c9db93ffff6e3b7fa12afebef0291edbab42aeafc95a247fe0776"
+              }
+            ],
+            "kv_used_cells": 476,
+            "kv_shared_cells": 382,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 427,
+            "src_latency_ms": 26.494741439819336,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 43,
+                "latency_ms": 6.455183029174805,
+                "output": " And they",
+                "output_sha256": "84c524b7b95c9db93ffff6e3b7fa12afebef0291edbab42aeafc95a247fe0776"
+              }
+            ],
+            "kv_used_cells": 476,
+            "kv_shared_cells": 382,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 427,
+            "src_latency_ms": 26.123762130737305,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 43,
+                "latency_ms": 5.2490234375,
+                "output": " And they",
+                "output_sha256": "84c524b7b95c9db93ffff6e3b7fa12afebef0291edbab42aeafc95a247fe0776"
+              }
+            ],
+            "kv_used_cells": 476,
+            "kv_shared_cells": 382,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 5,
+        "exit_code": 0
+      }
+    },
+    "M07_tool_call_json": {
+      "off": {
+        "recompute_median": 319,
+        "recompute_values": [
+          319,
+          319,
+          319,
+          319,
+          319
+        ],
+        "latency_median_ms": 16.61,
+        "latency_p95_ms": 16.72,
+        "shared_log_count": 0
+      },
+      "on": {
+        "recompute_median": 52,
+        "recompute_values": [
+          52,
+          52,
+          52,
+          52,
+          52
+        ],
+        "latency_median_ms": 5.56,
+        "latency_p95_ms": 5.58,
+        "shared_log_count": 5,
+        "shared_cells_samples": [
+          267,
+          267,
+          267,
+          267,
+          267
+        ]
+      },
+      "recompute_reduction_pct": 83.7,
+      "lossless_output_identical": true,
+      "canary_leak": false,
+      "expect_shared": true,
+      "off_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 318,
+            "src_latency_ms": 19.507884979248047,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 319,
+                "latency_ms": 17.009258270263672,
+                "output": ".\nThe",
+                "output_sha256": "734af9a4f873182fbb15a04ca1260ff5dfa573cf2224392711b7d803623e1962"
+              }
+            ],
+            "kv_used_cells": 322,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 1
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 318,
+            "src_latency_ms": 15.631914138793945,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 319,
+                "latency_ms": 16.722440719604492,
+                "output": ".\nThe",
+                "output_sha256": "734af9a4f873182fbb15a04ca1260ff5dfa573cf2224392711b7d803623e1962"
+              }
+            ],
+            "kv_used_cells": 322,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 1
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 318,
+            "src_latency_ms": 15.790939331054688,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 319,
+                "latency_ms": 16.498804092407227,
+                "output": ".\nThe",
+                "output_sha256": "734af9a4f873182fbb15a04ca1260ff5dfa573cf2224392711b7d803623e1962"
+              }
+            ],
+            "kv_used_cells": 322,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 1
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 318,
+            "src_latency_ms": 15.800237655639648,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 319,
+                "latency_ms": 15.858888626098633,
+                "output": ".\nThe",
+                "output_sha256": "734af9a4f873182fbb15a04ca1260ff5dfa573cf2224392711b7d803623e1962"
+              }
+            ],
+            "kv_used_cells": 322,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 1
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 318,
+            "src_latency_ms": 18.645763397216797,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 319,
+                "latency_ms": 16.610383987426758,
+                "output": ".\nThe",
+                "output_sha256": "734af9a4f873182fbb15a04ca1260ff5dfa573cf2224392711b7d803623e1962"
+              }
+            ],
+            "kv_used_cells": 322,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 1
+          }
+        ],
+        "shared_log_count": 0,
+        "exit_code": 0
+      },
+      "on_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 318,
+            "src_latency_ms": 22.719383239746094,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 52,
+                "latency_ms": 5.555629730224609,
+                "output": ".\nThe",
+                "output_sha256": "734af9a4f873182fbb15a04ca1260ff5dfa573cf2224392711b7d803623e1962"
+              }
+            ],
+            "kv_used_cells": 376,
+            "kv_shared_cells": 267,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 318,
+            "src_latency_ms": 15.509366989135742,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 52,
+                "latency_ms": 5.579471588134766,
+                "output": ".\nThe",
+                "output_sha256": "734af9a4f873182fbb15a04ca1260ff5dfa573cf2224392711b7d803623e1962"
+              }
+            ],
+            "kv_used_cells": 376,
+            "kv_shared_cells": 267,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 318,
+            "src_latency_ms": 15.782594680786133,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 52,
+                "latency_ms": 5.427837371826172,
+                "output": ".\nThe",
+                "output_sha256": "734af9a4f873182fbb15a04ca1260ff5dfa573cf2224392711b7d803623e1962"
+              }
+            ],
+            "kv_used_cells": 376,
+            "kv_shared_cells": 267,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 318,
+            "src_latency_ms": 15.92397689819336,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 52,
+                "latency_ms": 5.517005920410156,
+                "output": ".\nThe",
+                "output_sha256": "734af9a4f873182fbb15a04ca1260ff5dfa573cf2224392711b7d803623e1962"
+              }
+            ],
+            "kv_used_cells": 376,
+            "kv_shared_cells": 267,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 318,
+            "src_latency_ms": 16.020774841308594,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 52,
+                "latency_ms": 5.859851837158203,
+                "output": ".\nThe",
+                "output_sha256": "734af9a4f873182fbb15a04ca1260ff5dfa573cf2224392711b7d803623e1962"
+              }
+            ],
+            "kv_used_cells": 376,
+            "kv_shared_cells": 267,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 5,
+        "exit_code": 0
+      }
+    },
+    "M08_canary": {
+      "off": {
+        "recompute_median": 235,
+        "recompute_values": [
+          235,
+          235,
+          235,
+          235,
+          235
+        ],
+        "latency_median_ms": 10.14,
+        "latency_p95_ms": 10.31,
+        "shared_log_count": 0
+      },
+      "on": {
+        "recompute_median": 24,
+        "recompute_values": [
+          24,
+          24,
+          24,
+          24,
+          24
+        ],
+        "latency_median_ms": 3.28,
+        "latency_p95_ms": 3.38,
+        "shared_log_count": 5,
+        "shared_cells_samples": [
+          211,
+          211,
+          211,
+          211,
+          211
+        ]
+      },
+      "recompute_reduction_pct": 89.79,
+      "lossless_output_identical": true,
+      "canary_leak": false,
+      "expect_shared": true,
+      "off_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 239,
+            "src_latency_ms": 14.194488525390625,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 235,
+                "latency_ms": 10.309219360351562,
+                "output": " He was so happy",
+                "output_sha256": "78a4458251e31a18042507114d1949e2530d725f2156928e3eb1eb07871d0ea1"
+              }
+            ],
+            "kv_used_cells": 480,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 239,
+            "src_latency_ms": 10.243654251098633,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 235,
+                "latency_ms": 10.908365249633789,
+                "output": " He was so happy",
+                "output_sha256": "78a4458251e31a18042507114d1949e2530d725f2156928e3eb1eb07871d0ea1"
+              }
+            ],
+            "kv_used_cells": 480,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 239,
+            "src_latency_ms": 10.251045227050781,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 235,
+                "latency_ms": 10.103464126586914,
+                "output": " He was so happy",
+                "output_sha256": "78a4458251e31a18042507114d1949e2530d725f2156928e3eb1eb07871d0ea1"
+              }
+            ],
+            "kv_used_cells": 480,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 239,
+            "src_latency_ms": 10.056734085083008,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 235,
+                "latency_ms": 9.854316711425781,
+                "output": " He was so happy",
+                "output_sha256": "78a4458251e31a18042507114d1949e2530d725f2156928e3eb1eb07871d0ea1"
+              }
+            ],
+            "kv_used_cells": 480,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 239,
+            "src_latency_ms": 10.067462921142578,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 235,
+                "latency_ms": 10.137796401977539,
+                "output": " He was so happy",
+                "output_sha256": "78a4458251e31a18042507114d1949e2530d725f2156928e3eb1eb07871d0ea1"
+              }
+            ],
+            "kv_used_cells": 480,
+            "kv_shared_cells": 0,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 0,
+        "exit_code": 0
+      },
+      "on_raw": {
+        "failed": false,
+        "results": [
+          {
+            "repetition": 0,
+            "src_status": "ok",
+            "src_prompt_n": 239,
+            "src_latency_ms": 12.519598007202148,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 24,
+                "latency_ms": 3.383159637451172,
+                "output": " He was so happy",
+                "output_sha256": "78a4458251e31a18042507114d1949e2530d725f2156928e3eb1eb07871d0ea1"
+              }
+            ],
+            "kv_used_cells": 269,
+            "kv_shared_cells": 211,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 1,
+            "src_status": "ok",
+            "src_prompt_n": 239,
+            "src_latency_ms": 11.090993881225586,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 24,
+                "latency_ms": 3.217935562133789,
+                "output": " He was so happy",
+                "output_sha256": "78a4458251e31a18042507114d1949e2530d725f2156928e3eb1eb07871d0ea1"
+              }
+            ],
+            "kv_used_cells": 269,
+            "kv_shared_cells": 211,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 2,
+            "src_status": "ok",
+            "src_prompt_n": 239,
+            "src_latency_ms": 10.618209838867188,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 24,
+                "latency_ms": 3.3965110778808594,
+                "output": " He was so happy",
+                "output_sha256": "78a4458251e31a18042507114d1949e2530d725f2156928e3eb1eb07871d0ea1"
+              }
+            ],
+            "kv_used_cells": 269,
+            "kv_shared_cells": 211,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 3,
+            "src_status": "ok",
+            "src_prompt_n": 239,
+            "src_latency_ms": 10.535717010498047,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 24,
+                "latency_ms": 3.245830535888672,
+                "output": " He was so happy",
+                "output_sha256": "78a4458251e31a18042507114d1949e2530d725f2156928e3eb1eb07871d0ea1"
+              }
+            ],
+            "kv_used_cells": 269,
+            "kv_shared_cells": 211,
+            "kv_active_sequences": 2
+          },
+          {
+            "repetition": 4,
+            "src_status": "ok",
+            "src_prompt_n": 239,
+            "src_latency_ms": 9.699344635009766,
+            "targets": [
+              {
+                "slot": 1,
+                "status": "ok",
+                "prompt_n": 24,
+                "latency_ms": 3.2813549041748047,
+                "output": " He was so happy",
+                "output_sha256": "78a4458251e31a18042507114d1949e2530d725f2156928e3eb1eb07871d0ea1"
+              }
+            ],
+            "kv_used_cells": 269,
+            "kv_shared_cells": 211,
+            "kv_active_sequences": 2
+          }
+        ],
+        "shared_log_count": 5,
+        "exit_code": 0
+      }
+    }
+  }
+}

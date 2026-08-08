@@ -1,0 +1,397 @@
+{
+  "p1_c1024": {
+    "config": {
+      "ctx": 1024,
+      "parallel": 1,
+      "kv_type": "f16",
+      "n_prompt_units": 8
+    },
+    "completion_code": 200,
+    "timings": {
+      "prompt_n": 678,
+      "prompt_ms": 280.215,
+      "prompt_per_second": 2419.570686794069,
+      "predicted_ms": 107.498,
+      "predicted_per_second": 74.41998920910156
+    },
+    "kv_empty": {
+      "schema_version": 1,
+      "capacity_bytes": 33554432,
+      "used_bytes": 0,
+      "used_bytes_valid": true,
+      "capacity_cells": 1024,
+      "used_cells": 0,
+      "active_sequences": 0,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "kv_used": {
+      "schema_version": 1,
+      "capacity_bytes": 33554432,
+      "used_bytes": 22446080,
+      "used_bytes_valid": true,
+      "capacity_cells": 1024,
+      "used_cells": 685,
+      "active_sequences": 1,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "gpu_mem_baseline_mb": 2882,
+    "gpu_mem_after_mb": 2890,
+    "model_file_bytes": 2707514144
+  },
+  "p1_c2048": {
+    "config": {
+      "ctx": 2048,
+      "parallel": 1,
+      "kv_type": "f16",
+      "n_prompt_units": 8
+    },
+    "completion_code": 200,
+    "timings": {
+      "prompt_n": 678,
+      "prompt_ms": 277.291,
+      "prompt_per_second": 2445.0847665448932,
+      "predicted_ms": 105.749,
+      "predicted_per_second": 75.65083357762249
+    },
+    "kv_empty": {
+      "schema_version": 1,
+      "capacity_bytes": 67108864,
+      "used_bytes": 0,
+      "used_bytes_valid": true,
+      "capacity_cells": 2048,
+      "used_cells": 0,
+      "active_sequences": 0,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "kv_used": {
+      "schema_version": 1,
+      "capacity_bytes": 67108864,
+      "used_bytes": 22446080,
+      "used_bytes_valid": true,
+      "capacity_cells": 2048,
+      "used_cells": 685,
+      "active_sequences": 1,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "gpu_mem_baseline_mb": 2916,
+    "gpu_mem_after_mb": 2924,
+    "model_file_bytes": 2707514144
+  },
+  "p1_c4096": {
+    "config": {
+      "ctx": 4096,
+      "parallel": 1,
+      "kv_type": "f16",
+      "n_prompt_units": 8
+    },
+    "completion_code": 200,
+    "timings": {
+      "prompt_n": 678,
+      "prompt_ms": 284.246,
+      "prompt_per_second": 2385.2578400399657,
+      "predicted_ms": 103.855,
+      "predicted_per_second": 77.03047518174377
+    },
+    "kv_empty": {
+      "schema_version": 1,
+      "capacity_bytes": 134217728,
+      "used_bytes": 0,
+      "used_bytes_valid": true,
+      "capacity_cells": 4096,
+      "used_cells": 0,
+      "active_sequences": 0,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "kv_used": {
+      "schema_version": 1,
+      "capacity_bytes": 134217728,
+      "used_bytes": 22446080,
+      "used_bytes_valid": true,
+      "capacity_cells": 4096,
+      "used_cells": 685,
+      "active_sequences": 1,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "gpu_mem_baseline_mb": 2982,
+    "gpu_mem_after_mb": 2990,
+    "model_file_bytes": 2707514144
+  },
+  "p2_c1024": {
+    "config": {
+      "ctx": 1024,
+      "parallel": 2,
+      "kv_type": "f16",
+      "n_prompt_units": 8
+    },
+    "completion_code": 200,
+    "timings": {
+      "prompt_n": 678,
+      "prompt_ms": 302.324,
+      "prompt_per_second": 2242.627115280295,
+      "predicted_ms": 106.478,
+      "predicted_per_second": 75.13289130148951
+    },
+    "kv_empty": {
+      "schema_version": 1,
+      "capacity_bytes": 33554432,
+      "used_bytes": 0,
+      "used_bytes_valid": true,
+      "capacity_cells": 1024,
+      "used_cells": 0,
+      "active_sequences": 0,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "kv_used": {
+      "schema_version": 1,
+      "capacity_bytes": 33554432,
+      "used_bytes": 22446080,
+      "used_bytes_valid": true,
+      "capacity_cells": 1024,
+      "used_cells": 685,
+      "active_sequences": 1,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "gpu_mem_baseline_mb": 2932,
+    "gpu_mem_after_mb": 2940,
+    "model_file_bytes": 2707514144
+  },
+  "p2_c2048": {
+    "config": {
+      "ctx": 2048,
+      "parallel": 2,
+      "kv_type": "f16",
+      "n_prompt_units": 8
+    },
+    "completion_code": 200,
+    "timings": {
+      "prompt_n": 678,
+      "prompt_ms": 275.631,
+      "prompt_per_second": 2459.8103986851993,
+      "predicted_ms": 103.769,
+      "predicted_per_second": 77.09431525792867
+    },
+    "kv_empty": {
+      "schema_version": 1,
+      "capacity_bytes": 67108864,
+      "used_bytes": 0,
+      "used_bytes_valid": true,
+      "capacity_cells": 2048,
+      "used_cells": 0,
+      "active_sequences": 0,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "kv_used": {
+      "schema_version": 1,
+      "capacity_bytes": 67108864,
+      "used_bytes": 22446080,
+      "used_bytes_valid": true,
+      "capacity_cells": 2048,
+      "used_cells": 685,
+      "active_sequences": 1,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "gpu_mem_baseline_mb": 2966,
+    "gpu_mem_after_mb": 2974,
+    "model_file_bytes": 2707514144
+  },
+  "p2_c4096": {
+    "config": {
+      "ctx": 4096,
+      "parallel": 2,
+      "kv_type": "f16",
+      "n_prompt_units": 8
+    },
+    "completion_code": 200,
+    "timings": {
+      "prompt_n": 678,
+      "prompt_ms": 273.211,
+      "prompt_per_second": 2481.59847151103,
+      "predicted_ms": 104.9,
+      "predicted_per_second": 76.26310772163966
+    },
+    "kv_empty": {
+      "schema_version": 1,
+      "capacity_bytes": 134217728,
+      "used_bytes": 0,
+      "used_bytes_valid": true,
+      "capacity_cells": 4096,
+      "used_cells": 0,
+      "active_sequences": 0,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "kv_used": {
+      "schema_version": 1,
+      "capacity_bytes": 134217728,
+      "used_bytes": 22446080,
+      "used_bytes_valid": true,
+      "capacity_cells": 4096,
+      "used_cells": 685,
+      "active_sequences": 1,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "gpu_mem_baseline_mb": 3032,
+    "gpu_mem_after_mb": 3040,
+    "model_file_bytes": 2707514144
+  },
+  "p4_c1024": {
+    "config": {
+      "ctx": 1024,
+      "parallel": 4,
+      "kv_type": "f16",
+      "n_prompt_units": 8
+    },
+    "completion_code": 200,
+    "timings": {
+      "prompt_n": 678,
+      "prompt_ms": 275.359,
+      "prompt_per_second": 2462.240202789813,
+      "predicted_ms": 107.39,
+      "predicted_per_second": 74.49483192103548
+    },
+    "kv_empty": {
+      "schema_version": 1,
+      "capacity_bytes": 33554432,
+      "used_bytes": 0,
+      "used_bytes_valid": true,
+      "capacity_cells": 1024,
+      "used_cells": 0,
+      "active_sequences": 0,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "kv_used": {
+      "schema_version": 1,
+      "capacity_bytes": 33554432,
+      "used_bytes": 22446080,
+      "used_bytes_valid": true,
+      "capacity_cells": 1024,
+      "used_cells": 685,
+      "active_sequences": 1,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "gpu_mem_baseline_mb": 3032,
+    "gpu_mem_after_mb": 3040,
+    "model_file_bytes": 2707514144
+  },
+  "p4_c2048": {
+    "config": {
+      "ctx": 2048,
+      "parallel": 4,
+      "kv_type": "f16",
+      "n_prompt_units": 8
+    },
+    "completion_code": 200,
+    "timings": {
+      "prompt_n": 678,
+      "prompt_ms": 275.685,
+      "prompt_per_second": 2459.3285815332715,
+      "predicted_ms": 103.387,
+      "predicted_per_second": 77.3791675936046
+    },
+    "kv_empty": {
+      "schema_version": 1,
+      "capacity_bytes": 67108864,
+      "used_bytes": 0,
+      "used_bytes_valid": true,
+      "capacity_cells": 2048,
+      "used_cells": 0,
+      "active_sequences": 0,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "kv_used": {
+      "schema_version": 1,
+      "capacity_bytes": 67108864,
+      "used_bytes": 22446080,
+      "used_bytes_valid": true,
+      "capacity_cells": 2048,
+      "used_cells": 685,
+      "active_sequences": 1,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "gpu_mem_baseline_mb": 3066,
+    "gpu_mem_after_mb": 3074,
+    "model_file_bytes": 2707514144
+  },
+  "p4_c4096": {
+    "config": {
+      "ctx": 4096,
+      "parallel": 4,
+      "kv_type": "f16",
+      "n_prompt_units": 8
+    },
+    "completion_code": 200,
+    "timings": {
+      "prompt_n": 678,
+      "prompt_ms": 277.835,
+      "prompt_per_second": 2440.2972987564563,
+      "predicted_ms": 104.145,
+      "predicted_per_second": 76.81597772336646
+    },
+    "kv_empty": {
+      "schema_version": 1,
+      "capacity_bytes": 134217728,
+      "used_bytes": 0,
+      "used_bytes_valid": true,
+      "capacity_cells": 4096,
+      "used_cells": 0,
+      "active_sequences": 0,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "kv_used": {
+      "schema_version": 1,
+      "capacity_bytes": 134217728,
+      "used_bytes": 22446080,
+      "used_bytes_valid": true,
+      "capacity_cells": 4096,
+      "used_cells": 685,
+      "active_sequences": 1,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    },
+    "gpu_mem_baseline_mb": 3132,
+    "gpu_mem_after_mb": 3140,
+    "model_file_bytes": 2707514144
+  },
+  "p1_c2048_q8_0": {
+    "failed": true,
+    "reason": "server start failed"
+  },
+  "p1_c2048_q4_0": {
+    "failed": true,
+    "reason": "server start failed"
+  }
+}

@@ -1,0 +1,542 @@
+{
+  "off": {
+    "800": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1000": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1100": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1150": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1190": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1250": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1330": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1420": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "kv": {
+      "schema_version": 1,
+      "capacity_bytes": 655360,
+      "used_bytes": 359680,
+      "used_bytes_valid": true,
+      "capacity_cells": 1024,
+      "used_cells": 562,
+      "active_sequences": 4,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    }
+  },
+  "on": {
+    "800": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1000": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1100": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1150": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1190": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1250": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1330": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "1420": [
+      {
+        "rep": 0,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 1,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      },
+      {
+        "rep": 2,
+        "codes": [
+          200,
+          200,
+          200,
+          200
+        ],
+        "all_ok": true
+      }
+    ],
+    "kv": {
+      "schema_version": 1,
+      "capacity_bytes": 655360,
+      "used_bytes": 359680,
+      "used_bytes_valid": true,
+      "capacity_cells": 1024,
+      "used_cells": 562,
+      "active_sequences": 4,
+      "shared_cells": 0,
+      "physical_sharing": false,
+      "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+    }
+  }
+}

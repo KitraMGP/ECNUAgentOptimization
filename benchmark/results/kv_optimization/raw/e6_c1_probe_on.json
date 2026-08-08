@@ -4,7 +4,7 @@
   "variant": "on",
   "workload_id": "C1_PROBE",
   "repetition": 0,
-  "git_commit": "69711a2d6bd67e0d4f1a8a6c14c7d61a32110b0f",
+  "git_commit": "f5837427b5c5bb4d572d2e0061833f6adc3cc82d",
   "mode": "on",
   "req1": {
     "status": "ok",
