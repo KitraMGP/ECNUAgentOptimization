@@ -23,7 +23,10 @@
 | 文件 | 类型 | 内容 |
 |---|---|---|
 | `benchmark/framework/tool_payload.py` | 新增 | ToolPayloadStore 核心（纯 Python stdlib：hashlib/json/os/re/threading/dataclasses/types，无外部依赖） |
-| `benchmark/tests/test_tool_payload.py` | 新增 | 65 个纯 pytest 单元测试（无 GPU / 真实 server / workload 依赖；36 为 reviewer 修复前基线，修复后 65，阶段 0 实测 65 passed） |
+| `benchmark/tests/test_tool_payload.py` | 新增 | 65 个纯 pytest 单元测试（无 GPU / 真实 server / workload 依赖；36 为 reviewer 修复前基线，修复后 65，阶段 0 实测 65 passed，截至本阶段，后续新增以实测为准） |
+| `benchmark/tests/test_e15_2_tool_payload_integration.py` | 新增 | 21 个 workload 集成 pytest（E15.2.1：off 回滚语义 / externalized put→projection 占位→resolve 拦截严格校验 / 跨 thread 隔离 / long_life resolve 成功路径；阶段 0 实测 21 passed，与 §7.2、AGENTS.md 一致） |
+| `benchmark/workload/tool_call.py` | 修改 | E15.2.1 集成：共享组件 `ToolPayloadRun`（tool_call / long_life 共用）——每个 run 创建 thread-scoped store；`tool_payload_mode=externalized`：工具返回先 `put` → tool_response 只注入 deterministic projection + payload_ref + expected_hash → 模型输出 resolve ACTION 时拦截并严格校验回填；`off`（默认）完全旧行为，可回滚 |
+| `benchmark/workload/long_life.py` | 修改 | E15.2.1 集成：工具轮接入同一 `ToolPayloadRun` 语义（见 §6） |
 | `docs/E15_2_TOOL_PAYLOAD_STORE.md` | 新增 | 本报告 |
 
 ## 2. 公共接口

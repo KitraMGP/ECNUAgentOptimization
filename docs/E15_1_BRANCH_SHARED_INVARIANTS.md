@@ -252,22 +252,25 @@ attention-only，Qwen3.5-4B hybrid 由 capability gate 永久禁用共享，不�
 
 ## 5. 复现命令
 
+> 每条命令均**从仓库根**（`<repo-root>`，即本仓库顶层目录）独立执行，不要先
+> `cd llama.cpp/tools/server/tests` 再 `cd benchmark`（后者会从错误 cwd 失败）。
+
 ```bash
 # 0) 前置：CPU build 已存在（llama.cpp/build/bin/llama-server）；TinyLlama 已缓存
 #    （llama.cpp/tmp/models--ggml-org--test-model-stories260K/.../stories260K-f32.gguf）
 
 # 1) llama.cpp 侧 E15 单测（真实并发 fan-out / 12.13 中间态 / metrics 契约 / canary）
-cd llama.cpp/tools/server/tests
-LLAMA_SERVER_BIN_PATH=$PWD/../../build/bin/llama-server \
-LLAMA_CACHE=$PWD/../../tmp \
+cd <repo-root>/llama.cpp/tools/server/tests
+LLAMA_SERVER_BIN_PATH=<repo-root>/llama.cpp/build/bin/llama-server \
+LLAMA_CACHE=<repo-root>/llama.cpp/tmp \
 python3 -m pytest unit/test_e15_branch_shared.py --noconftest -v
 
 # 2) benchmark 侧纯函数测试（不依赖 server/GPU）
-cd benchmark
+cd <repo-root>/benchmark
 .venv/bin/python -m pytest tests/test_e15_branch_concurrent.py -q
 
 # 3) 分支并发 paired smoke（off/on × warmup=2 + reps=5；seed=42/temp=0）
-cd benchmark
+cd <repo-root>/benchmark
 .venv/bin/python runner/e15_branch_concurrent.py \
   --server-bin ../llama.cpp/build/bin/llama-server \
   --model ../llama.cpp/tmp/models--ggml-org--test-model-stories260K/snapshots/479896ec924af6d40fd419ab8f4d1eb2101de00d/stories260K-f32.gguf \
@@ -279,30 +282,36 @@ cd benchmark
 HTTP/错误、prompt_n/cache_n、输出 token ids + 内容 sha256、latency、/metrics/kv 全字段、
 日志 shared 事件 delta、清空前后基线断言）。
 
-### 阶段 0 复核实测（2026-08-08）
+### 阶段 0 复核实测（2026-08-08 首次 / 2026-08-09 修正重跑）
 
-- **llama.cpp 侧 4 个集成测试**（真实 server，非空跑）：
+- **llama.cpp 侧 4 个集成测试**（真实 server，非空跑；命令从仓库根执行）：
 
 ```bash
-cd llama.cpp/tools/server/tests
-LLAMA_SERVER_BIN_PATH=$PWD/../../build/bin/llama-server \
-LLAMA_CACHE=$PWD/../../tmp \
+cd <repo-root>/llama.cpp/tools/server/tests
+LLAMA_SERVER_BIN_PATH=<repo-root>/llama.cpp/build/bin/llama-server \
+LLAMA_CACHE=<repo-root>/llama.cpp/tmp \
 python3 -m pytest unit/test_e15_branch_shared.py --noconftest -v
 ```
 
-  - **结果**：`4 passed in 0.94s`（重跑一次留存日志
-    `llama.cpp/tmp/e15_1_integ_20260808.log`，结果一致）；
+  - **首次结果（2026-08-08，已勘误）**：`4 passed in 0.94s`，日志
+    `llama.cpp/tmp/e15_1_integ_20260808.log`。当时二进制为 version 8568（`f54930492`），
+    **早于 llama.cpp HEAD `4a699aaad`，缺少 `afbf375c6` 的 checkpoint guard**，
+    原记录"二进制与 HEAD 核心代码一致"**不成立**——审查发现后重建修正（见下）。
+  - **修正结果（2026-08-09，以本记录为准）**：`cmake --build build -j $(nproc)` 重建
+    当前 HEAD 后，二进制 **version 8570（`4a699aaad`）**（`git log -1` 亦为 `4a699aaad`，
+    与 HEAD 一致）；同命令重跑 → **`4 passed in 0.99s`**，日志
+    `llama.cpp/tmp/e15_1_integ_head_20260809.log`（**耗时以该日志为准**）；
     4/4 为 `test_concurrent_fanout_paired_off_on` / `test_erase_middle_target_releases_only_its_refs` /
     `test_metrics_kv_contract_on_branch_scenario` / `test_concurrent_canary_no_cross_branch_leak`。
-  - **环境**：`build/bin/llama-server` version 8568（`f54930492`，E15.1 commit `4a699aaad`
-    仅新增测试文件未改核心代码，二进制与 HEAD 核心代码一致）；Python 3.14.6 / pytest
-    9.0.3（系统 python，非 .venv）；模型 `ggml-org/test-model-stories260K` 已缓存于
+  - **环境**：Python 3.14.6 / pytest 9.0.3（系统 python，非 .venv）；模型
+    `ggml-org/test-model-stories260K` 已缓存于
     `llama.cpp/tmp/models--ggml-org--test-model-stories260K/.../stories260K-f32.gguf`
     （`--offline` 从缓存加载，不联网）；每测试 autouse fixture 真实 Popen exec
     llama-server（`--kv-unified --kv-prefix-share` 等）并轮询 `/health` 就绪后执行
     真实并发请求。
-- **benchmark 侧**：`cd benchmark && uv run pytest tests/test_e15_branch_concurrent.py -q`
-  → `48 passed`；根全量 `cd benchmark && uv run pytest -q` → `413 passed`（14.72s）。
+- **benchmark 侧**：`cd <repo-root>/benchmark && uv run pytest tests/test_e15_branch_concurrent.py -q`
+  → `48 passed`；根全量 `cd <repo-root>/benchmark && uv run pytest -q` → `413 passed`（2026-08-08
+  阶段 0 首次实测 14.72s；2026-08-09 修正重跑复验 14.78s，数字一致；后续新增测试以当时实测为准）。
 
 ---
 
