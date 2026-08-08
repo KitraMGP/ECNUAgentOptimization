@@ -1,0 +1,1097 @@
+{
+  "reps": 3,
+  "scan_off": {
+    "0": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 8.546,
+          "predicted_ms": 0.675,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 4.974,
+          "predicted_ms": 0.8,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 5.384,
+          "predicted_ms": 0.844,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "1": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 5.959,
+          "predicted_ms": 1.059,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 5.335,
+          "predicted_ms": 0.968,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 5.286,
+          "predicted_ms": 1.002,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "2": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 5.815,
+          "predicted_ms": 1.438,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 6.098,
+          "predicted_ms": 1.264,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 5.959,
+          "predicted_ms": 1.122,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "4": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 6.643,
+          "predicted_ms": 1.429,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 6.741,
+          "predicted_ms": 1.438,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 7.196,
+          "predicted_ms": 1.488,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "8": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 8.203,
+          "predicted_ms": 1.985,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 8.3,
+          "predicted_ms": 1.609,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 8.179,
+          "predicted_ms": 1.544,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "16": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 9.226,
+          "predicted_ms": 1.391,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 9.525,
+          "predicted_ms": 1.483,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 8.882,
+          "predicted_ms": 1.639,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "32": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 12.603,
+          "predicted_ms": 1.505,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 13.325,
+          "predicted_ms": 2.113,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 12.975,
+          "predicted_ms": 1.578,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "64": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 20.49,
+          "predicted_ms": 9.36,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 21.469,
+          "predicted_ms": 9.284,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 21.812,
+          "predicted_ms": 10.295,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    }
+  },
+  "capacity_off": {
+    "failed": false,
+    "results": {
+      "100": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "150": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "200": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "225": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "250": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "275": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "300": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "325": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "350": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ]
+    },
+    "ctx": 1024,
+    "parallel": 4
+  },
+  "scan_on": {
+    "0": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 7.508,
+          "predicted_ms": 0.671,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 5.141,
+          "predicted_ms": 0.71,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 5.537,
+          "predicted_ms": 0.807,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "1": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 5.722,
+          "predicted_ms": 1.197,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 5.557,
+          "predicted_ms": 1.165,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 5.225,
+          "predicted_ms": 1.116,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "2": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 5.884,
+          "predicted_ms": 1.181,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 5.951,
+          "predicted_ms": 1.159,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 5.316,
+          "predicted_ms": 1.102,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "4": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 6.483,
+          "predicted_ms": 1.541,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 6.405,
+          "predicted_ms": 1.503,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 6.344,
+          "predicted_ms": 1.323,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "8": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 7.061,
+          "predicted_ms": 1.298,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 7.562,
+          "predicted_ms": 1.234,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 7.168,
+          "predicted_ms": 1.242,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "16": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 8.848,
+          "predicted_ms": 1.878,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 8.549,
+          "predicted_ms": 1.76,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 8.806,
+          "predicted_ms": 1.667,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "32": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 200,
+          "prompt_ms": 12.683,
+          "predicted_ms": 1.702,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 1,
+          "code": 200,
+          "prompt_ms": 13.871,
+          "predicted_ms": 2.083,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        },
+        {
+          "rep": 2,
+          "code": 200,
+          "prompt_ms": 12.058,
+          "predicted_ms": 1.708,
+          "prompt_n": 182,
+          "queue": null,
+          "hash": "3548763cfe8b9132"
+        }
+      ]
+    },
+    "64": {
+      "failed": false,
+      "reps": [
+        {
+          "rep": 0,
+          "code": 500,
+          "err": "HTTP Error 500: Internal Server Error"
+        },
+        {
+          "rep": 1,
+          "code": 500,
+          "err": "HTTP Error 500: Internal Server Error"
+        },
+        {
+          "rep": 2,
+          "code": 500,
+          "err": "HTTP Error 500: Internal Server Error"
+        }
+      ]
+    }
+  },
+  "capacity_on": {
+    "failed": false,
+    "results": {
+      "100": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "150": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "200": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "225": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "250": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "275": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "300": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "325": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ],
+      "350": [
+        {
+          "rep": 0,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 1,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        },
+        {
+          "rep": 2,
+          "codes": [
+            200,
+            200,
+            200,
+            200
+          ],
+          "all_ok": true
+        }
+      ]
+    },
+    "ctx": 1024,
+    "parallel": 4
+  }
+}
