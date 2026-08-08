@@ -219,13 +219,14 @@
       "id": "lminfinite",
       "title": "LM-Infinite: Simple On-the-Fly Length Generalization",
       "arxiv": "2308.16137",
-      "venue": "VENUE_UNVERIFIED",
+      "venue": "NAACL 2024",
       "read_status": "FULL_TEXT_READ",
       "pdf_sha256": "77ca6902d34c3ab3",
       "notes": "notes/lminfinite.md",
       "candidate": "DEFERRED (P2 lossy)",
-      "venue_evidence": "OpenReview forum pOujzgHIRY 存在（ICLR 2024 submission）但 decision 无法确认（验证墙）；arXiv v7 无 journal-ref",
-      "venue_correction": "E8.1: 保持 VENUE_UNVERIFIED（无一级来源确认接受；OpenReview decision 不可读）"
+      "venue_evidence": "ACL Anthology 2024.naacl-long.222（\"LM-Infinite: Zero-Shot Extreme Length Generalization for Large Language Models\"，han-etal-2024-lm，正式 proceedings 一级来源）",
+      "venue_correction": "E9.7：从 VENUE_UNVERIFIED 修正为 NAACL 2024。E8 漏检原因：正式版标题为 \"Zero-Shot Extreme Length Generalization\"（arXiv 2308.16137 是 \"Simple On-the-Fly Length Generalization\"），E8.1 只查了 arXiv 标题的 ICLR/OpenReview 路径而未检索 ACL Anthology 正式版标题。",
+      "preprint_relation": "arXiv 2308.16137 为 preprint 版；正式版发表于 NAACL 2024（2024.naacl-long.222，DOI 10.18653/v1/2024.naacl-long.222）"
     },
     {
       "id": "vpid",
