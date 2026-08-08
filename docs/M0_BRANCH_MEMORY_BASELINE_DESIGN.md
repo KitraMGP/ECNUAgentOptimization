@@ -2,7 +2,7 @@
 
 > 状态：**调研完成 + 详细设计（DESIGN ONLY）；未实现 workload 代码、未运行正式 benchmark**。
 > 日期：2026-08-09 ｜ 对应路线：M0（阶段 0 通过后第一条后续路线）｜ 实施建议：**GO**（见 §8）。
-> 修订：2026-08-09 v2（审查修复）——矩阵/预算/层数/架构/接口合同/回收观测修正，见各节。
+> 修订：2026-08-09 v2（审查修复——矩阵/预算/层数/架构/接口合同/回收观测）；**v3（复审修复——精确 token 计数 /apply-template+/tokenize、矩阵手算值修正与预算函数单测化、driver 合同扩展、决策点 n_predict 16、G-M0-1/3/4 语义定稿、--slot-save-path 合同）**，见各节。
 > 约束：本阶段只调研与设计，不实现代码、不运行长 GPU benchmark；不改 E6–E15 历史 raw/结论。
 > 探针（§1.3/§7）：仅"启动 server → 读取内存分配日志与 /metrics/kv → 退出"，未做任何推理请求。
 
@@ -142,16 +142,34 @@ ACTION: branch(b1|b2|b3|b4|b5|b6|b7|b8)
 - **不改**：`config.py`、`runner.py`、`workload/__init__.py`、任何既有 workload（可回滚：删除新增文件即完全回滚，默认无行为改动）。
 - **失败降级**：server 启动失败重试 3 次后跳过该配置并记 INVALID；`/metrics/kv` 不可用 → KVProbe 现有优雅降级（failures/last_error）；预算校验 fail-fast（§4）；决策点 fallback → NOT_VALIDATED（§3.1）。
 
-### 3.3 请求接口合同（审查修订）
+### 3.3 请求接口合同（审查修订 v3）
 
 | 项 | 合同 |
 |---|---|
 | 统一接口 | **OAI `/v1/chat/completions`**（`driver.chat`）——决策点与分支请求同一接口；`chat_template_kwargs.enable_thinking=False`（`driver.py:134-141`）保证 no-think 一致；原生 `/completion` 仅为 e15 对照既有路径，M0 不用（模板/thinking 控制不一致风险） |
-| 确定性 | `temperature=0, seed=42`（经 `extra_body`）；`--n-predict`：决策点 8、分支轮 64（CLI 可配 `--decision-n-predict/--branch-n-predict`） |
-| 停止判定 | OAI `finish_reason`（stop/length）；记录到行级 |
+| 确定性 | `temperature=0, seed=42`；`--n-predict`：**决策点 16（v3：由 8 上调，保证 `ACTION: branch(bX)` 输出完整且留边界）**、分支轮 64（CLI 可配 `--decision-n-predict/--branch-n-predict`） |
+| 停止判定 | OAI `finish_reason`（stop/length）；**`finish_reason=length` 且输出不含合法 ACTION → 该 rep 判定失败（INVALID）**，计入决策合法率（G-M0-1） |
 | 可比性 | 同 seed/temp 下输出 `tokens` 数组 + `content_sha256` 逐字节比较（e15 G1 模式）；决策点与分支均在请求级记录 prompt_tokens/completion_tokens/timings |
-| slot 控制 | 默认不强制 `id_slot`（server 自动调度）；若需确定性 slot 映射（决策点 slot 0、分支 1..N），M0 实现时在 `driver.chat` 的 `extra_body` 增加可选 `id_slot` 透传（一行，兼容旧行为，默认缺省） |
+| slot 控制 | 默认不强制 `id_slot`（server 自动调度）；若需确定性 slot 映射（决策点 slot 0、分支 1..N），经 `extra_body["id_slot"]` 透传（见下方 driver 扩展，默认缺省保持旧行为） |
 | timings | `driver._extract_timings`（`:160-180`）；TTFT 代理 = `timings.prompt_ms`（`server-context.cpp:571`），见 §5.1 |
+
+**driver 最小兼容扩展（审查修订 v3 —— 不能只改 id_slot 一行）**：当前 `driver.chat(messages, _retry=0)` **不支持 temperature/seed/max_tokens 透传**（`driver.py:62`）。设计签名：
+
+```python
+def chat(
+    self, messages: List[dict],
+    *,
+    temperature: Optional[float] = None,   # → create(temperature=...)，None 不传（保持旧默认）
+    seed: Optional[int] = None,            # → create(seed=...)
+    max_tokens: Optional[int] = None,      # → create(max_tokens=...)
+    extra_body: Optional[Dict[str, Any]] = None,  # 与 _extra_body() 合并（id_slot 等），None 不合并
+    _retry: int = 0,                       # 内部递归参数，保持位置参数不变
+) -> Dict[str, Any]:
+```
+
+- **兼容性**：`_retry` 留在 `*` 之后**最后**，现有调用（`driver.chat(messages)`、递归 `self.chat(messages, _retry+1)`）不受影响——新增参数全部 keyword-only 且默认 None → 行为与旧版逐字节一致（回归测试锁定）；
+- **OpenAI 参数映射**：`temperature/seed/max_tokens` 直接映射 `chat.completions.create` 同名参数；`extra_body` 与既有 `_extra_body()` 字典合并（调用方优先）；
+- **实施清单**：`driver.py` 签名扩展 + `tests/test_driver.py` 新增用例（默认 None 旧行为、透传生效、keyword-only 不破坏现有调用、extra_body 合并优先级）。
 
 ### 3.4 请求序列与计时
 
@@ -171,39 +189,38 @@ ACTION: branch(b1|b2|b3|b4|b5|b6|b7|b8)
 
 **明确不做**：checkpoint/COW 实现（`--checkpoint-reuse` 在 hybrid 上已禁用，slot save/restore 为 E12 原型范畴；M0 只做内存归因基线）。
 
-### 4.2 unified KV 严格预算公式与 fail-fast（审查修订）
+### 4.2 unified KV 严格预算公式与 fail-fast（审查修订 v3：精确 token 计数）
 
 **容量事实**：unified KV 池 `capacity_cells = ctx_size = 4096`（§1.3 实测），所有 slot 共享 cell 池；4B 上 C1 被 gate 拒绝 → **A/B 对照实际均为 full-prefill**（每分支从零 prefill 完整上下文）。
 
-**预算公式（保守上界，沿用 e15 前置估算模式）**：
-```
-used_cells ≈ P + N×(P+B)
-P = 决策点/公共前缀 token 数；B = 每分支后缀 token 数；N = fan-out 分支数
-约束：P + N×(P+B) ≤ capacity_cells × 0.85 = 3481   （安全余量 15%）
-```
-- 含义：决策点请求占 P cells；N 个分支各自 full-prefill 完整 `(P+B)`（无跨 slot 共享）；
-- 运行时优化（不影响公式）：分支并发前可 `erase` 决策点 slot 释放 P cells → 实际占用 `N×(P+B)`；公式仍按保守上界 fail-fast；
-- **fail-fast**：runner 启动前置校验用 `est = P + N×(P+B)`（token 估算 2.5 chars/token，同 e15 `est_tokens`，`e15_branch_concurrent.py:867-873`），`est > 3481` → 拒绝该组合并记 INVALID，不启动 server。
+**token 精确计数（审查修订，不再以 chars/2.5 为唯一门禁）**：
+- **预算函数**：`budget(P, B, N) = P + N×(P+B)`（P=决策点/公共前缀 token 数，B=每分支后缀 token 数，N=fan-out）；约束 `budget ≤ 4096×0.85 = 3481 cells`（安全余量 15%）。
+- **P/B 的取值必须来自 chat 模板渲染后的真实 prompt 精确 token 计数**（实现时）：
+  1. `POST /apply-template`（`server.cpp:263`；`server-context.cpp:5775-5781`）：body `{messages, add_generation_prompt: true, chat_template_kwargs: {enable_thinking: false}}`，经 `oaicompat_chat_params_parse`（与 /v1/chat/completions 同一解析路径，**thinking=false 模板一致**）→ 响应 `{"prompt": "<渲染后完整 prompt>"}`；
+  2. `POST /tokenize`（`server.cpp:261`；`server-context.cpp:5828+`）：body `{content: <prompt>, add_special: false}` → 响应 `{"tokens": [id, ...]}`，`P/B = len(tokens)`。
+  - 探针实测（2026-08-09，4B，中文为主）：chars/2.5 估算**低估**真实 token 数 **7.4%（short）→ 12.6%（medium）→ 16.3%（long）**（真实 chars/token ≈ 2.1–3.1，中文 1 字常 1–2 token）——**long 边界下 est=3400 实际可达 ~3944 > 3481 预算**，故 chars/2.5 不得作为门禁唯一依据。
+- **失败降级**：`/apply-template` 或 `/tokenize` 不可用（HTTP 非 200/schema 不符）→ **保守 fallback = `chars/2.0`**（比实测最差 2.1 chars/token 更保守，高估 token → 安全侧）+ 记录 warning；budget 校验仍 fail-fast（超限拒绝该组合记 INVALID）。
+- **运行前校准**：runner 在 server 就绪后、正式运行前，先对各桶 prompt 执行一次 apply-template+tokenize 得真实 P/B → 预算校验 → 合法才运行（预算表由函数计算，**单测断言合法/非法组合表，避免手工常量漂移**）。
 
-**长度桶收敛（token 估算，2.5 chars/token）**：
+**长度桶（token 目标值，实测校准；v3 收紧 long）**：
 | 桶 | prefix P | branch B | 说明 |
 |---|---|---|---|
 | short | 150 | 150 | 决策点 + 短分支任务 |
 | medium | 280 | 480 | 中等上下文 + 分支任务+工具注入 |
-| long | 600 | 800 | 长公共上下文（仅配小 fanout，见下） |
+| long | 400 | 600 | 长公共上下文（v2 的 600/800 经探针证明余量不足，收紧） |
 
-**合法矩阵（9 候选 → 6 合法；parallel = fanout+2 动态，审查修订）**：
+**合法矩阵（6 组合；parallel = fanout+2 动态；budget 值由公式计算，单测锁定）**：
 
-| fanout N | parallel | short (750) | medium (1900/3320) | long (3400/…) |
+| fanout N | parallel | short | medium | long |
 |---|---|---|---|---|
-| 2 | 4 | ✓ used=750 | ✓ used=1900 | ✓ used=3400 |
-| 4 | 6 | ✓ used=1350 | ✓ used=3320 | ✗ used=6200 > 3481 |
-| 8 | 10 | ✓ used=2550 | ✗ used=6700 | ✗ |
+| 2 | 4 | ✓ 750 | ✓ **1800** | ✓ 2400 |
+| 4 | 6 | ✓ 1350 | ✓ **3320** | ✗ 4400 > 3481 |
+| 8 | 10 | ✓ 2550 | ✗ **6360** | ✗ |
 
-- `parallel = N + 2`（+1 决策点 slot、+1 spare），前置校验 `parallel >= fanout+2`（沿用 e15 `parallel>=branches+2` 模式）；
-- **不可运行组合（long×4、medium/long×8）在 runner 中由 §4.2 公式拒绝，不进入实验**；
+- 修正说明（v3）：medium×2 = 280+2×760 = **1800**、medium×8 = 280+8×760 = **6360**（v2 手算 1900/6700 有误，已由预算函数+单测取代手算）；long 桶收紧后 long×2 余量 = 3481−2400 = **1081 cells**（v2 的 81 cells 不足，因估算低估 16% 时 3400 est 实际 ~3944 超预算）。
+- `parallel = N + 2`（+1 决策点 slot、+1 spare），前置校验 `parallel >= fanout+2`；
 - 矩阵维度 × ctk{q8_0, f16} × 对照{A, B} → 6 组合 × 2 × 2 = **24 个运行单元**（每单元 warmup 2 + reps 5）；
-- **RTX 4060 8GB 安全预算（§1.3 探针实测）**：最大 parallel 10 q8_0 = 3402 MiB（41.5%）；全部合法组合 GPU 峰值 < 3.5 GiB，余量 >4.6 GiB 供 compute buffer 与抖动——**无需降级**。
+- **RTX 4060 8GB 安全预算（§1.3 探针实测）**：最大 parallel 10 q8_0 = 3402 MiB（41.5%）；全部合法组合 GPU 峰值 < 3.5 GiB，余量 >4.6 GiB——**无需降级**。
 
 ---
 
@@ -256,16 +273,18 @@ P = 决策点/公共前缀 token 数；B = 每分支后缀 token 数；N = fan-o
 
 | 文件 | 类型 | 内容 |
 |---|---|---|
-| `benchmark/framework/fanout_prompts.py` | 新增 | 纯函数：决策点 prompt（枚举约束）、分支扩展、canary 注入/检测、`ACTION: branch(bX)` 解析、token 估算、KV 预算校验（§4.2 fail-fast） |
+| `benchmark/framework/fanout_prompts.py` | 新增 | 纯函数：决策点 prompt（枚举约束）、分支扩展、canary 注入/检测、`ACTION: branch(bX)` 解析、**token 精确计数客户端（/apply-template + /tokenize，§4.2）与保守 fallback（chars/2.0）**、预算函数 `budget(P,B,N)` 与 fail-fast |
 | `benchmark/runner/m0_fanout_runner.py` | 新增 | CLI + 矩阵编排 + server 生命周期（复用 e15 骨架）+ barrier 并发 + gate（G-M0-1..7）+ 唯一顶层 schema 落盘（§5.1） |
-| `benchmark/tests/test_fanout_prompts.py` / `test_m0_fanout_runner.py` | 新增 | 纯函数（决策解析确定性/canary/预算 fail-fast/gate 判定/CLI）+ mock server e2e |
+| `benchmark/framework/driver.py` | 修改 | **chat() keyword-only 扩展（temperature/seed/max_tokens/extra_body，§3.3）**，默认 None 保持旧行为 |
+| `benchmark/tests/test_fanout_prompts.py` / `test_m0_fanout_runner.py` | 新增 | 纯函数（决策解析确定性/canary/**预算函数合法/非法组合表单测**/tokenize 客户端 mock/fail-fast/gate 判定/CLI）+ mock server e2e |
+| `benchmark/tests/test_driver.py` | 修改 | 新增 chat 扩展用例（默认 None 旧行为、透传生效、keyword-only 兼容、extra_body 合并） |
 | 文档 | 更新 | 本文件补实测结果 + AGENTS.md 状态更新 |
 
-**不改**：`config.py`、`runner.py`、`workload/`、`driver.py`（除 §3.3 可选 `id_slot` 透传一行，缺省行为不变）。
+**不改**：`config.py`、`runner.py`、`workload/`。
 
-CLI 合同：`--server-bin --model --port --ctx-size 4096 --fanout {2,4,8} --prefix-len {short,medium,long} --branch-len {short,medium,long} --ctk q8_0 --ctv q8_0 --decision-n-predict 8 --branch-n-predict 64 --tool-rounds M --warmup 2 --reps 5 --out <path>`；`--parallel` 由 runner 按 `fanout+2` 计算（不接受手工覆盖，避免非法组合）。预算 fail-fast：`est > 3481` → INVALID（§4.2）。
+CLI 合同（v3 补充）：`--server-bin --model --port --ctx-size 4096 --fanout {2,4,8} --prefix-len {short,medium,long} --branch-len {short,medium,long} --ctk q8_0 --ctv q8_0 --decision-n-predict 16 --branch-n-predict 64 --tool-rounds M --warmup 2 --reps 5 --out <path> --slot-save-path <dir> --tmp-dir <dir>`；`--parallel` 由 runner 按 `fanout+2` 计算（不接受手工覆盖）；**`--slot-save-path` 指向 runner 创建的临时目录（`tempfile.mkdtemp`），默认生命周期内创建、退出清理——保证 `POST /slots/:id?action=erase` 可用**（slot erase 依赖该路径，`e15_branch_concurrent.py:548-560` 先例）。预算 fail-fast：`budget(P,B,N) > 3481` → INVALID（§4.2，P/B 来自 tokenize 实测）。
 
-测试计划：纯函数 pytest（决策点解析边界/确定性/canary/预算公式/gate_verdict 分支/CLI 校验/fail-fast）+ mock OpenAI server e2e（现有 `tests/mock_server.py` 模式）+ 可选 TinyLlama CPU smoke（**仅冒烟，不宣称 4B 结论**）。
+测试计划：纯函数 pytest（决策点解析边界/确定性/canary/**预算函数合法与非法组合表**/tokenize 客户端 mock（HTTP 失败→chars/2.0 fallback）/gate_verdict 分支/CLI 校验/fail-fast）+ mock OpenAI server e2e（现有 `tests/mock_server.py` 模式）+ 可选 TinyLlama CPU smoke（**仅冒烟，不宣称 4B 结论**）。
 
 ---
 
@@ -285,10 +304,10 @@ CLI 合同：`--server-bin --model --port --ctx-size 4096 --fanout {2,4,8} --pre
 可量化验收标准（M0 实现阶段）：
 | 门禁 | 标准 |
 |---|---|
-| G-M0-1 决策确定性 | temp=0/seed=42 下 4B 决策点合法 `ACTION: branch(bX)` 输出率 **100%**（≥20 次，跨 2 次独立 server 会话）；**<100% → `NOT_VALIDATED`/HOLD**（固定映射数据仅作内存压力 smoke，不称真实决策 PASS） |
+| G-M0-1 决策确定性（v3：专用验证协议） | **专用稳定性验证，与正式矩阵数据分离**：2 次独立 server 会话，每次 ≥10 请求（共 ≥20），temp=0/seed=42 下 4B 决策点合法 `ACTION: branch(bX)` 输出率 **100%**；**<100% → `NOT_VALIDATED`/HOLD**（固定映射数据仅作内存压力 smoke，不称真实决策 PASS）；正式矩阵的决策输出仅用于分支路由，不并入稳定性统计 |
 | G-M0-2 隔离 | canary 跨分支泄漏率 **0**（全部 reps×branches 输出） |
-| G-M0-3 回收（审查修订） | 每 rep 末 `erase` 后 `/metrics/kv` `used_cells==0 && active_sequences==0`（**仅证明 attention cells 回收**）；recurrent 回收用 **GPU 差分观测**：nvidia-smi `used` 回落至空载基线（±50 MiB）；**局限**：总量粒度、受波动影响、不能证明 per-slot/完整状态回收——M0 只承诺"attention 回收 + GPU 总量回落"，不承诺完整状态回收证明 |
-| G-M0-4 内存归因 | 各成分可分离：`attention KV`（=8×8×128×2×elem×4096：q8 68 / f16 128 MiB）、`recurrent`（=24×548864×4×parallel）、`权重+compute`（=GPU used − KV − RS − 系统 40）—— 与探针数字对账误差 ≤5% |
+| G-M0-3 回收（v3：不形成伪门禁） | **G-M0-3a（门禁）**：每 rep 末 `erase` 后 `/metrics/kv` `used_cells==0 && active_sequences==0` —— **仅证明 attention cells 回收**；**G-M0-3b（smoke，非门禁）**：全部 reps 完成后 nvidia-smi `used` 回落至空载基线（±50 MiB）—— **只做显存泄漏 smoke，不证明 recurrent state 回收**；recurrent 回收**保持不可观测缺口**（无运行期接口，§5.1），M0 不承诺、不验收 |
+| G-M0-4 内存归因（v3：启动日志精确值门禁） | **主门禁**：启动日志 `RS buffer size`（`llama-memory-recurrent.cpp:123-126`）精确值 vs 公式 `24×548864×4×parallel` 对账 **误差 ≤5%**；attention KV 同理（`llama_kv_cache` 分配日志 68/128 MiB vs `8×8×128×2×elem×4096`）；**GPU used 差分只作总量 sanity**（阈值 ±10%，口径 = nvidia-smi `memory.used` 增量，探针观测 run-to-run 波动 <10%） |
 | G-M0-5 对照有效性 | 4B 上 off vs `--kv-prefix-share`：两者 `shared_cells` 恒 0，且 on 会话日志含 `E8-C1: capability rejected: hybrid`（100%） |
 | G-M0-6 复现 | 同配置两次独立 run：TTFT（`timings.prompt_ms`）/latency 中位数偏差 ≤10%，决策分支归属一致 |
 | G-M0-7 数据落盘 | 每 rep 完整记录 §5.2 字段，无缺键；`results/m0_fanout_*.json` 可独立复算 summarize |
