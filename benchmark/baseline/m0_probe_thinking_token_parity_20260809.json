@@ -51,7 +51,7 @@
     "chat_usage_prompt_tokens": 46,
     "chat_finish_reason": "length",
     "parity": true,
-    "explanation": "add_special=false/true 幂等的真实原因：该 GGUF tokenizer.ggml.add_bos_token=false 且 bos_token_id=None（无 BOS token 可加，tokenizer model=qpt2, eos_token_id=248046）；仅对本模型/配置成立，换模型必须重验。chat usage.prompt_tokens=46 与两者完全一致（偏差 0）。"
+    "explanation": "add_special=false/true 幂等的真实原因：该 GGUF tokenizer.ggml.add_bos_token=false 且 bos_token_id 缺失（无 BOS token 可加）；add_eos_token 字段缺失（默认 false）、eos_token_id=248046、tokenizer model=gpt2。结论仅限本 GGUF/配置，换模型必须重验。chat usage.prompt_tokens=46 与两者完全一致（偏差 0）。"
   },
   "notes": "无敏感公共消息；chat 探针 max_tokens=1 仅触发 1 token decode（轻量，非正式 benchmark）"
 }

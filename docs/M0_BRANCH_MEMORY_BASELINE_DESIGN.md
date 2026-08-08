@@ -2,7 +2,7 @@
 
 > 状态：**调研完成 + 详细设计（DESIGN ONLY）；未实现 workload 代码、未运行正式 benchmark**。
 > 日期：2026-08-09 ｜ 对应路线：M0（阶段 0 通过后第一条后续路线）｜ 实施建议：**GO**（见 §8）。
-> 修订：2026-08-09 v2（矩阵/预算/层数/架构/接口合同/回收观测）；v3（精确 token 计数、矩阵手算修正、driver 合同、门禁语义）；v4（driver `_retry` 位置参数兼容、thinking 字段生效实证、G-M0-1 与矩阵完全分离、RS 日志行号、CLI 临时目录）；v5（G-M0-1 口径统一、可提交证据、token parity 门禁、verdict 规则）；**v6（终审——INVALID 谓词 OR 语义三处统一、verdict/gates 完整值域与优先级映射表、add_special 幂等归因修正（add_bos_token=false 无 BOS）、parity 校准/清理协议、步骤编号与行号 Low 修正）**，见各节。
+> 修订：2026-08-09 v2（矩阵/预算/层数/架构/接口合同/回收观测）；v3（精确 token 计数、矩阵手算修正、driver 合同、门禁语义）；v4（driver `_retry` 位置参数兼容、thinking 字段生效实证、G-M0-1 与矩阵完全分离、RS 日志行号、CLI 临时目录）；v5（G-M0-1 口径统一、可提交证据、token parity 门禁、verdict 规则）；v6（INVALID 谓词 OR 语义、verdict/gates 值域映射、add_special 归因、parity 校准协议）；**v7（终审闭环——parity 失败独立前置 HOLD_NOT_VALIDATED 不再挂 G-M0-7、G-M0-1 gate status 仅由专用验证决定（fallback 为独立聚合条件不写 FAIL）、schema/meta 完整化（parity_ok/parity_compensation/token_count_method）、qpt2→gpt2 与 BOS/EOS 完整归因、预算超限 preflight 拒绝不生成 verdict、max_tokens=1 校准豁免 INVALID 谓词并每桶 P/B 分别校准、确定性聚合伪代码、交叉引用与行号统一）**，见各节。
 > 约束：本阶段只调研与设计，不实现代码、不运行长 GPU benchmark；不改 E6–E15 历史 raw/结论。
 > 探针（§1.3/§7）：仅"启动 server → 读取内存分配日志与 /metrics/kv → 退出"，未做任何推理请求。
 
@@ -33,7 +33,7 @@
 - 请求走**原生 `/completion`**：`{prompt, n_predict, temperature, seed, cache_prompt, id_slot, return_tokens}`（`:602-608`）；
 - 落盘 JSON：`{"meta", "modes":{"off"/"on":{"start","replicates","stop"}}, "gates", "verdict", "notes"}`（`:795-831`）。
 
-**driver**（`benchmark/framework/driver.py`）：OpenAI SDK 封装走 `/v1/chat/completions`（`:58`）；`chat()` 请求前 `preprocessor.process(messages)`（默认 off）、`kv_probe` 前后快照（`:75-103`）；返回行 `text/prompt_tokens/completion_tokens/total_tokens/cached_tokens/latency_ms/rss_mb/gpu_mb/timings`（`:89-99`）；`_extract_timings` 从 `timings` 属性 / `model_extra` / `__pydantic_extra__` 提取（`:160-180`）；**`_extra_body` 固定 `chat_template_kwargs.enable_thinking=False`（`:134-141`，no-think 保证可比）**；**400 超 ctx 重试**：`exceed_context_size_error` 且 `_retry<max_retry(3)` 时丢弃最早约 1/3 非 system 消息，若候选丢失全部真实 user query 则找回最早一条（Qwen3.5 multi_step_tool 模板要求，`:107-131`；`_is_real_user_query` 定义 `:147-158`）。**原生 `/completion` 未在 driver 封装**（e15_branch_concurrent 直接可用）。
+**driver**（`benchmark/framework/driver.py`）：OpenAI SDK 封装走 `/v1/chat/completions`（`:58`）；`chat()` 请求前 `preprocessor.process(messages)`（默认 off）、`kv_probe` 前后快照（`:75-103`）；返回行 `text/prompt_tokens/completion_tokens/total_tokens/cached_tokens/latency_ms/rss_mb/gpu_mb/timings`（`:89-99`）；`_extract_timings` 从 `timings` 属性 / `model_extra` / `__pydantic_extra__` 提取（`:160-180`）；**`_extra_body` 固定 `chat_template_kwargs.enable_thinking=False`（`:135-142`，no-think 保证可比）**；**400 超 ctx 重试**：`exceed_context_size_error` 且 `_retry<max_retry(3)` 时丢弃最早约 1/3 非 system 消息，若候选丢失全部真实 user query 则找回最早一条（Qwen3.5 multi_step_tool 模板要求，`:107-131`；`_is_real_user_query` 定义 `:147-158`）。**原生 `/completion` 未在 driver 封装**（e15_branch_concurrent 直接可用）。
 
 **sampler / KVProbe**：`framework/sampler.py` —— `find_server_pid`（ss -ltnp + psutil 兜底）、`find_server_rss_mb`（psutil rss）、`find_server_gpu_mb`（pynvml 按 pid 匹配 usedGpuMemory，容器内降级 None）（`:21-75`）；`framework/kv_probe.py` —— `KVProbe` GET `/metrics/kv`（自动剥 /v1，`:25-29`）、`snapshot(tag)`、`kv_state/list_slots/erase_slot/clean_all_slots`（`:95-144`）、后台周期采样（`:147-158`）、`run_aggregate`（first/last/peak_used_cells，`:177-196`）。
 
@@ -111,7 +111,7 @@
 | `/apply-template` → `/tokenize`（`add_special:true`） | 46（**幂等归因（v6 修正）**：该 GGUF `tokenizer.ggml.add_bos_token=false` 且 `bos_token_id=None`（无 BOS token）→ add_special 无可加；**仅对本模型/配置成立，换模型必须重验**，GGUF 元数据实测见下） |
 | 真实 `/v1/chat/completions`（max_tokens=1, temp=0, seed=42, no-think）`usage.prompt_tokens` | 46（finish_reason=length） |
 
-→ **parity 成立、偏差 0**：M0 一致性门禁 = 比较 chat `usage.prompt_tokens` vs apply-template→tokenize(`add_special:false`)（§4.2 步骤 2/3）。**GGUF 元数据实测（2026-08-09）**：`tokenizer.ggml.add_bos_token=false`、`tokenizer.ggml.bos_token_id=None`、`eos_token_id=248046`、`tokenizer.ggml.model="qpt2"`——add_special 幂等的真实原因是无 BOS token 可加，**换模型必须重验**。
+→ **parity 成立、偏差 0**：M0 一致性门禁 = 比较 chat `usage.prompt_tokens` vs apply-template→tokenize(`add_special:false`)（§4.2 步骤 2/3）。**GGUF 元数据实测（2026-08-09）**：`tokenizer.ggml.add_bos_token=false`、`tokenizer.ggml.bos_token_id` 缺失（None）、`tokenizer.ggml.add_eos_token` 字段缺失（默认 false）、`eos_token_id=248046`、`tokenizer.ggml.model="gpt2"`——**add_special 幂等的真实原因是无 BOS token 可加（add_bos_token=false 且无 bos_token_id）**；**结论仅限本 GGUF/配置，换模型必须重验**。
 
 ---
 
@@ -154,7 +154,7 @@ ACTION: branch(b1|b2|b3|b4|b5|b6|b7|b8)
   → 回收：全部分支完成后 erase（/slots/:id?action=erase，KVProbe.erase_slot）
 ```
 - **identity 定义**：`branch`（b1..b8）是内容分支；`session` 是 workload 实例；`thread` 是并发出线程。canary 隔离：每分支专属 `CANARY-BX-<hex>` 注入分支 prompt 尾部，输出检测跨分支泄漏（复用 E15.1 G5 模式）。
-- **工具注入（v5 定稿）**：**M0 不使用 OpenAI `tools` schema**（避免两条路径（apply-template vs chat）渲染差异与精确计数遗漏）；分支工具观测以**固定、无敏感、可审计的消息注入**（如 `<tool_response>` 文本块，复用 tool_call.py 协议）实现——精确计数请求因此不遗漏 tools；若未来改用 `tools` schema，则 /apply-template 与 /tokenize 两条路径必须携带**同一 tools schema**（并重新验证 token parity，§4.2 步骤 2）。
+- **工具注入（v5 定稿）**：**M0 不使用 OpenAI `tools` schema**（避免两条路径（apply-template vs chat）渲染差异与精确计数遗漏）；分支工具观测以**固定、无敏感、可审计的消息注入**（如 `<tool_response>` 文本块，复用 tool_call.py 协议）实现——精确计数请求因此不遗漏 tools；若未来改用 `tools` schema，则 /apply-template 与 /tokenize 两条路径必须携带**同一 tools schema**（并重新验证 token parity，§4.2 步骤 3）。
 
 ### 3.2 模块边界（**单一架构定稿**，审查修订）
 
@@ -166,13 +166,13 @@ ACTION: branch(b1|b2|b3|b4|b5|b6|b7|b8)
   - `benchmark/runner/m0_fanout_runner.py` —— CLI + 矩阵编排 + server 生命周期 + 并发（barrier+ThreadPoolExecutor）+ gate + 落盘（唯一顶层 schema，§5.1）。
   - `benchmark/tests/test_fanout_prompts.py`、`benchmark/tests/test_m0_fanout_runner.py` —— 纯函数 + mock server e2e。
 - **不改**：`config.py`、`runner.py`、`workload/__init__.py`、任何既有 workload（可回滚：删除新增文件即完全回滚，默认无行为改动）。
-- **失败降级**：server 启动失败重试 3 次后跳过该配置并记 INVALID；`/metrics/kv` 不可用 → KVProbe 现有优雅降级（failures/last_error）；预算校验 fail-fast（§4）；决策点 fallback → NOT_VALIDATED（§3.1）。
+- **失败降级**：server 启动失败重试 3 次后跳过该配置并记 run 级 INVALID（**preflight 拒绝，不生成正式 verdict**）；`/metrics/kv` 不可用 → KVProbe 现有优雅降级（failures/last_error）；预算校验 fail-fast（§4，同样 preflight 拒绝）；决策点 fallback → **`HOLD_NOT_VALIDATED`**（§3.1/§5.1 verdict 规则 #3/#4）。
 
 ### 3.3 请求接口合同（审查修订 v3）
 
 | 项 | 合同 |
 |---|---|
-| 统一接口 | **OAI `/v1/chat/completions`**（`driver.chat`）——决策点与分支请求同一接口；**thinking 合同（v5 实证，§1.4 证据）**：server 默认 **thinking 开启**（apply-template 不传时渲染 `<|im_start|>assistant\n<think>\n`），必须显式 `chat_template_kwargs.enable_thinking=false` 才渲染空 think 块（`<think>\n\n</think>`）实现 no-think——该字段经 `oaicompat_chat_params_parse` 解析**实际生效**（`server-common.cpp:1095-1102` 覆盖默认；可复核证据 `benchmark/baseline/m0_probe_thinking_token_parity_20260809.json`）；M0 沿用 `driver._extra_body`（`driver.py:135-142`）显式 false，并以 token parity 一致性门禁（§4.2 步骤 2）执行验证；原生 `/completion` 仅为 e15 对照既有路径，M0 不用 |
+| 统一接口 | **OAI `/v1/chat/completions`**（`driver.chat`）——决策点与分支请求同一接口；**thinking 合同（v5 实证，§1.4 证据）**：server 默认 **thinking 开启**（apply-template 不传时渲染 `<|im_start|>assistant\n<think>\n`），必须显式 `chat_template_kwargs.enable_thinking=false` 才渲染空 think 块（`<think>\n\n</think>`）实现 no-think——该字段经 `oaicompat_chat_params_parse` 解析**实际生效**（`server-common.cpp:1095-1102` 覆盖默认；可复核证据 `benchmark/baseline/m0_probe_thinking_token_parity_20260809.json`）；M0 沿用 `driver._extra_body`（`driver.py:135-142`）显式 false，并以 token parity 一致性门禁（§4.2 步骤 3）执行验证；原生 `/completion` 仅为 e15 对照既有路径，M0 不用 |
 | 确定性 | `temperature=0, seed=42`；`--n-predict`：**决策点 16（v3：由 8 上调，保证 `ACTION: branch(bX)` 输出完整且留边界）**、分支轮 64（CLI 可配 `--decision-n-predict/--branch-n-predict`） |
 | 停止判定 | OAI `finish_reason`（stop/length）；**INVALID 谓词（v6）**：`(finish_reason=="length") OR (输出不含合法 ACTION)` → 任一即该 rep INVALID（length 截断即使含 ACTION 也不可信），走固定路由 fallback（§3.1）、**不计入 G-M0-1**（G-M0-1 仅用专用 2 会话×10 请求数据，§8） |
 | 可比性 | 同 seed/temp 下输出 `tokens` 数组 + `content_sha256` 逐字节比较（e15 G1 模式）；决策点与分支均在请求级记录 prompt_tokens/completion_tokens/timings |
@@ -223,10 +223,11 @@ def chat(
 - **P/B 的取值必须来自 chat 模板渲染后的真实 prompt 精确 token 计数**（实现时）：
   1. `POST /apply-template`（`server.cpp:263`；`server-context.cpp:5775-5781`）：body `{messages, add_generation_prompt: true, chat_template_kwargs: {enable_thinking: false}}`，经 `oaicompat_chat_params_parse`（与 /v1/chat/completions 同一解析路径，**thinking=false 模板一致**；字段生效证据：`server-common.cpp:1095-1102` 解析覆盖 + 探针证据 §1.4）→ 响应 `{"prompt": "<渲染后完整 prompt>"}`；
   2. `POST /tokenize`（`server.cpp:261`；`server-context.cpp:5828+`）：body `{content: <prompt>, add_special: false}` → 响应 `{"tokens": [id, ...]}`，`P/B = len(tokens)`；
-  3. **一致性门禁（v6：token parity + M2 校准/清理协议）**：
-     - **执行时机（独立校准）**：正式矩阵开始前、server 就绪后，对**每个桶的 messages 模板**独立校准一次：比较真实 chat 请求（`max_tokens=1, temp=0, seed=42`, no-think）的 `usage.prompt_tokens` 与 `/apply-template`→`/tokenize(add_special:false)` 的 token 数；**该 max_tokens=1 chat 请求不计入 replicates**（仅校准用途）；
+  3. **一致性门禁（v7：token parity + 校准/清理协议）**：
+     - **执行时机（独立前置校准）**：正式矩阵开始前、server 就绪后，**对每个长度桶分别校准两个模板**：公共决策点 P 模板与分支 B/工具观测模板（各自 messages 构造）；比较真实 chat 请求（`max_tokens=1, temp=0, seed=42`, no-think）的 `usage.prompt_tokens` 与 `/apply-template`→`/tokenize(add_special:false)` 的 token 数；
+     - **max_tokens=1 校准请求豁免决策 INVALID 谓词（v7）**：校准请求仅用于 parity 计数，**不进入任何 rep/gate、不触发决策 INVALID 判定**（其 `finish_reason=length` 是预期的）；
      - **允许偏差 0**（实测成立，§1.4；add_special 幂等归因 = 该 GGUF 无 BOS token，**换模型必须重验**）；
-     - **偏差非零 → 直接 `HOLD_NOT_VALIDATED` 并停止正式矩阵**，不做未经验证的自动补偿；若确需补偿，必须写入 `meta.parity_compensation`（含确定公式）并有对应单测；
+     - **偏差非零 → 前置 `HOLD_NOT_VALIDATED` 并停止正式矩阵**（不产生矩阵结果，verdict 规则 #1），不做未经验证的自动补偿；若确需补偿，必须写入 `meta.parity_compensation`（含确定公式）并有对应单测（当前策略 `parity_compensation=null`）；
      - **校准后状态清理**：校准完成后 `erase` 全部 slot 并确认 `/metrics/kv` `used_cells==0 && active_sequences==0`（attention 回基线），**之后才采集正式基线**；
      - **mock 测试只校验请求参数一致性**（messages、thinking=false、temperature、seed、max_tokens），不声称比较渲染结果；
   - 探针实测（2026-08-09，4B，中文为主）：chars/2.5 估算**低估**真实 token 数 **7.4%（short）→ 12.6%（medium）→ 16.3%（long）**（真实 chars/token ≈ 2.1–3.1，中文 1 字常 1–2 token）——**long 边界下 est=3400 实际可达 ~3944 > 3481 预算**，故 chars/2.5 不得作为门禁唯一依据。
@@ -267,37 +268,60 @@ def chat(
            "fanout": N, "prefix_len": "...", "branch_len": "...", "ctk/ctv": "...",
            "protocol": "OAI /v1/chat/completions, temp=0, seed=42, no-think",
            "decision_validated": true|false,
-           "decision_fallback": false|true},   # v4：正式矩阵单 rep 决策失败触发固定路由时置 true
+           "decision_fallback": false|true,        # 任一正式矩阵 rep fallback 时 true（聚合）
+           "parity_ok": true|false,                # v7：parity 前置校准是否通过（false 则无矩阵结果）
+           "parity_compensation": null,            # v7：当前策略不补偿，恒 null；如未来启用须为确定公式对象
+           "token_count_method": "apply-template+tokenize"},  # 或 "chars/2.0-fallback"
   "modes": {"off": {"start": ..., "replicates": [...], "stop": ...},
             "on":  {"start": ..., "replicates": [...], "stop": ...}},
-  "gates": {"G-M0-1..7": {...}},
-  "verdict": "PASS|NOT_VALIDATED|HOLD|INVALID",
+  "gates": {"G-M0-1": {"status": "PASS|FAIL|NOT_APPLICABLE"}, "...": {...}},
+  "verdict": "PASS|HOLD_NOT_VALIDATED|HOLD_UNSTABLE_MEASUREMENT|REJECT_CORRECTNESS_OR_ISOLATION|INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE",
   "notes": [...]
 }
 ```
 
 每 replicate 行字段（§5.2）：含 **`decision_fallback: bool`（v5：该 rep 是否触发固定路由 fallback）**；KV 观测经 `KVProbe.run_aggregate`（first/last/peak_used_cells）。
 
-**verdict 确定规则（v6 定稿：完整值域与映射，无模糊词）**：
+**verdict 确定规则（v7 定稿：gate 与顶层分层，确定性聚合）**：
 
 - **`gates.*.status` 值域**：`PASS | FAIL | NOT_APPLICABLE`（required gates = G-M0-1、G-M0-2、G-M0-3a、G-M0-4、G-M0-5、G-M0-6、G-M0-7；G-M0-3b 为 smoke 观测，status 恒 `NOT_APPLICABLE` 且不计入判定）。
 - **顶层 `verdict` 值域**：`PASS | HOLD_NOT_VALIDATED | HOLD_UNSTABLE_MEASUREMENT | REJECT_CORRECTNESS_OR_ISOLATION | INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE`（单一枚举值，不使用枚举外字符串）。
+- **分层原则**：`gates` 只反映**各自测量域**的 PASS/FAIL（G-M0-1 只由专用 2×≥10 验证决定，**正式矩阵 fallback 不改变 G-M0-1 status**）；fallback / parity / 预算超限等**顶层聚合条件**作为独立判定项，在映射表中显式给出 gate 状态与顶层 verdict 的组合。
 - **优先级映射表（高 → 低，命中即终值）**：
 
 | # | 条件 | gates 状态 | verdict |
 |---|---|---|---|
-| 1 | 任一正式矩阵 rep `decision_fallback:true` | G-M0-1 = FAIL | `HOLD_NOT_VALIDATED` |
-| 2 | 专用验证合法率 <100% | G-M0-1 = FAIL | `HOLD_NOT_VALIDATED` |
-| 3 | G-M0-2 隔离失败（canary 泄漏 >0）或 G-M0-5 对照失效（shared_cells≠0 / 缺 rejected 日志） | 对应 gate = FAIL | `REJECT_CORRECTNESS_OR_ISOLATION` |
-| 4 | G-M0-6 复现偏差 >10% | G-M0-6 = FAIL | `HOLD_UNSTABLE_MEASUREMENT` |
-| 5 | G-M0-4 归因对账误差 >5% | G-M0-4 = FAIL | `HOLD_UNSTABLE_MEASUREMENT` |
-| 6 | G-M0-7 落盘缺键 / parity 校准失败（§4.2 M2 协议） | G-M0-7 = FAIL | `INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE` |
-| 7 | G-M0-3a 回收失败（erase 后 used_cells≠0） | G-M0-3a = FAIL | `REJECT_CORRECTNESS_OR_ISOLATION` |
-| 8 | 全部 required gates = PASS 且无任何 fallback | 全 PASS | `PASS` |
+| 1 | **前置：parity 校准失败**（§4.2 步骤 3，偏差非零）→ 停止矩阵，不产生正式结果 | gates 不存在（无结果） | `HOLD_NOT_VALIDATED` |
+| 2 | **前置：预算超限**（§4.2 fail-fast）→ preflight 拒绝，不运行、不产生正式结果 | gates 不存在（无结果） | （不生成 verdict；CLI 直接拒绝该组合） |
+| 3 | 任一正式矩阵 rep `decision_fallback:true`（聚合 `any_fallback=true`） | **G-M0-1 = PASS（不变）** | `HOLD_NOT_VALIDATED` |
+| 4 | 专用验证合法率 <100% | G-M0-1 = FAIL | `HOLD_NOT_VALIDATED` |
+| 5 | G-M0-2 隔离失败（canary 泄漏 >0）或 G-M0-5 对照失效（shared_cells≠0 / 缺 rejected 日志） | 对应 gate = FAIL | `REJECT_CORRECTNESS_OR_ISOLATION` |
+| 6 | G-M0-3a 回收失败（erase 后 used_cells≠0） | G-M0-3a = FAIL | `REJECT_CORRECTNESS_OR_ISOLATION` |
+| 7 | G-M0-6 复现偏差 >10% | G-M0-6 = FAIL | `HOLD_UNSTABLE_MEASUREMENT` |
+| 8 | G-M0-4 归因对账误差 >5% | G-M0-4 = FAIL | `HOLD_UNSTABLE_MEASUREMENT` |
+| 9 | G-M0-7 落盘缺键（schema/必需键缺失） | G-M0-7 = FAIL | `INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE` |
+| 10 | 全部 required gates = PASS 且无任何 fallback | 全 PASS | `PASS` |
 
-- **PASS 的唯一充分条件**：`G-M0-1..7（required，G-M0-3b 除外）全部 PASS` 且 `无 decision_fallback`。
+> 注：G-M0-7 只负责**落盘 schema/必需键**完整性；parity 失败已由 #1 前置处理（不再挂 G-M0-7）。
+
+**确定性聚合伪代码（v7 定稿）**：
+```
+def aggregate_verdict(parity_ok, budget_ok, any_fallback, g):   # g = gates.status
+    if not parity_ok: return "HOLD_NOT_VALIDATED"               # 前置 #1，无矩阵结果
+    if not budget_ok:  raise PreflightRejected                   # 前置 #2，不生成 verdict
+    if any_fallback:   return "HOLD_NOT_VALIDATED"               # #3（G-M0-1 保持原值）
+    if g["G-M0-1"] == "FAIL":  return "HOLD_NOT_VALIDATED"       # #4
+    if g["G-M0-2"] == "FAIL" or g["G-M0-5"] == "FAIL" or g["G-M0-3a"] == "FAIL":
+                         return "REJECT_CORRECTNESS_OR_ISOLATION" # #5/#6
+    if g["G-M0-6"] == "FAIL" or g["G-M0-4"] == "FAIL":
+                         return "HOLD_UNSTABLE_MEASUREMENT"       # #7/#8
+    if g["G-M0-7"] == "FAIL":  return "INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE"  # #9
+    return "PASS"                                                 # #10：全部 required PASS 且无 fallback
+```
+- 每个条件**唯一映射**；gate status 与顶层 verdict **分层**（fallback 不改 G-M0-1 status，只在聚合层决定 verdict）。
+- **PASS 的唯一充分条件**：`G-M0-1..7（required，G-M0-3b 除外）全部 PASS` 且 `parity_ok=true` 且 `any_fallback=false`。
 - **fallback rep 的归属**：带 `decision_fallback:true` 标记，**可继续参与内存归因 G-M0-4**（内存压力行为与决策来源无关），但**排除在真实决策质量声明之外**（不并入决策合法率、不参与 G-M0-1 统计）。
-- `meta/modes/gates/verdict` 关系：`meta` 记录全局配置与决策验证结论（`decision_validated`/`decision_fallback` 聚合）；`modes.{off,on}.replicates[]` 为逐 rep 数据（含 rep 级 `decision_fallback`）；`gates` 为门禁判定明细（每 gate 一个 `status`）；`verdict` 为上述映射表的单值结论。
+- `meta/modes/gates/verdict` 关系：`meta` 记录全局配置与决策验证结论（`decision_validated`/`decision_fallback` 聚合、`parity_ok`/`parity_compensation`/`token_count_method`）；`modes.{off,on}.replicates[]` 为逐 rep 数据（含 rep 级 `decision_fallback`）；`gates` 为门禁判定明细（每 gate 一个 `status`）；`verdict` 为上述聚合伪代码的单值结论。
 
 ### 5.2 指标字段
 
@@ -335,7 +359,7 @@ def chat(
 
 **不改**：`config.py`、`runner.py`、`workload/`。
 
-CLI 合同（v4 收紧）：`--server-bin --model --port --ctx-size 4096 --fanout {2,4,8} --prefix-len {short,medium,long} --branch-len {short,medium,long} --ctk q8_0 --ctv q8_0 --decision-n-predict 16 --branch-n-predict 64 --tool-rounds M --warmup 2 --reps 5 --out <path> [--tmp-dir <dir>]`；`--parallel` 由 runner 按 `fanout+2` 计算（不接受手工覆盖）。**临时目录合同（对齐 E15 + M0 增强）**：`--tmp-dir` 为**可选用户参数**（缺省时 runner 用 `tempfile.mkdtemp()` 创建、退出时 `shutil.rmtree` 清理——**此"创建并主动清理"是 M0 相对 E15 的增强**，E15 runner 接受 `--tmp-dir` 但清理语义未承诺）；`--slot-save-path` **不作为独立用户参数**，由 runner 内部绑定为同一临时目录（`--slot-save-path <tmp-dir>`）传给 server——保证 `POST /slots/:id?action=erase` 可用（slot erase 依赖该路径，`e15_branch_concurrent.py:548-560` 先例）且生命周期随 runner 清理。预算 fail-fast：`budget(P,B,N) > 3481` → INVALID（§4.2，P/B 来自 tokenize 实测）。
+CLI 合同（v4 收紧）：`--server-bin --model --port --ctx-size 4096 --fanout {2,4,8} --prefix-len {short,medium,long} --branch-len {short,medium,long} --ctk q8_0 --ctv q8_0 --decision-n-predict 16 --branch-n-predict 64 --tool-rounds M --warmup 2 --reps 5 --out <path> [--tmp-dir <dir>]`；`--parallel` 由 runner 按 `fanout+2` 计算（不接受手工覆盖）。**临时目录合同（对齐 E15 + M0 增强）**：`--tmp-dir` 为**可选用户参数**（缺省时 runner 用 `tempfile.mkdtemp()` 创建、退出时 `shutil.rmtree` 清理——**此"创建并主动清理"是 M0 相对 E15 的增强**，E15 runner 接受 `--tmp-dir` 但清理语义未承诺）；`--slot-save-path` **不作为独立用户参数**，由 runner 内部绑定为同一临时目录（`--slot-save-path <tmp-dir>`）传给 server——保证 `POST /slots/:id?action=erase` 可用（slot erase 依赖该路径，`e15_branch_concurrent.py:548-560` 先例）且生命周期随 runner 清理。预算 fail-fast：`budget(P,B,N) > 3481` → **preflight 拒绝该组合（不生成正式 verdict，CLI 直接报错退出）**（§4.2，P/B 来自 tokenize 实测）。
 
 测试计划：纯函数 pytest（决策点解析边界/确定性/canary/**预算函数合法与非法组合表**/tokenize 客户端 mock（HTTP 失败→chars/2.0 fallback）/gate_verdict 分支/CLI 校验/fail-fast）+ mock OpenAI server e2e（现有 `tests/mock_server.py` 模式）+ 可选 TinyLlama CPU smoke（**仅冒烟，不宣称 4B 结论**）。
 
@@ -372,7 +396,7 @@ CLI 合同（v4 收紧）：`--server-bin --model --port --ctx-size 4096 --fanou
 ## 9. 未决问题
 
 1. **recurrent 内存运行期观测缺口**：需 llama.cpp 最小扩展（`llama_kv_stats` 加 recurrent 字段）或接受"启动日志 + 差分"近似——M0 用后者，列为后续优化候选。
-2. **4B 决策点提示工程**：需 0.8B 离线校准（CPU，可跑）→ 4B 验证；若枚举约束下 4B 仍不稳定，fallback = 固定决策映射且判定 **NOT_VALIDATED/HOLD**（§3.1/§8）。
+2. **4B 决策点提示工程**：需 0.8B 离线校准（CPU，可跑）→ 4B 验证；若枚举约束下 4B 仍不稳定，fallback = 固定决策映射且判定 **`HOLD_NOT_VALIDATED`**（§3.1/§8 verdict 规则 #3/#4）。
 3. **temp=0 下分支"选择/回收"轮语义**：模型 `ACTION: select(bX)` 的稳定性需实测；失败则降级为固定回收（`erase`），不阻塞内存归因目标。
 4. **parallel 10 + long 桶的 decode 吞吐**：单线程调度下 latency 可能高，M0 只报告、不优化（且 long×大 fanout 已被预算公式排除）。
 5. **build-cuda 二进制版本**：探针用 8569/afbf375c6（核心代码与 HEAD 等价，因 4a699aaad 仅新增测试文件）；正式 M0 实验前重建到 4a699aaad（version 8570）保证版本号一致。
@@ -380,7 +404,7 @@ CLI 合同（v4 收紧）：`--server-bin --model --port --ctx-size 4096 --fanou
 ## 10. 风险
 
 - Laptop GPU 抖动（E3 门禁先例）→ warmup + 中位数 + 同硬件 off/on paired。
-- 0.8B 指令遵循不稳定 → 决策点枚举约束 + 离线校准（§9.2 fallback → NOT_VALIDATED）。
+- 0.8B 指令遵循不稳定 → 决策点枚举约束 + 离线校准（§9.2 fallback → `HOLD_NOT_VALIDATED`）。
 - 模型可用性：4B GGUF 已就位（2.7 GB，`models/qwen3-5-4B-Q4_K_M.gguf`）；0.8B 需 `download_models.sh 0.8b`（M0 实现时按需拉取）。
 
 ## 11. 实施清单（下一步，不在本阶段执行）
@@ -388,6 +412,6 @@ CLI 合同（v4 收紧）：`--server-bin --model --port --ctx-size 4096 --fanou
 1. 新增 `benchmark/framework/fanout_prompts.py` + 纯函数测试（决策点解析/确定性/canary/预算公式 fail-fast）；
 2. 新增 `benchmark/runner/m0_fanout_runner.py`（复用 e15 生命周期/gate 骨架）+ mock e2e 测试；
 3. `cmake --build build-cuda` 重建 4B 实验二进制到 HEAD（4a699aaad）；
-4. 0.8B 决策点校准 → 4B 决策确定性验证（G-M0-1，<100% → NOT_VALIDATED）；
+4. 0.8B 决策点校准 → 4B 决策确定性验证（G-M0-1，<100% → `HOLD_NOT_VALIDATED`）；
 5. 跑合法矩阵（§4.2，6 组合 × 2 ctk × 2 对照 = 24 单元）→ 落盘 → 归因报告（§8 输出）→ 对照 G-M0-2..7；
 6. 结果归档 `benchmark/baseline/` + 报告文档 + AGENTS.md 状态更新。
