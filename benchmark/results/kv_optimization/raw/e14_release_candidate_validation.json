@@ -1,0 +1,50 @@
+{
+  "git": "afbf375c6b5d5747411b09663661d967423b7053",
+  "1_health": true,
+  "2_3_per_cell": 17408,
+  "4_short_qa": {
+    "code": 200,
+    "hash": "c5e89e3bfe8d4167",
+    "prompt_n": 10,
+    "err": ""
+  },
+  "5_tool_json": {
+    "code": 200,
+    "parse_ok": true,
+    "has_tool_calls": true,
+    "content": ""
+  },
+  "6_system_retention": {
+    "code": 200,
+    "hash": "ad618ff47c3920f6",
+    "prompt_n": 19,
+    "err": ""
+  },
+  "7_canary": {
+    "code": 200,
+    "leak": false
+  },
+  "8_multi_turn": [
+    200,
+    200
+  ],
+  "9_long_prompt": {
+    "code": 200,
+    "hash": "126357be2c69be7d",
+    "prompt_n": 761,
+    "err": ""
+  },
+  "10_parallel4": [
+    200,
+    200,
+    200,
+    200
+  ],
+  "12a_empty_prompt": 200,
+  "12b_oversized": 200,
+  "12b_prompt_n": 2500,
+  "11_graceful_shutdown": 0,
+  "15_restart_health": true,
+  "13_checkpoint_log_count": 0,
+  "14_clone_from": 501
+}
