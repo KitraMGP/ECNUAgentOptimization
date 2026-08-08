@@ -2,7 +2,7 @@
 
 > 状态：**调研完成 + 详细设计（DESIGN ONLY）；未实现 workload 代码、未运行正式 benchmark**。
 > 日期：2026-08-09 ｜ 对应路线：M0（阶段 0 通过后第一条后续路线）｜ 实施建议：**GO**（见 §8）。
-> 修订：2026-08-09 v2（矩阵/预算/层数/架构/接口合同/回收观测）；v3（精确 token 计数、矩阵手算修正、driver 合同、门禁语义）；v4（driver `_retry` 位置参数兼容、thinking 字段生效实证、G-M0-1 与矩阵完全分离、RS 日志行号、CLI 临时目录）；v5（G-M0-1 口径统一、可提交证据、token parity 门禁、verdict 规则）；v6（INVALID 谓词 OR 语义、verdict/gates 值域映射、add_special 归因、parity 校准协议）；v7（gate/verdict 分层、parity 前置、schema 完整化、聚合定稿）；**v8（preflight/schema 闭环——专用合法率 <100% → G-M0-1=FAIL → HOLD_NOT_VALIDATED 统一表述、preflight/formal 两 phase 合法 schema 变体（唯一顶层键集 meta/modes/gates/verdict/notes，G-M0-7 仅 formal 评估）、/apply-template|/tokenize 不可用 → parity_ok=false → 落盘 preflight HOLD（chars/2.0 仅诊断不允许绕过 parity）、any_fallback 行 G-M0-1 保持专用验证原值、rep 级 INVALID_DECISION 与顶层 verdict 枚举分离、对齐 E15 限定顶层键/落盘习惯）**，见各节。
+> 修订：2026-08-09 v2（矩阵/预算/层数/架构/接口合同/回收观测）；v3（精确 token 计数、矩阵手算修正、driver 合同、门禁语义）；v4（driver `_retry` 位置参数兼容、thinking 字段生效实证、G-M0-1 与矩阵完全分离、RS 日志行号、CLI 临时目录）；v5（G-M0-1 口径统一、可提交证据、token parity 门禁、verdict 规则）；v6（INVALID 谓词 OR 语义、verdict/gates 值域映射、add_special 归因、parity 校准协议）；v7（gate/verdict 分层、parity 前置、schema 完整化、聚合定稿）；v8（preflight/schema 闭环）；**v9（状态机/schema 终审——§6 删除 chars/2.0 fallback 旧行为、schema 示例 meta 必含 phase 且 token_count_method 仅两值、preflight 完整五键（preflight_status/preflight_reason，预算超限也落盘）、rep status 状态机 OK/INVALID_DECISION/ERROR（any_rep_error → 聚合 #10a，ERROR 不参与 G-M0-4）、基础设施失败 → preflight INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE（废除 run 级 INVALID）、validator 先验顶层键集精确五键（get/default 防 KeyError）、执行顺序 §3.5、§5.2 rep 字段扩展）**，见各节。
 > 约束：本阶段只调研与设计，不实现代码、不运行长 GPU benchmark；不改 E6–E15 历史 raw/结论。
 > 探针（§1.3/§7）：仅"启动 server → 读取内存分配日志与 /metrics/kv → 退出"，未做任何推理请求。
 
@@ -166,7 +166,7 @@ ACTION: branch(b1|b2|b3|b4|b5|b6|b7|b8)
   - `benchmark/runner/m0_fanout_runner.py` —— CLI + 矩阵编排 + server 生命周期 + 并发（barrier+ThreadPoolExecutor）+ gate + 落盘（唯一顶层 schema，§5.1）。
   - `benchmark/tests/test_fanout_prompts.py`、`benchmark/tests/test_m0_fanout_runner.py` —— 纯函数 + mock server e2e。
 - **不改**：`config.py`、`runner.py`、`workload/__init__.py`、任何既有 workload（可回滚：删除新增文件即完全回滚，默认无行为改动）。
-- **失败降级**：server 启动失败重试 3 次后跳过该配置并记 run 级 INVALID（**preflight 拒绝，不生成正式 verdict**）；`/metrics/kv` 不可用 → KVProbe 现有优雅降级（failures/last_error）；预算校验 fail-fast（§4，同样 preflight 拒绝）；决策点 fallback → **`HOLD_NOT_VALIDATED`**（§3.1/§5.1 verdict 规则 #3/#4）。
+- **失败降级（v9 定稿）**：server 启动/health 失败（重试 3 次后）或 `/metrics/kv` 不可用等**基础设施失败 → 落盘 preflight 五键结果（`phase=preflight`、`preflight_status=FAILED`、`verdict=INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE`）并停止**——**不使用"run 级 INVALID"措辞**（rep 级 status 仅 OK/INVALID_DECISION/ERROR，见 §5.1）；预算校验 fail-fast（§4，超限也落盘 preflight `HOLD_NOT_VALIDATED`）；决策点 fallback → **`HOLD_NOT_VALIDATED`**（§3.1/§5.1 verdict 规则 #3/#4）。
 
 ### 3.3 请求接口合同（审查修订 v3）
 
@@ -200,6 +200,19 @@ def chat(
 
 每 replicate：决策点请求（slot 0）→（可选 erase 决策点 slot，见 §4 预算）→ N 分支并发（barrier，slot 1..N）→ 每分支 M 轮 → `erase` 全部 → 断言回基线。warmup≥1、reps≥5（与 `benchmark/README.md:145` 约定一致），中位数报告。
 
+### 3.5 执行顺序（v9 定稿，任务 6）
+
+```
+1. server 就绪（--health 200）且 /metrics/kv、/apply-template、/tokenize 端点可用
+2. 每长度桶分别校准：P 模板与 B/工具观测模板 apply-template+tokenize → parity 对比（max_tokens=1 chat，豁免 INVALID_DECISION 谓词）
+3. 精确 budget preflight（P/B 来自 tokenize 实测；budget > 3481 → 落盘 preflight HOLD_NOT_VALIDATED）
+4. erase 全部 slot → /metrics/kv used_cells==0 && active_sequences==0（attention 回基线）
+5. G-M0-1 专用稳定性验证（2 次独立 server 会话 × 每次 ≥10 请求，总数 ≥20）
+6. formal 矩阵（6 合法组合 × 2 ctk × 2 对照 = 24 单元，每单元 warmup 2 + reps 5）
+```
+
+**任一前置步骤（1–5）失败 → 落盘 preflight 五键结果并停止**（verdict：parity/预算 → `HOLD_NOT_VALIDATED`；基础设施 → `INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE`），不进入 formal。
+
 ---
 
 ## 4. 实验矩阵与 KV 预算（审查修订）
@@ -231,7 +244,7 @@ def chat(
      - **校准后状态清理**：校准完成后 `erase` 全部 slot 并确认 `/metrics/kv` `used_cells==0 && active_sequences==0`（attention 回基线），**之后才采集正式基线**；
      - **mock 测试只校验请求参数一致性**（messages、thinking=false、temperature、seed、max_tokens），不声称比较渲染结果；
   - 探针实测（2026-08-09，4B，中文为主）：chars/2.5 估算**低估**真实 token 数 **7.4%（short）→ 12.6%（medium）→ 16.3%（long）**（真实 chars/token ≈ 2.1–3.1，中文 1 字常 1–2 token）——**long 边界下 est=3400 实际可达 ~3944 > 3481 预算**，故 chars/2.5 不得作为门禁唯一依据。
-- **失败降级（v8 定稿）**：`/apply-template` 或 `/tokenize` 不可用（HTTP 非 200/schema 不符）→ **parity 无法执行 → `parity_ok=false` → 落盘 preflight HOLD 结果（§5.1 phase=preflight 变体，`verdict=HOLD_NOT_VALIDATED`）并停止，不进入正式矩阵**；`chars/2.0` 仅作为**诊断预算估计**写入 meta（`token_count_method: "chars/2.0-diagnostic"`），**不允许绕过 parity 开始正式矩阵**；预算校验仍 fail-fast（`budget > 3481` preflight 拒绝，不生成正式 verdict）。
+- **失败降级（v9 定稿）**：`/apply-template` 或 `/tokenize` 不可用（HTTP 非 200/schema 不符）→ **parity 无法执行 → `parity_ok=false` → 落盘 preflight 五键结果（§5.1 phase=preflight 变体，`verdict=HOLD_NOT_VALIDATED`）并停止，不进入正式矩阵**；**预算超限同样落盘 preflight 五键结果（`verdict=HOLD_NOT_VALIDATED`）——已取消 v8 的"不生成文件"行为**（保证证据不丢）；`chars/2.0` 仅作为**诊断预算估计**写入 meta（`token_count_method: "chars/2.0-diagnostic"`），**不允许绕过 parity 开始正式矩阵**。
 - **运行前校准**：runner 在 server 就绪后、正式运行前，先对各桶 prompt 执行一次 apply-template+tokenize 得真实 P/B → 预算校验 → 合法才运行（预算表由函数计算，**单测断言合法/非法组合表，避免手工常量漂移**）。
 
 **长度桶（token 目标值，实测校准；v3 收紧 long）**：
@@ -267,11 +280,14 @@ def chat(
            "model": "...", "binary_version": "8570/4a699aaad", "ctx_size": 4096,
            "fanout": N, "prefix_len": "...", "branch_len": "...", "ctk/ctv": "...",
            "protocol": "OAI /v1/chat/completions, temp=0, seed=42, no-think",
+           "phase": "preflight|formal",           # v9：唯一 phase 字段（必含）
+           "preflight_status": "OK|FAILED|N/A",   # phase=preflight 时 FAILED，formal 时 N/A
+           "preflight_reason": null,              # phase=preflight 时失败原因字符串（去敏）
            "decision_validated": true|false,
            "decision_fallback": false|true,        # 任一正式矩阵 rep fallback 时 true（聚合）
            "parity_ok": true|false,                # v7：parity 前置校准是否通过（false 则无矩阵结果）
            "parity_compensation": null,            # v7：当前策略不补偿，恒 null；如未来启用须为确定公式对象
-           "token_count_method": "apply-template+tokenize"},  # 或 "chars/2.0-fallback"
+           "token_count_method": "apply-template+tokenize"|"chars/2.0-diagnostic"},  # v9：仅两值
   "modes": {"off": {"start": ..., "replicates": [...], "stop": ...},
             "on":  {"start": ..., "replicates": [...], "stop": ...}},
   "gates": {"G-M0-1": {"status": "PASS|FAIL|NOT_APPLICABLE"}, "...": {...}},
@@ -286,11 +302,18 @@ def chat(
 
 | phase | 触发 | meta 关键字段 | modes | gates | verdict | G-M0-7 |
 |---|---|---|---|---|---|---|
-| `preflight` | parity 失败（偏差≠0 或 /apply-template、/tokenize 不可用）或预算超限 | `phase="preflight"`, `parity_ok=false`（预算超限时 `parity_ok` 可缺省或 false）, `token_count_method="chars/2.0-diagnostic"`（仅预算超限/parity 不可用路径写） | `{}`（无矩阵运行） | `{}`（不评估任何 gate） | `HOLD_NOT_VALIDATED`（parity 失败）或**不生成文件**（预算超限：CLI 直接拒绝，§6） | **不评估**（仅 formal 评估） |
+| `preflight` | parity 失败（偏差≠0 或 /apply-template、/tokenize 不可用）或预算超限或 server/health/基础设施失败 | `phase="preflight"`, `preflight_status="FAILED"`, `preflight_reason=<去敏原因>`, `parity_ok=false`（预算/基础设施失败时可为 false 或 null）, `token_count_method="chars/2.0-diagnostic"`（仅预算/parity 不可用路径；基础设施失败可 null） | `{}`（无矩阵运行） | `{}`（不评估任何 gate） | `HOLD_NOT_VALIDATED`（parity/预算失败）或 `INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE`（server/health/基础设施失败） | **不评估**（仅 formal 评估） |
 | `formal` | parity 通过且预算通过 | `phase="formal"`, `parity_ok=true`, `token_count_method="apply-template+tokenize"` | `{off:{...}, on:{...}}` | `G-M0-1..7`（G-M0-3b 恒 NOT_APPLICABLE） | §5.1 verdict 规则五值 | 评估（缺键 → FAIL → INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE） |
 
-- **schema 判定规则（可编码）**：`phase=preflight` ⇔ `modes={} ∧ gates={} ∧ verdict=HOLD_NOT_VALIDATED`；`phase=formal` ⇔ `modes 非空 ∧ gates 非空`；任何文件若 `phase=preflight` 且 `gates≠{}` 或 `verdict≠HOLD_NOT_VALIDATED` → 判定为非法 schema；
-- **测试要求**：① preflight 变体单测（parity 失败 → 上述字段精确匹配）；② formal 变体单测（全 gate status 三值枚举、verdict 五值枚举、`gates["G-M0-7"].status` 仅在 formal 存在）；③ 非法 schema 检测单测（preflight 携带 gates → 报错）；④ **verdict 必须有持久化证据**：preflight 文件即该阶段持久化输出（含 `parity_ok=false` 与失败原因），不丢证据。
+- **schema 判定规则（v9 可编码）**：**validator 在 phase 分支前先验证顶层键集精确等于 `{meta, modes, gates, verdict, notes}`**（preflight 与 formal 均强制，缺任一键即非法）；`phase=preflight` ⇔ `modes={} ∧ gates={}`（verdict 为 `HOLD_NOT_VALIDATED` 或 `INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE` 之一，由前置失败类型决定）；`phase=formal` ⇔ `modes 非空 ∧ gates 非空`；任何文件 `phase=preflight` 且 `gates≠{}`、或顶层键集不精确 → 非法 schema；
+- **G-M0-7 评估范围（v9）**：仅 `phase=formal` 时评估；**formal 缺 `gates["G-M0-7"]` 键 → 完整性检查先置该 gate FAIL**（聚合用 `get(default)` 不 KeyError，§伪代码）；preflight 不评估任何 gate。
+- **rep status 状态机（v9 定稿，H3）**：每个正式矩阵 replicate 的 `status` 取值：
+  - `OK`：请求成功（HTTP 200）、响应字段完整、决策合法（`finish_reason=stop` 且含合法 ACTION）；
+  - `INVALID_DECISION`：`(finish_reason=="length") OR (输出不含合法 ACTION)`（谓词三处同一）→ **走固定路由 fallback 继续**（§3.1），不计入 G-M0-1，**可参与 G-M0-4 内存归因**（内存压力行为与决策来源无关），但排除真实决策质量声明；
+  - `ERROR`：HTTP 最终非 200（按 driver/runner 既有有限重试后仍失败）、请求超时、响应缺字段/畸形、请求异常 → **任何 formal rep ERROR → 顶层 `INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE`**（映射表 #9b、聚合 #10a），**ERROR rep 不参与 G-M0-4 数值归因**（数据不可信）；
+  - **server 启动/health/endpoint 失败不属于 rep status**——它们是 preflight 基础设施失败（§3.2），落盘 preflight 五键结果。
+- **G-M0-7 对 formal 每 rep 校验**：`status`（三值）、`decision_fallback`（bool）、`error_type`/`error_message`（ERROR 时必填，内容去敏）等必需键（§5.2）；缺键 → G-M0-7 = FAIL。
+- **测试要求（v9 补充）**：① preflight 变体单测（parity/预算/基础设施三路径 → 五键精确匹配，verdict 分别为 HOLD_NOT_VALIDATED / HOLD_NOT_VALIDATED / INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE）；② formal 变体单测（全 gate status 三值枚举、verdict 五值枚举、`gates["G-M0-7"].status` 仅在 formal 存在）；③ 非法 schema 检测单测（顶层键集多/缺键、preflight 携带 gates → 报错）；④ **verdict 必须有持久化证据**：preflight 文件即该阶段持久化输出（含 `preflight_status=FAILED`/`preflight_reason`/`parity_ok`），不丢证据；⑤ rep 状态机单测（OK/INVALID_DECISION/ERROR 判定与 ERROR → any_rep_error → 聚合 #10a）。
 
 **verdict 确定规则（v7 定稿：gate 与顶层分层，确定性聚合）**：
 
@@ -301,8 +324,9 @@ def chat(
 
 | # | 条件 | gates 状态 | verdict |
 |---|---|---|---|
-| 1 | **前置：parity 校准失败**（§4.2 步骤 3，偏差非零）→ 停止矩阵，不产生正式结果 | gates 不存在（无结果） | `HOLD_NOT_VALIDATED` |
-| 2 | **前置：预算超限**（§4.2 fail-fast）→ preflight 拒绝，不运行、不产生正式结果 | gates 不存在（无结果） | （不生成 verdict；CLI 直接拒绝该组合） |
+| 1 | **前置：parity 校准失败**（§4.2 步骤 3，偏差非零）→ 停止矩阵，落盘 preflight 五键结果 | gates = `{}`（preflight 不评估） | `HOLD_NOT_VALIDATED` |
+| 2 | **前置：预算超限**（§4.2 fail-fast）→ 停止，**落盘 preflight 五键结果** | gates = `{}`（preflight 不评估） | `HOLD_NOT_VALIDATED` |
+| 2b | **前置：server/health/基础设施失败**（§3.2）→ 停止，落盘 preflight 五键结果 | gates = `{}`（preflight 不评估） | `INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE` |
 | 3 | 任一正式矩阵 rep `decision_fallback:true`（聚合 `any_fallback=true`） | **G-M0-1 保持专用验证原值**（不因 fallback 改写） | `HOLD_NOT_VALIDATED` |
 | 4 | 专用验证合法率 <100% | G-M0-1 = FAIL | `HOLD_NOT_VALIDATED` |
 | 5 | G-M0-2 隔离失败（canary 泄漏 >0）或 G-M0-5 对照失效（shared_cells≠0 / 缺 rejected 日志） | 对应 gate = FAIL | `REJECT_CORRECTNESS_OR_ISOLATION` |
@@ -310,28 +334,31 @@ def chat(
 | 7 | G-M0-6 复现偏差 >10% | G-M0-6 = FAIL | `HOLD_UNSTABLE_MEASUREMENT` |
 | 8 | G-M0-4 归因对账误差 >5% | G-M0-4 = FAIL | `HOLD_UNSTABLE_MEASUREMENT` |
 | 9 | G-M0-7 落盘缺键（schema/必需键缺失） | G-M0-7 = FAIL | `INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE` |
-| 10 | 全部 required gates = PASS 且无任何 fallback | 全 PASS | `PASS` |
+| 9b | 任一 formal rep `status=ERROR`（聚合 `any_rep_error=true`） | 各 gate 保持原值（ERROR rep 不参与 G-M0-4 归因） | `INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE` |
+| 10 | 全部 required gates = PASS 且无任何 fallback 且无 rep ERROR | 全 PASS | `PASS` |
 
 > 注：G-M0-7 只负责**落盘 schema/必需键**完整性；parity 失败已由 #1 前置处理（不再挂 G-M0-7）。
 
-**确定性聚合伪代码（v7 定稿）**：
+**确定性聚合伪代码（v9 定稿）**：
 ```
-def aggregate_verdict(parity_ok, budget_ok, any_fallback, g):   # g = gates.status
-    if not parity_ok: return "HOLD_NOT_VALIDATED"               # 前置 #1，无矩阵结果
-    if not budget_ok:  raise PreflightRejected                   # 前置 #2，不生成 verdict
-    if any_fallback:   return "HOLD_NOT_VALIDATED"               # #3（G-M0-1 保持原值）
-    if g["G-M0-1"] == "FAIL":  return "HOLD_NOT_VALIDATED"       # #4
-    if g["G-M0-2"] == "FAIL" or g["G-M0-5"] == "FAIL" or g["G-M0-3a"] == "FAIL":
-                         return "REJECT_CORRECTNESS_OR_ISOLATION" # #5/#6
-    if g["G-M0-6"] == "FAIL" or g["G-M0-4"] == "FAIL":
-                         return "HOLD_UNSTABLE_MEASUREMENT"       # #7/#8
-    if g["G-M0-7"] == "FAIL":  return "INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE"  # #9
-    return "PASS"                                                 # #10：全部 required PASS 且无 fallback
+def aggregate_verdict(meta, any_fallback, any_rep_error, g):  # g = gates.status，一律 get(default)，不 KeyError
+    if meta["phase"] == "preflight":
+        return meta["verdict"]     # 前置失败由落盘函数确定：parity/预算 → HOLD_NOT_VALIDATED；基础设施 → INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE
+    # ---- formal ----
+    if any_rep_error:  return "INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE"   # #10a（任一 formal rep ERROR）
+    if any_fallback:   return "HOLD_NOT_VALIDATED"                         # #3（G-M0-1 保持专用验证原值）
+    if g.get("G-M0-1", "FAIL") == "FAIL":   return "HOLD_NOT_VALIDATED"    # #4
+    if g.get("G-M0-2","FAIL")=="FAIL" or g.get("G-M0-5","FAIL")=="FAIL" or g.get("G-M0-3a","FAIL")=="FAIL":
+                          return "REJECT_CORRECTNESS_OR_ISOLATION"         # #5/#6
+    if g.get("G-M0-6","FAIL")=="FAIL" or g.get("G-M0-4","FAIL")=="FAIL":
+                          return "HOLD_UNSTABLE_MEASUREMENT"               # #7/#8
+    if g.get("G-M0-7","FAIL") == "FAIL":  return "INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE"  # #9（formal 缺 G-M0-7 键 → get 默认 FAIL，完整性先置 FAIL）
+    return "PASS"                                                          # #10：全部 required PASS 且无 fallback 且无 rep ERROR
 ```
-- 每个条件**唯一映射**；gate status 与顶层 verdict **分层**（fallback 不改 G-M0-1 status，只在聚合层决定 verdict）。
-- **PASS 的唯一充分条件**：`G-M0-1..7（required，G-M0-3b 除外）全部 PASS` 且 `parity_ok=true` 且 `any_fallback=false`。
-- **fallback rep 的归属**：带 `decision_fallback:true` 标记，**可继续参与内存归因 G-M0-4**（内存压力行为与决策来源无关），但**排除在真实决策质量声明之外**（不并入决策合法率、不参与 G-M0-1 统计）。
-- `meta/modes/gates/verdict` 关系：`meta` 记录全局配置与决策验证结论（`decision_validated`/`decision_fallback` 聚合、`parity_ok`/`parity_compensation`/`token_count_method`）；`modes.{off,on}.replicates[]` 为逐 rep 数据（含 rep 级 `decision_fallback`）；`gates` 为门禁判定明细（每 gate 一个 `status`）；`verdict` 为上述聚合伪代码的单值结论。
+- 每个条件**唯一映射**；gate status 与顶层 verdict **分层**（fallback/rep ERROR 不改任何 gate status，只在聚合层决定 verdict）。
+- **PASS 的唯一充分条件**：`phase=formal` 且 `G-M0-1..7（required，G-M0-3b 除外）全部 PASS` 且 `parity_ok=true` 且 `any_fallback=false` 且 `any_rep_error=false`。
+- **fallback rep 的归属**：带 `decision_fallback:true` 标记，**可继续参与内存归因 G-M0-4**（内存压力行为与决策来源无关），但**排除在真实决策质量声明之外**（不并入决策合法率、不参与 G-M0-1 统计）；**ERROR rep 不参与 G-M0-4 数值归因**（其数据不可信）。
+- `meta/modes/gates/verdict` 关系：`meta` 记录全局配置与决策验证结论（`phase`/`preflight_status`/`preflight_reason`、`decision_validated`/`decision_fallback` 聚合、`parity_ok`/`parity_compensation`/`token_count_method`）；`modes.{off,on}.replicates[]` 为逐 rep 数据（含 rep 级 `status`/`decision_fallback`/`error_type`/`error_message`）；`gates` 为门禁判定明细（每 gate 一个 `status`）；`verdict` 为上述聚合伪代码的单值结论。
 
 ### 5.2 指标字段
 
@@ -343,6 +370,7 @@ def aggregate_verdict(parity_ok, budget_ok, any_fallback, g):   # g = gates.stat
 | 延迟 | `latency_ms`；**TTFT 代理 = `timings.prompt_ms`**（= `t_prompt_processing`，`server-context.cpp:342/571`；llama-server 无独立 TTFT 字段） | driver 行 / timings |
 | 输出 | `tokens`（数组）+ `content_sha256` + `finish_reason` | driver/runner 提取（e15 模式） |
 | 分支质量 | `task_success`、canary 泄漏标志、决策点合法率、回收断言 | workload gate |
+| rep 级状态（v9） | `status`（`OK\|INVALID_DECISION\|ERROR`，状态机 §5.1）、`decision_fallback`（bool）、`error_type`/`error_message`（仅 ERROR 必填，**内容去敏**） | runner 写入；**G-M0-7 对 formal 每 rep 校验这些必需键** |
 
 **recurrent/attention 细分 —— 最小可观测性缺口（如实记录，本阶段不实现 llama.cpp 改动）**：
 - `/metrics/kv` 只统计 attention（`llama-memory-hybrid.cpp:190-194`）；recurrent 内存**无运行期接口**（仅启动日志 `RS buffer size` + 退出时 `common_memory_breakdown_print` 的合并 `context` 列）。
@@ -360,7 +388,7 @@ def aggregate_verdict(parity_ok, budget_ok, any_fallback, g):   # g = gates.stat
 
 | 文件 | 类型 | 内容 |
 |---|---|---|
-| `benchmark/framework/fanout_prompts.py` | 新增 | 纯函数：决策点 prompt（枚举约束）、分支扩展、canary 注入/检测、`ACTION: branch(bX)` 解析、**token 精确计数客户端（/apply-template + /tokenize，§4.2）与保守 fallback（chars/2.0）**、预算函数 `budget(P,B,N)` 与 fail-fast |
+| `benchmark/framework/fanout_prompts.py` | 新增 | 纯函数：决策点 prompt（枚举约束）、分支扩展、canary 注入/检测、`ACTION: branch(bX)` 解析、**token 精确计数客户端（/apply-template + /tokenize，§4.2；端点不可用 → 报 preflight 失败，不降级继续）**、预算函数 `budget(P,B,N)` 与 fail-fast、**preflight 结果落盘助手（五键 schema，§5.1）** |
 | `benchmark/runner/m0_fanout_runner.py` | 新增 | CLI + 矩阵编排 + server 生命周期（复用 e15 骨架）+ barrier 并发 + gate（G-M0-1..7）+ 唯一顶层 schema 落盘（§5.1） |
 | `benchmark/framework/driver.py` | 修改 | **chat() keyword-only 扩展（temperature/seed/max_tokens/extra_body，§3.3）**，默认 None 保持旧行为 |
 | `benchmark/tests/test_fanout_prompts.py` / `test_m0_fanout_runner.py` | 新增 | 纯函数（决策解析确定性/canary/**预算函数合法/非法组合表单测**/tokenize 客户端 mock/fail-fast/gate 判定/CLI）+ mock server e2e |
@@ -371,7 +399,7 @@ def aggregate_verdict(parity_ok, budget_ok, any_fallback, g):   # g = gates.stat
 
 CLI 合同（v4 收紧）：`--server-bin --model --port --ctx-size 4096 --fanout {2,4,8} --prefix-len {short,medium,long} --branch-len {short,medium,long} --ctk q8_0 --ctv q8_0 --decision-n-predict 16 --branch-n-predict 64 --tool-rounds M --warmup 2 --reps 5 --out <path> [--tmp-dir <dir>]`；`--parallel` 由 runner 按 `fanout+2` 计算（不接受手工覆盖）。**临时目录合同（落盘/顶层键习惯对齐 E15；gates 子结构为 M0 自有）**：`--tmp-dir` 为**可选用户参数**（缺省时 runner 用 `tempfile.mkdtemp()` 创建、退出时 `shutil.rmtree` 清理——**此"创建并主动清理"是 M0 相对 E15 的增强**，E15 runner 接受 `--tmp-dir` 但清理语义未承诺）；`--slot-save-path` **不作为独立用户参数**，由 runner 内部绑定为同一临时目录（`--slot-save-path <tmp-dir>`）传给 server——保证 `POST /slots/:id?action=erase` 可用（slot erase 依赖该路径，`e15_branch_concurrent.py:548-560` 先例）且生命周期随 runner 清理。**"对齐 E15"仅指**：结果落盘位置（`results/`）与顶层键集 `{meta, modes, gates, verdict, notes}`（`e15_branch_concurrent.py:795-831`）；`gates` 子结构（§5.1 三值 status 与 G-M0-1..7 定义）为 M0 自有，不沿用 E15 的 gate 字段。预算 fail-fast：`budget(P,B,N) > 3481` → **preflight 拒绝该组合（不生成正式 verdict，CLI 直接报错退出）**（§4.2，P/B 来自 tokenize 实测）。
 
-测试计划：纯函数 pytest（决策点解析边界/确定性/canary/**预算函数合法与非法组合表**/tokenize 客户端 mock（HTTP 失败→chars/2.0 fallback）/gate_verdict 分支/CLI 校验/fail-fast）+ mock OpenAI server e2e（现有 `tests/mock_server.py` 模式）+ 可选 TinyLlama CPU smoke（**仅冒烟，不宣称 4B 结论**）。
+测试计划：纯函数 pytest（决策点解析边界/确定性/canary/**预算函数合法与非法组合表**/tokenize 客户端 mock（**端点失败 → 报 preflight 失败并落盘，不降级继续**）/gate_verdict 分支/rep status 状态机（OK/INVALID_DECISION/ERROR）/CLI 校验/fail-fast/**schema validator（五键精确集、preflight 缺键非法、formal 缺 G-M0-7 先置 FAIL）**）+ mock OpenAI server e2e（现有 `tests/mock_server.py` 模式）+ 可选 TinyLlama CPU smoke（**仅冒烟，不宣称 4B 结论**）。
 
 ---
 
