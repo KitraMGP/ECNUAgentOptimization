@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
-"""E6.3-C2: SnapKV 式 prompt KV 压缩离线 oracle（Qwen3.5-4B）。
+"""E7.5-C2: KV budget feasibility estimator（离线容量估算，Qwen3.5-4B）。
 
-目的：评估"prefill 后压缩 prompt KV"在 hybrid 主模型上的收益上界与可行性。
+范围修正（E7 复核）：本脚本仅做 prompt token 计数 + budget keep 估算 +
+理论 attention KV bytes 计算，**不计算 attention score、不生成压缩 KV、
+不执行 decode、不测输出质量** → 状态 KV_BUDGET_FEASIBILITY_ESTIMATOR，
+不得称为 SnapKV oracle / 在线压缩。
+
+目的：评估"prefill 后压缩 prompt KV"在 hybrid 主模型上的理论上界与可行性。
 方法：
   1. 真实 4B server 跑长 prompt 请求，采集 /metrics/kv（attention KV 占用）；
   2. 离线模拟 SnapKV 式压缩预算 K（保留最近 observation window + 选中的 prefix token），

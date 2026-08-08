@@ -1,7 +1,7 @@
 [
   {
-    "candidate_id": "C1_RADIX_PREFIX_SHARING",
-    "route": "P0-B (exact prefix sharing, RadixAttention 式)",
+    "candidate_id": "C1_CROSS_SLOT_PREFIX_SHARING",
+    "route": "P0-B (exact prefix sharing; Inspired by RadixAttention; 非完整 radix tree: 线性 idle-slot LCP 扫描 + seq_cp 元数据共享)",
     "paper_evidence": [
       "SGLang/RadixAttention SOSP'24 (2312.07104)",
       "ChunkAttention (2402.15220)",
@@ -38,11 +38,12 @@
     ],
     "minimal_reproducer": "W07_exact_prefix_4_sessions / W08_partial_prefix（见 workload_manifest.json）",
     "rollback_condition": "任一 correctness/isolation 红线触发（active victim、错误复用、静默截断、泄漏）→ 关闭候选开关回退原行为",
-    "status": "SELECTED_FOR_IMPLEMENTATION",
-    "reason": "P0 无损主候选；在 unified KV pool 之上加 CPU 侧 radix tree（边=cell 区间），复用现有 get_common_prefix/k_idxs/prompt cache/seq bitset；无需新 CUDA kernel；收益=exact-prefix recompute tokens 下降。"
+    "status": "IMPLEMENTED_ATTENTION_ONLY",
+    "reason": "P0 无损主候选；在 unified KV pool 之上加 CPU 侧 radix tree（边=cell 区间），复用现有 get_common_prefix/k_idxs/prompt cache/seq bitset；无需新 CUDA kernel；收益=exact-prefix recompute tokens 下降。",
+    "name": "Cross-slot exact-prefix KV metadata sharing"
   },
   {
-    "candidate_id": "C2_SNAPKV_PROMPT_COMPRESSION",
+    "candidate_id": "C2_KV_BUDGET_ESTIMATOR",
     "route": "P1-G (token budget, SnapKV 式 prompt KV 压缩)",
     "paper_evidence": [
       "SnapKV NeurIPS'24 (2404.14469)",
@@ -81,8 +82,9 @@
     ],
     "minimal_reproducer": "W07_exact_prefix_4_sessions / W08_partial_prefix（见 workload_manifest.json）",
     "rollback_condition": "任一 correctness/isolation 红线触发（active victim、错误复用、静默截断、泄漏）→ 关闭候选开关回退原行为",
-    "status": "SELECTED_FOR_IMPLEMENTATION",
-    "reason": "P1 有损第二候选；prefill 后一次性压缩 prompt KV（observation window 投票 + topk + pooling），生成阶段零开销；需新增 prefill 注意力分数输出通道 + KV 紧凑重排。"
+    "status": "NOT_IMPLEMENTED_OFFLINE_ESTIMATOR_ONLY",
+    "reason": "E7 复核：脚本仅做 prompt token 计数 + budget keep 估算 + 理论 attention KV bytes 计算；无 attention score、无压缩 KV、无 decode、无质量测量 → 降级为 KV_BUDGET_FEASIBILITY_ESTIMATOR，不得称 SnapKV oracle",
+    "name": "KV budget feasibility estimator (offline capacity estimation only)"
   },
   {
     "candidate_id": "C3_PAGED_BLOCK_POOL",
