@@ -1,0 +1,36 @@
+# Qwen3.5-4B q8_0 production configuration（E14.1 固化，不可歧义）
+# 状态：PASS_VALIDATED_DEPLOYMENT_PROFILE（发布基线；非新算法）
+# 校验：E14.2 发布前验收；启动日志断言见 docs/E14_1_PRODUCTION_CONFIGURATION.md
+model:
+  path: models/qwen3-5-4B-Q4_K_M.gguf
+  sha256: de8e96cd0d0c358487091aaaed1346bc02e61da3d4b412c833662702e233e78c
+kv:
+  cache_type_k: q8_0
+  cache_type_v: q8_0
+  kv_unified: true
+  ctx_size: 4096
+  parallel: 4
+  # q4_0 不得进入生产配置（NOT_VALIDATED）
+gpu:
+  offload_layers: 99            # -ngl 99（全部层）
+server:
+  host: 127.0.0.1
+  port: 8080
+  # API authorization：通过启动参数 --api-key 注入（值不写入本配置/仓库）
+  metrics: true                 # --metrics（暴露 /metrics、/metrics/kv）
+  slot_save_path: /var/log/llama-slot-save   # 运维按环境配置；不启用时无需
+  log_file: /var/log/llama-server.log        # 运维按环境配置
+  log_rotation: "外部 logrotate（按大小/天轮转）"
+  request_timeout_s: 300
+  shutdown_timeout_s: 15
+  max_concurrent_requests: 4    # = parallel（并发上限由 parallel 决定）
+  max_request_prompt_tokens: 2000  # 受控边界（ctx 4096/p4 每 slot ~1024，超限 400）
+limits:
+  checkpoint_reuse: false       # 生产必须关闭
+  checkpoint_save: false        # 不包含 checkpoint_save
+  checkpoint_restore: false     # 不包含 checkpoint_restore
+  clone_from: false             # 不包含 clone_from（公共 action 已移除）
+regression_only:
+  temperature: 0                # 仅发布回归用；业务采样参数由受控请求配置决定
+  seed: 42                      # 同上
+expected_status: PASS_VALIDATED_DEPLOYMENT_PROFILE
