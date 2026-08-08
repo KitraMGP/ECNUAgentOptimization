@@ -7,15 +7,14 @@
 > 提交状态（2026-08-08 收口）：已提交，根仓库 commit `a2e0558`（核心 + 集成 + 测试 + 本文档）。
 > 约束执行（CORE）：只新增 `benchmark/framework/tool_payload.py`、`benchmark/tests/test_tool_payload.py`
 > 与本文档；未修改 tool_call.py / long_life.py / config.py / runner.py / driver.py / workload.py /
-> 现有测试 / llama.cpp；未提交、未安装依赖、未跑全量测试/格式化（仅跑 `tests/test_tool_payload.py`）。
+> 现有测试 / llama.cpp；未安装依赖、未跑全量测试/格式化（仅跑 `tests/test_tool_payload.py`）。
 > 约束执行（集成）：只改 `benchmark/workload/tool_call.py`、`benchmark/workload/long_life.py`、
 > 新增 `benchmark/tests/test_e15_2_tool_payload_integration.py` 与本文档；未改 llama.cpp / Driver /
-> context_policy / runner / config.py / framework/tool_payload.py / 既有 E14 文档；未提交、
-> 未跑全量测试/格式化（仅跑集成测试 + test_workloads.py 回归）。
+> context_policy / runner / config.py / framework/tool_payload.py / 既有 E14 文档；未跑全量测试/格式化（仅跑集成测试 + test_workloads.py 回归）。
 > 并行任务隔离：本实现不触碰 context_policy（并行任务产物）涉及的任何文件与命名空间。
 > 核心 reviewer 修复（2026-08-08）：只改 `benchmark/framework/tool_payload.py`、
 > `benchmark/tests/test_tool_payload.py` 与本文档；未改 workload / Driver / config / runner /
-> llama.cpp；未提交、未格式化、未跑全量测试（仅跑 `tests/test_tool_payload.py`，65 passed）。
+> llama.cpp；未格式化、未跑全量测试（仅跑 `tests/test_tool_payload.py`，65 passed）。
 
 ---
 
@@ -323,7 +322,7 @@ cd benchmark && uv run pytest tests/test_workloads.py -q   # 回归（workload �
   ② 测试改为检查 resolve 后第 2、3 个后续调用整个 messages；③ 并发隔离测试用不同
   customer → 不同 ref 区分独立/误共享 store；④ 新增 long_life resolve 成功路径测试；
   ⑤ evaluate 排除内部 resolve_tool_payload；⑥ 文档更新删除"未来集成"过时表述。
-- 未提交（遵守约束）；未安装依赖（仅用现有 `.venv`）；未跑全量测试与格式化（仅跑
+- 未安装依赖（仅用现有 `.venv`）；未跑全量测试与格式化（仅跑
   `tests/test_tool_payload.py`，65 passed）。
 - **未做真实模型 paired**：externalized 模式的上下文占位替换是否带来 prompt tokens /
   KV bytes 收益（E15.0 §5.2 阈值 12.11/12.12）需 4B greedy paired 对比（store on vs off），

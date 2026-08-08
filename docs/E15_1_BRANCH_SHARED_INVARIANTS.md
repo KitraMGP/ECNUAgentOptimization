@@ -2,6 +2,7 @@
 
 > 阶段：E15.1（A1：既有 bitset 引用与共享源保护的不变量加固 + 分支并发 paired 验证）
 > 日期：2026-08-08
+> 提交状态（2026-08-08 收口）：已提交——根仓库 `f357a42` / llama.cpp `4a699aaad`（llama.cpp 仅新增独立 E15 test 文件，未改核心代码）。
 > 关联计划：`docs/E15_0_TECHNICAL_PLAN_AND_ACCEPTANCE.md` §2.3（A1）、§7（E15.1/E15.2）
 > **最终判定：`PASS`**（10/10 门禁 G0–G9 全过；**零 llama.cpp 核心代码改动**，纯测试 + benchmark 扩展）
 > 约束遵守：不重开 E2.5 prefix-branch 路由；未新增 refcount/guard 状态；未将 metadata
@@ -244,7 +245,7 @@ ThreadPoolExecutor + barrier）中**确定生效**：
 target 实际串行进入处理循环（首版已注明，不影响共享链证据）；② 容量——off 模式 4 并发
 全量 KV 2022/2048，更大并发/更长 prompt 需按 §7.3 约束调参；③ 模型域——仅 TinyLlama
 attention-only，Qwen3.5-4B hybrid 由 capability gate 永久禁用共享，不在本阶段范围；
-④ 本阶段所有改动（根仓库 + llama.cpp）均未提交，等待用户授权（2026-08-08 收口：已提交，根仓库 f357a42 / llama.cpp 4a699aaad）。
+④ 本阶段所有改动**已提交**：根仓库 `f357a42` / llama.cpp `4a699aaad`（2026-08-08 收口；llama.cpp 仅新增独立 E15 test 文件，未改核心代码）。
 
 ---
 
@@ -308,5 +309,5 @@ HTTP/错误、prompt_n/cache_n、输出 token ids + 内容 sha256、latency、/m
    - `/slots/{id}?action=erase` 需 `--slot-save-path`。
 5. **性能数值**：latency（off ~98ms vs on ~18-20ms/target）为 CPU f32 TinyLlama 数据，
    仅作共享行为的辅助证据，不作主模型性能声明；正式收益门槛按 12.11 recompute 指标判定。
-6. **未提交**：本阶段所有改动（根仓库 + llama.cpp）均未提交，等待用户授权（E6 §12.20
-   提交规则；2026-08-08 收口：已提交，根仓库 f357a42 / llama.cpp 4a699aaad）。
+6. **提交状态**：本阶段所有改动**已提交**——根仓库 `f357a42` / llama.cpp `4a699aaad`（2026-08-08
+   收口；按 E6 §12.20 提交规则，llama.cpp 仅新增独立 E15 test 文件，未改核心代码）。

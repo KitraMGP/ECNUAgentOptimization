@@ -5,7 +5,7 @@
 > 提交状态（2026-08-08 收口）：已提交，根仓库 commit `c9c26ab`（核心 + 测试 + 本文档）。
 > 约束执行：只新增 `benchmark/framework/context_policy.py`、`benchmark/tests/test_context_policy.py` 与本文档；
 > 未修改 tool_call.py / long_life.py / config.py / runner.py / driver.py / workload.py / 现有测试 / llama.cpp；
-> 未提交、未安装依赖、未跑全量测试/格式化。
+> 未安装依赖、未跑全量测试/格式化。
 > 并行任务隔离：本核心不触碰 ToolPayloadStore（并行任务产物）涉及的任何文件与命名空间。
 > **reviewer 修订（2026-08-08）**：本版按 reviewer 9 项意见修订——summary 注入位置、manifest
 > 明文泄露、summary 块截断语义（完整行/闭合标签/needle 不截断）、apply_policy 幂等、snapshot
