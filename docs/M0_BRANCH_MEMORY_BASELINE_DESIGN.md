@@ -2,7 +2,7 @@
 
 > 状态：**调研完成 + 详细设计（DESIGN ONLY）；未实现 workload 代码、未运行正式 benchmark**。
 > 日期：2026-08-09 ｜ 对应路线：M0（阶段 0 通过后第一条后续路线）｜ 实施建议：**GO**（见 §8）。
-> 修订：2026-08-09 v2（审查修复——矩阵/预算/层数/架构/接口合同/回收观测）；**v3（复审修复——精确 token 计数 /apply-template+/tokenize、矩阵手算值修正与预算函数单测化、driver 合同扩展、决策点 n_predict 16、G-M0-1/3/4 语义定稿、--slot-save-path 合同）**，见各节。
+> 修订：2026-08-09 v2（审查修复——矩阵/预算/层数/架构/接口合同/回收观测）；v3（复审修复——精确 token 计数、矩阵手算修正、driver 合同、门禁语义）；**v4（复审修复——driver `_retry` 位置参数兼容、thinking 字段生效实证、G-M0-1 与矩阵完全分离 + decision_fallback 标记、RS 日志行号 :115、CLI 临时目录对齐 E15）**，见各节。
 > 约束：本阶段只调研与设计，不实现代码、不运行长 GPU benchmark；不改 E6–E15 历史 raw/结论。
 > 探针（§1.3/§7）：仅"启动 server → 读取内存分配日志与 /metrics/kv → 退出"，未做任何推理请求。
 
@@ -53,7 +53,7 @@
 
 **`/completion` 与 OAI**：`handle_completions_impl` 定义 `server-context.cpp:4890`；`post_completions`（/completion、/completions）委托 `:5621-5625`，OAI 端点（/v1/completions、/chat/completions、/v1/chat/completions）同一 handler（`server.cpp:242-246` 路由；`server-context.cpp:5633-5762`）；timings 填充 `server-context.cpp:568-576`（`prompt_n/cache_n/predicted_n/prompt_ms/predicted_ms` 等）；`t_prompt_processing` 定义 `:342` → `timings.prompt_ms`（`:571`，**TTFT 代理**，见 §5.1）。**并发模型**：`server_queue::start_loop`（`server-queue.cpp:125-215`）主线程阻塞循环 = 队首 task → `update_slots()` 单次遍历所有 slots 完成 pre_decode/decode/sample（`server-context.cpp:3398+`）→ 即 cont-batching 是**单线程调度**，HTTP 线程独立（`server.cpp:504/519`）；并行只存在于 ggml 内部线程与多 slot 批处理。
 
-**memory_breakdown / position**：唯一输出点 `server.cpp:531` 退出时 `common_memory_breakdown_print`（`common/fit.cpp:817-940`），由 model 权重 + memory（KV/记忆）+ compute buffer 三部分构成；**hybrid 下 `context` 列 = attn+recr 合并，无法拆分**。运行期唯一 recurrent 细分 = 启动日志（`llama-memory-recurrent.cpp:123-126`）。
+**memory_breakdown / position**：唯一输出点 `server.cpp:531` 退出时 `common_memory_breakdown_print`（`common/fit.cpp:817-940`），由 model 权重 + memory（KV/记忆）+ compute buffer 三部分构成；**hybrid 下 `context` 列 = attn+recr 合并，无法拆分**。运行期唯一 recurrent 细分 = 启动日志：`RS buffer size` 行（`llama-memory-recurrent.cpp:115`）+ `R/S (f32)` 分解行（`:123-126`）。
 
 **checkpoint / COW**：`--checkpoint-reuse`（`arg.cpp:3684-3690`）在 hybrid/recurrent 上启动强制禁用（`server-context.cpp:1479-1487`，E12 实证 restore 后仍全量 prefill）；请求级 `checkpoint_save/restore`（`server-task.h:81-83`）；slot 级 `POST /slots/:id?action=save|restore|erase`（`server.cpp:275`；`server-context.cpp:5446-5477`）需 `--slot-save-path`；**无 COW**（physical_sharing 恒 false，共享是 metadata/bitset 级）。
 
@@ -118,7 +118,9 @@ ACTION: branch(b1|b2|b3|b4|b5|b6|b7|b8)
 ```
 - 决策点 prompt 采用枚举式约束（"只能输出上述 ACTION 之一，不得输出其他内容"），规避自由文本指令漂移；
 - `temperature=0, seed=42` 固定 → 分支选择在**给定公共上下文下确定性**；用 0.8B（CPU）离线校准决策点 prompt 的合法输出率，4B（GPU）正式；
-- **fallback 与判定（审查修订）**：若 4B 决策点合法输出率 <100%（经 ≥20 次复现），触发固定映射 fallback（脚本按固定规则选分支），该数据判定为 **`NOT_VALIDATED`/HOLD**——**不称真实决策 PASS**；固定映射数据仅可作内存压力 smoke（§8 G-M0-1）。
+- **fallback 与判定（审查修订 v4：专用验证与正式矩阵分离）**：
+  - **专用稳定性验证**（G-M0-1 数据源）：4B 决策点合法输出率 <100%（2 次独立会话 × ≥10 次，无 ACTION 或 `finish_reason=length` 均计 INVALID）→ 触发固定映射 fallback，该数据判定 **`NOT_VALIDATED`/HOLD**——**不称真实决策 PASS**；
+  - **正式矩阵**：单 rep 决策失败**只记录该 rep INVALID**，并使用**固定路由 fallback**（脚本按固定规则选分支）**继续内存压力实验**（不中断、不重试），该 rep **不计入 G-M0-1**（G-M0-1 只用专用验证数据）；fallback 触发时在结果 schema `decision_fallback: true` 与顶层 `verdict` 显式标记（§5.1），报告不得宣称真实决策。
 - 分支语义稳定：分支 prompt = 公共上下文 + 决策点输出 + 分支专属任务 + 分支专属 canary；分支任务**不依赖模型继续决策**（后续轮次为固定后续推理/工具调用）。
 
 **分支-工具-回收流**：
@@ -136,7 +138,7 @@ ACTION: branch(b1|b2|b3|b4|b5|b6|b7|b8)
 
 - **复用**：`framework/driver.py`（OAI 封装/timings 提取）、`framework/kv_probe.py`、`framework/sampler.py`、`metrics/metrics.py summarize`、`e15_branch_concurrent.py` 的 server 生命周期（`start_server/stop_server`，`:548-599`）与 gate_verdict 纯函数模式。
 - **新增（下一实现阶段，本阶段不写）**：
-  - `benchmark/framework/fanout_prompts.py` —— 纯函数：决策点 prompt 构造（枚举约束）、分支扩展、canary 注入、`ACTION: branch(bX)` 解析、token 估算（2.5 chars/token，同 e15 `est_tokens` 惯例）、KV 预算校验（§4 公式，fail-fast）。
+  - `benchmark/framework/fanout_prompts.py` —— 纯函数：决策点 prompt 构造（枚举约束）、分支扩展、canary 注入、`ACTION: branch(bX)` 解析、**token 精确计数（§4.2：/apply-template + /tokenize）**、KV 预算校验（§4 公式，fail-fast）。
   - `benchmark/runner/m0_fanout_runner.py` —— CLI + 矩阵编排 + server 生命周期 + 并发（barrier+ThreadPoolExecutor）+ gate + 落盘（唯一顶层 schema，§5.1）。
   - `benchmark/tests/test_fanout_prompts.py`、`benchmark/tests/test_m0_fanout_runner.py` —— 纯函数 + mock server e2e。
 - **不改**：`config.py`、`runner.py`、`workload/__init__.py`、任何既有 workload（可回滚：删除新增文件即完全回滚，默认无行为改动）。
@@ -146,30 +148,29 @@ ACTION: branch(b1|b2|b3|b4|b5|b6|b7|b8)
 
 | 项 | 合同 |
 |---|---|
-| 统一接口 | **OAI `/v1/chat/completions`**（`driver.chat`）——决策点与分支请求同一接口；`chat_template_kwargs.enable_thinking=False`（`driver.py:134-141`）保证 no-think 一致；原生 `/completion` 仅为 e15 对照既有路径，M0 不用（模板/thinking 控制不一致风险） |
+| 统一接口 | **OAI `/v1/chat/completions`**（`driver.chat`）——决策点与分支请求同一接口；**thinking 合同（v4 实证）**：server 默认 **thinking 开启**（apply-template 不传时渲染 `<|im_start|>assistant\n<think>\n`），必须显式 `chat_template_kwargs.enable_thinking=false` 才渲染空 think 块（`<think>\n\n</think>`）实现 no-think——该字段经 `oaicompat_chat_params_parse` 解析**实际生效**（`server-common.cpp:1089-1097` 覆盖默认；探针实证 2026-08-09：default 147 chars vs false 158 chars vs true=default）；M0 沿用 `driver._extra_body`（`driver.py:134-141`）显式 false，并以"两条路径渲染 prompt 一致性探针"（apply-template vs chat 实际请求模板）为门禁（§4.2）；原生 `/completion` 仅为 e15 对照既有路径，M0 不用 |
 | 确定性 | `temperature=0, seed=42`；`--n-predict`：**决策点 16（v3：由 8 上调，保证 `ACTION: branch(bX)` 输出完整且留边界）**、分支轮 64（CLI 可配 `--decision-n-predict/--branch-n-predict`） |
 | 停止判定 | OAI `finish_reason`（stop/length）；**`finish_reason=length` 且输出不含合法 ACTION → 该 rep 判定失败（INVALID）**，计入决策合法率（G-M0-1） |
 | 可比性 | 同 seed/temp 下输出 `tokens` 数组 + `content_sha256` 逐字节比较（e15 G1 模式）；决策点与分支均在请求级记录 prompt_tokens/completion_tokens/timings |
 | slot 控制 | 默认不强制 `id_slot`（server 自动调度）；若需确定性 slot 映射（决策点 slot 0、分支 1..N），经 `extra_body["id_slot"]` 透传（见下方 driver 扩展，默认缺省保持旧行为） |
 | timings | `driver._extract_timings`（`:160-180`）；TTFT 代理 = `timings.prompt_ms`（`server-context.cpp:571`），见 §5.1 |
 
-**driver 最小兼容扩展（审查修订 v3 —— 不能只改 id_slot 一行）**：当前 `driver.chat(messages, _retry=0)` **不支持 temperature/seed/max_tokens 透传**（`driver.py:62`）。设计签名：
+**driver 最小兼容扩展（审查修订 v4 —— `_retry` 保持位置参数）**：当前 `driver.chat(messages, _retry=0)` **不支持 temperature/seed/max_tokens 透传**（`driver.py:62`）。设计签名：
 
 ```python
 def chat(
-    self, messages: List[dict],
+    self, messages: List[dict], _retry: int = 0,   # _retry 保持位置参数（`*` 之前），兼容现有递归调用
     *,
     temperature: Optional[float] = None,   # → create(temperature=...)，None 不传（保持旧默认）
     seed: Optional[int] = None,            # → create(seed=...)
     max_tokens: Optional[int] = None,      # → create(max_tokens=...)
     extra_body: Optional[Dict[str, Any]] = None,  # 与 _extra_body() 合并（id_slot 等），None 不合并
-    _retry: int = 0,                       # 内部递归参数，保持位置参数不变
 ) -> Dict[str, Any]:
 ```
 
-- **兼容性**：`_retry` 留在 `*` 之后**最后**，现有调用（`driver.chat(messages)`、递归 `self.chat(messages, _retry+1)`）不受影响——新增参数全部 keyword-only 且默认 None → 行为与旧版逐字节一致（回归测试锁定）；
-- **OpenAI 参数映射**：`temperature/seed/max_tokens` 直接映射 `chat.completions.create` 同名参数；`extra_body` 与既有 `_extra_body()` 字典合并（调用方优先）；
-- **实施清单**：`driver.py` 签名扩展 + `tests/test_driver.py` 新增用例（默认 None 旧行为、透传生效、keyword-only 不破坏现有调用、extra_body 合并优先级）。
+- **兼容性（v4 修正）**：`_retry` 位于 `*` **之前**（位置参数区），现有调用全部不受影响——外部 `driver.chat(messages)` 与内部递归 `self.chat(messages, _retry + 1)`（`driver.py:131`，位置传参）均无需改动；新增参数全部 keyword-only 且默认 None → 不传时行为与旧版逐字节一致（`tests/test_driver.py` 回归用例锁定：旧签名调用方式全绿）；
+- **实施文件**：`benchmark/framework/driver.py`（仅 `chat` 签名 + `_extra_body` 合并逻辑）；`benchmark/tests/test_driver.py` 新增用例（默认 None 旧行为、透传生效、**旧调用 `chat(msgs, 2)` 位置传 `_retry` 兼容**、keyword-only 参数拒绝位置传参、extra_body 合并优先级）；
+- **OpenAI 参数映射**：`temperature/seed/max_tokens` 直接映射 `chat.completions.create` 同名参数；`extra_body` 与既有 `_extra_body()` 字典合并（调用方优先）。
 
 ### 3.4 请求序列与计时
 
@@ -196,7 +197,7 @@ def chat(
 **token 精确计数（审查修订，不再以 chars/2.5 为唯一门禁）**：
 - **预算函数**：`budget(P, B, N) = P + N×(P+B)`（P=决策点/公共前缀 token 数，B=每分支后缀 token 数，N=fan-out）；约束 `budget ≤ 4096×0.85 = 3481 cells`（安全余量 15%）。
 - **P/B 的取值必须来自 chat 模板渲染后的真实 prompt 精确 token 计数**（实现时）：
-  1. `POST /apply-template`（`server.cpp:263`；`server-context.cpp:5775-5781`）：body `{messages, add_generation_prompt: true, chat_template_kwargs: {enable_thinking: false}}`，经 `oaicompat_chat_params_parse`（与 /v1/chat/completions 同一解析路径，**thinking=false 模板一致**）→ 响应 `{"prompt": "<渲染后完整 prompt>"}`；
+  1. `POST /apply-template`（`server.cpp:263`；`server-context.cpp:5775-5781`）：body `{messages, add_generation_prompt: true, chat_template_kwargs: {enable_thinking: false}}`，经 `oaicompat_chat_params_parse`（与 /v1/chat/completions 同一解析路径，**thinking=false 模板一致**；字段生效证据：`server-common.cpp:1089-1097` 解析覆盖 + 探针 default 147 chars vs false 158 chars）→ 响应 `{"prompt": "<渲染后完整 prompt>"}`；**一致性门禁**：run 前对同一 messages 分别经 /apply-template 与真实 chat 请求（mock 记录请求体）比对渲染结果，不一致则 INVALID；
   2. `POST /tokenize`（`server.cpp:261`；`server-context.cpp:5828+`）：body `{content: <prompt>, add_special: false}` → 响应 `{"tokens": [id, ...]}`，`P/B = len(tokens)`。
   - 探针实测（2026-08-09，4B，中文为主）：chars/2.5 估算**低估**真实 token 数 **7.4%（short）→ 12.6%（medium）→ 16.3%（long）**（真实 chars/token ≈ 2.1–3.1，中文 1 字常 1–2 token）——**long 边界下 est=3400 实际可达 ~3944 > 3481 预算**，故 chars/2.5 不得作为门禁唯一依据。
 - **失败降级**：`/apply-template` 或 `/tokenize` 不可用（HTTP 非 200/schema 不符）→ **保守 fallback = `chars/2.0`**（比实测最差 2.1 chars/token 更保守，高估 token → 安全侧）+ 记录 warning；budget 校验仍 fail-fast（超限拒绝该组合记 INVALID）。
@@ -235,7 +236,8 @@ def chat(
            "model": "...", "binary_version": "8570/4a699aaad", "ctx_size": 4096,
            "fanout": N, "prefix_len": "...", "branch_len": "...", "ctk/ctv": "...",
            "protocol": "OAI /v1/chat/completions, temp=0, seed=42, no-think",
-           "decision_validated": true|false},
+           "decision_validated": true|false,
+           "decision_fallback": false|true},   # v4：正式矩阵单 rep 决策失败触发固定路由时置 true
   "modes": {"off": {"start": ..., "replicates": [...], "stop": ...},
             "on":  {"start": ..., "replicates": [...], "stop": ...}},
   "gates": {"G-M0-1..7": {...}},
@@ -259,7 +261,7 @@ def chat(
 
 **recurrent/attention 细分 —— 最小可观测性缺口（如实记录，本阶段不实现 llama.cpp 改动）**：
 - `/metrics/kv` 只统计 attention（`llama-memory-hybrid.cpp:190-194`）；recurrent 内存**无运行期接口**（仅启动日志 `RS buffer size` + 退出时 `common_memory_breakdown_print` 的合并 `context` 列）。
-- M0 归因方案：**启动日志解析 `RS buffer size`/`R/S (f32)`（`llama-memory-recurrent.cpp:123-126`）+ nvidia-smi 峰值差分**（全模型峰值 − 空载基线 = KV+RS+compute），配合 §1.3 精确公式（RS = 24×548864×4×N、KV = 8×8×128×2×elem×ctx）分离各成分。后续若需运行期 recurrent 计数，需 llama.cpp 最小扩展（`llama_kv_stats` 增加 recurrent 字段或 `/metrics/kv` 加 breakdown）——**列为未决问题 §9.1，不在 M0 承诺**。
+- M0 归因方案：**启动日志解析 `RS buffer size`（`llama-memory-recurrent.cpp:115`）与 `R/S (f32)`（`:123-126`）+ nvidia-smi 峰值差分**（全模型峰值 − 空载基线 = KV+RS+compute），配合 §1.3 精确公式（RS = 24×548864×4×N、KV = 8×8×128×2×elem×ctx）分离各成分。后续若需运行期 recurrent 计数，需 llama.cpp 最小扩展（`llama_kv_stats` 增加 recurrent 字段或 `/metrics/kv` 加 breakdown）——**列为未决问题 §9.1，不在 M0 承诺**。
 
 ### 5.3 指标语义区分
 
@@ -282,7 +284,7 @@ def chat(
 
 **不改**：`config.py`、`runner.py`、`workload/`。
 
-CLI 合同（v3 补充）：`--server-bin --model --port --ctx-size 4096 --fanout {2,4,8} --prefix-len {short,medium,long} --branch-len {short,medium,long} --ctk q8_0 --ctv q8_0 --decision-n-predict 16 --branch-n-predict 64 --tool-rounds M --warmup 2 --reps 5 --out <path> --slot-save-path <dir> --tmp-dir <dir>`；`--parallel` 由 runner 按 `fanout+2` 计算（不接受手工覆盖）；**`--slot-save-path` 指向 runner 创建的临时目录（`tempfile.mkdtemp`），默认生命周期内创建、退出清理——保证 `POST /slots/:id?action=erase` 可用**（slot erase 依赖该路径，`e15_branch_concurrent.py:548-560` 先例）。预算 fail-fast：`budget(P,B,N) > 3481` → INVALID（§4.2，P/B 来自 tokenize 实测）。
+CLI 合同（v4 收紧）：`--server-bin --model --port --ctx-size 4096 --fanout {2,4,8} --prefix-len {short,medium,long} --branch-len {short,medium,long} --ctk q8_0 --ctv q8_0 --decision-n-predict 16 --branch-n-predict 64 --tool-rounds M --warmup 2 --reps 5 --out <path> [--tmp-dir <dir>]`；`--parallel` 由 runner 按 `fanout+2` 计算（不接受手工覆盖）。**临时目录合同（对齐 E15）**：`--tmp-dir` 为**可选用户参数**（缺省时 runner 用 `tempfile.mkdtemp()` 创建、退出时 `shutil.rmtree` 清理）；`--slot-save-path` **不作为独立用户参数**，由 runner 内部绑定为同一临时目录（`--slot-save-path <tmp-dir>`）传给 server——保证 `POST /slots/:id?action=erase` 可用（slot erase 依赖该路径，`e15_branch_concurrent.py:548-560` 先例）且生命周期随 runner 清理。预算 fail-fast：`budget(P,B,N) > 3481` → INVALID（§4.2，P/B 来自 tokenize 实测）。
 
 测试计划：纯函数 pytest（决策点解析边界/确定性/canary/**预算函数合法与非法组合表**/tokenize 客户端 mock（HTTP 失败→chars/2.0 fallback）/gate_verdict 分支/CLI 校验/fail-fast）+ mock OpenAI server e2e（现有 `tests/mock_server.py` 模式）+ 可选 TinyLlama CPU smoke（**仅冒烟，不宣称 4B 结论**）。
 
@@ -304,10 +306,10 @@ CLI 合同（v3 补充）：`--server-bin --model --port --ctx-size 4096 --fanou
 可量化验收标准（M0 实现阶段）：
 | 门禁 | 标准 |
 |---|---|
-| G-M0-1 决策确定性（v3：专用验证协议） | **专用稳定性验证，与正式矩阵数据分离**：2 次独立 server 会话，每次 ≥10 请求（共 ≥20），temp=0/seed=42 下 4B 决策点合法 `ACTION: branch(bX)` 输出率 **100%**；**<100% → `NOT_VALIDATED`/HOLD**（固定映射数据仅作内存压力 smoke，不称真实决策 PASS）；正式矩阵的决策输出仅用于分支路由，不并入稳定性统计 |
+| G-M0-1 决策确定性（v4：专用验证协议，与矩阵分离） | **专用稳定性验证，与正式矩阵数据完全分离**：2 次独立 server 会话，每次 ≥10 请求（共 ≥20），temp=0/seed=42 下 4B 决策点合法 `ACTION: branch(bX)` 输出率 **100%**（无 ACTION / `finish_reason=length` 均计 INVALID）；**<100% → `NOT_VALIDATED`/HOLD**；**正式矩阵单 rep 决策失败仅记录该 rep INVALID 并走固定路由 fallback 继续内存压力实验，不计入 G-M0-1，不宣称真实决策 PASS**；fallback 触发 → `decision_fallback: true` + verdict 标记（§5.1） |
 | G-M0-2 隔离 | canary 跨分支泄漏率 **0**（全部 reps×branches 输出） |
 | G-M0-3 回收（v3：不形成伪门禁） | **G-M0-3a（门禁）**：每 rep 末 `erase` 后 `/metrics/kv` `used_cells==0 && active_sequences==0` —— **仅证明 attention cells 回收**；**G-M0-3b（smoke，非门禁）**：全部 reps 完成后 nvidia-smi `used` 回落至空载基线（±50 MiB）—— **只做显存泄漏 smoke，不证明 recurrent state 回收**；recurrent 回收**保持不可观测缺口**（无运行期接口，§5.1），M0 不承诺、不验收 |
-| G-M0-4 内存归因（v3：启动日志精确值门禁） | **主门禁**：启动日志 `RS buffer size`（`llama-memory-recurrent.cpp:123-126`）精确值 vs 公式 `24×548864×4×parallel` 对账 **误差 ≤5%**；attention KV 同理（`llama_kv_cache` 分配日志 68/128 MiB vs `8×8×128×2×elem×4096`）；**GPU used 差分只作总量 sanity**（阈值 ±10%，口径 = nvidia-smi `memory.used` 增量，探针观测 run-to-run 波动 <10%） |
+| G-M0-4 内存归因（v4：启动日志精确值门禁） | **主门禁**：启动日志 `RS buffer size`（`llama-memory-recurrent.cpp:115`）精确值 vs 公式 `24×548864×4×parallel` 对账 **误差 ≤5%**；attention KV 同理（`llama_kv_cache` 分配日志 68/128 MiB vs `8×8×128×2×elem×4096`）；**GPU used 差分只作总量 sanity**（阈值 ±10%，口径 = nvidia-smi `memory.used` 增量，探针观测 run-to-run 波动 <10%） |
 | G-M0-5 对照有效性 | 4B 上 off vs `--kv-prefix-share`：两者 `shared_cells` 恒 0，且 on 会话日志含 `E8-C1: capability rejected: hybrid`（100%） |
 | G-M0-6 复现 | 同配置两次独立 run：TTFT（`timings.prompt_ms`）/latency 中位数偏差 ≤10%，决策分支归属一致 |
 | G-M0-7 数据落盘 | 每 rep 完整记录 §5.2 字段，无缺键；`results/m0_fanout_*.json` 可独立复算 summarize |
