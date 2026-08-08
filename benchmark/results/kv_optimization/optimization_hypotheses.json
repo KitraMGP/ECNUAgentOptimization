@@ -1,0 +1,248 @@
+[
+  {
+    "candidate_id": "C1_RADIX_PREFIX_SHARING",
+    "route": "P0-B (exact prefix sharing, RadixAttention 式)",
+    "paper_evidence": [
+      "SGLang/RadixAttention SOSP'24 (2312.07104)",
+      "ChunkAttention (2402.15220)",
+      "MemServe (2406.17565)"
+    ],
+    "current_code_locations": [],
+    "bottleneck": "固定预分配连续 KV buffer：无 paged/radix/defrag；无 token 级淘汰；K/V 量化粒度受限；跨请求前缀复用缺失",
+    "proposed_change": "P0-B (exact prefix sharing, RadixAttention 式)",
+    "invariants": [
+      "active/protected KV 永不成为 victim",
+      "无跨 session/generation/model/adapter 错误复用（cache identity 完整）",
+      "无损候选输出 token ID 与基线完全一致",
+      "清空后资源返回预注册基线",
+      "trace-off lifecycle event 为 0"
+    ],
+    "implementation_steps": [],
+    "expected_metrics": [
+      "recompute_tokens",
+      "physical_kv_bytes",
+      "cache_hit_cells",
+      "internal_fragmentation",
+      "max_completed_sessions"
+    ],
+    "expected_gain_threshold": null,
+    "quality_risks": [
+      "有损候选：per-head 降级 token 级选择可能掉点",
+      "long-CoT 误差累积",
+      "needle 位置敏感"
+    ],
+    "performance_risks": [
+      "radix tree 维护开销",
+      "radix 命中率低时 overhead",
+      "FA 下分数输出通道成本"
+    ],
+    "minimal_reproducer": "W07_exact_prefix_4_sessions / W08_partial_prefix（见 workload_manifest.json）",
+    "rollback_condition": "任一 correctness/isolation 红线触发（active victim、错误复用、静默截断、泄漏）→ 关闭候选开关回退原行为",
+    "status": "SELECTED_FOR_IMPLEMENTATION",
+    "reason": "P0 无损主候选；在 unified KV pool 之上加 CPU 侧 radix tree（边=cell 区间），复用现有 get_common_prefix/k_idxs/prompt cache/seq bitset；无需新 CUDA kernel；收益=exact-prefix recompute tokens 下降。"
+  },
+  {
+    "candidate_id": "C2_SNAPKV_PROMPT_COMPRESSION",
+    "route": "P1-G (token budget, SnapKV 式 prompt KV 压缩)",
+    "paper_evidence": [
+      "SnapKV NeurIPS'24 (2404.14469)",
+      "PyramidKV (2406.02069)",
+      "ScissorHands (2305.17118)",
+      "StreamingLLM (2309.17453)"
+    ],
+    "current_code_locations": [],
+    "bottleneck": "固定预分配连续 KV buffer：无 paged/radix/defrag；无 token 级淘汰；K/V 量化粒度受限；跨请求前缀复用缺失",
+    "proposed_change": "P1-G (token budget, SnapKV 式 prompt KV 压缩)",
+    "invariants": [
+      "active/protected KV 永不成为 victim",
+      "无跨 session/generation/model/adapter 错误复用（cache identity 完整）",
+      "无损候选输出 token ID 与基线完全一致",
+      "清空后资源返回预注册基线",
+      "trace-off lifecycle event 为 0"
+    ],
+    "implementation_steps": [],
+    "expected_metrics": [
+      "recompute_tokens",
+      "physical_kv_bytes",
+      "cache_hit_cells",
+      "internal_fragmentation",
+      "max_completed_sessions"
+    ],
+    "expected_gain_threshold": null,
+    "quality_risks": [
+      "有损候选：per-head 降级 token 级选择可能掉点",
+      "long-CoT 误差累积",
+      "needle 位置敏感"
+    ],
+    "performance_risks": [
+      "radix tree 维护开销",
+      "radix 命中率低时 overhead",
+      "FA 下分数输出通道成本"
+    ],
+    "minimal_reproducer": "W07_exact_prefix_4_sessions / W08_partial_prefix（见 workload_manifest.json）",
+    "rollback_condition": "任一 correctness/isolation 红线触发（active victim、错误复用、静默截断、泄漏）→ 关闭候选开关回退原行为",
+    "status": "SELECTED_FOR_IMPLEMENTATION",
+    "reason": "P1 有损第二候选；prefill 后一次性压缩 prompt KV（observation window 投票 + topk + pooling），生成阶段零开销；需新增 prefill 注意力分数输出通道 + KV 紧凑重排。"
+  },
+  {
+    "candidate_id": "C3_PAGED_BLOCK_POOL",
+    "route": "P0-A (固定大小 paged/block pool)",
+    "paper_evidence": [
+      "PagedAttention SOSP'23 (2309.06180)"
+    ],
+    "current_code_locations": [],
+    "bottleneck": "固定预分配连续 KV buffer：无 paged/radix/defrag；无 token 级淘汰；K/V 量化粒度受限；跨请求前缀复用缺失",
+    "proposed_change": "P0-A (固定大小 paged/block pool)",
+    "invariants": [
+      "active/protected KV 永不成为 victim",
+      "无跨 session/generation/model/adapter 错误复用（cache identity 完整）",
+      "无损候选输出 token ID 与基线完全一致",
+      "清空后资源返回预注册基线",
+      "trace-off lifecycle event 为 0"
+    ],
+    "implementation_steps": [],
+    "expected_metrics": [
+      "recompute_tokens",
+      "physical_kv_bytes",
+      "cache_hit_cells",
+      "internal_fragmentation",
+      "max_completed_sessions"
+    ],
+    "expected_gain_threshold": null,
+    "quality_risks": [
+      "有损候选：per-head 降级 token 级选择可能掉点",
+      "long-CoT 误差累积",
+      "needle 位置敏感"
+    ],
+    "performance_risks": [
+      "radix tree 维护开销",
+      "radix 命中率低时 overhead",
+      "FA 下分数输出通道成本"
+    ],
+    "minimal_reproducer": "W07_exact_prefix_4_sessions / W08_partial_prefix（见 workload_manifest.json）",
+    "rollback_condition": "任一 correctness/isolation 红线触发（active victim、错误复用、静默截断、泄漏）→ 关闭候选开关回退原行为",
+    "status": "REJECT_INCOMPATIBLE_ARCHITECTURE",
+    "reason": "读取侧需为全部 ggml 后端重写 attention kernel（连续 view 假设），与图执行+多后端架构根本冲突；运行时按需扩容与固定形状 KV buffer 不兼容。"
+  },
+  {
+    "candidate_id": "C4_REUSE_AWARE_EVICTION",
+    "route": "P0-C (reuse/cost-aware idle eviction)",
+    "paper_evidence": [
+      "E3.2-E3.4 既有实验（lru 已实现，收益在真实场景稀释为 0%）"
+    ],
+    "current_code_locations": [],
+    "bottleneck": "固定预分配连续 KV buffer：无 paged/radix/defrag；无 token 级淘汰；K/V 量化粒度受限；跨请求前缀复用缺失",
+    "proposed_change": "P0-C (reuse/cost-aware idle eviction)",
+    "invariants": [
+      "active/protected KV 永不成为 victim",
+      "无跨 session/generation/model/adapter 错误复用（cache identity 完整）",
+      "无损候选输出 token ID 与基线完全一致",
+      "清空后资源返回预注册基线",
+      "trace-off lifecycle event 为 0"
+    ],
+    "implementation_steps": [],
+    "expected_metrics": [
+      "recompute_tokens",
+      "physical_kv_bytes",
+      "cache_hit_cells",
+      "internal_fragmentation",
+      "max_completed_sessions"
+    ],
+    "expected_gain_threshold": null,
+    "quality_risks": [
+      "有损候选：per-head 降级 token 级选择可能掉点",
+      "long-CoT 误差累积",
+      "needle 位置敏感"
+    ],
+    "performance_risks": [
+      "radix tree 维护开销",
+      "radix 命中率低时 overhead",
+      "FA 下分数输出通道成本"
+    ],
+    "minimal_reproducer": "W07_exact_prefix_4_sessions / W08_partial_prefix（见 workload_manifest.json）",
+    "rollback_condition": "任一 correctness/isolation 红线触发（active victim、错误复用、静默截断、泄漏）→ 关闭候选开关回退原行为",
+    "status": "DEFERRED_AFTER_SCORING",
+    "reason": "已有 lru（experimental 默认关）；真实并发 slot 均匀分配下收益稀释为 0%；仅池满防 OOM 场景有价值。"
+  },
+  {
+    "candidate_id": "C5_KV_QUANT_MIXED",
+    "route": "P1-E (per-layer/per-KV mixed precision via 现有 -ctk/-ctv)",
+    "paper_evidence": [
+      "KIVI ICML'24 (2402.02750)",
+      "KVQuant NeurIPS'24 (2401.18079)"
+    ],
+    "current_code_locations": [],
+    "bottleneck": "固定预分配连续 KV buffer：无 paged/radix/defrag；无 token 级淘汰；K/V 量化粒度受限；跨请求前缀复用缺失",
+    "proposed_change": "P1-E (per-layer/per-KV mixed precision via 现有 -ctk/-ctv)",
+    "invariants": [
+      "active/protected KV 永不成为 victim",
+      "无跨 session/generation/model/adapter 错误复用（cache identity 完整）",
+      "无损候选输出 token ID 与基线完全一致",
+      "清空后资源返回预注册基线",
+      "trace-off lifecycle event 为 0"
+    ],
+    "implementation_steps": [],
+    "expected_metrics": [
+      "recompute_tokens",
+      "physical_kv_bytes",
+      "cache_hit_cells",
+      "internal_fragmentation",
+      "max_completed_sessions"
+    ],
+    "expected_gain_threshold": null,
+    "quality_risks": [
+      "有损候选：per-head 降级 token 级选择可能掉点",
+      "long-CoT 误差累积",
+      "needle 位置敏感"
+    ],
+    "performance_risks": [
+      "radix tree 维护开销",
+      "radix 命中率低时 overhead",
+      "FA 下分数输出通道成本"
+    ],
+    "minimal_reproducer": "W07_exact_prefix_4_sessions / W08_partial_prefix（见 workload_manifest.json）",
+    "rollback_condition": "任一 correctness/isolation 红线触发（active victim、错误复用、静默截断、泄漏）→ 关闭候选开关回退原行为",
+    "status": "DEFERRED_AFTER_SCORING",
+    "reason": "现有 -ctk/-ctv 已支持 K/V 独立类型组合（Q8_0/Q4_1 等），属已有功能重测而非新实现（指令禁止仅重命名已有行为）；作为 C2 的对照基线使用。"
+  },
+  {
+    "candidate_id": "C6_VATTN_VMM",
+    "route": "P0-D (virtual-memory-backed allocation)",
+    "paper_evidence": [
+      "vAttention ASPLOS'25 (2405.04437)"
+    ],
+    "current_code_locations": [],
+    "bottleneck": "固定预分配连续 KV buffer：无 paged/radix/defrag；无 token 级淘汰；K/V 量化粒度受限；跨请求前缀复用缺失",
+    "proposed_change": "P0-D (virtual-memory-backed allocation)",
+    "invariants": [
+      "active/protected KV 永不成为 victim",
+      "无跨 session/generation/model/adapter 错误复用（cache identity 完整）",
+      "无损候选输出 token ID 与基线完全一致",
+      "清空后资源返回预注册基线",
+      "trace-off lifecycle event 为 0"
+    ],
+    "implementation_steps": [],
+    "expected_metrics": [
+      "recompute_tokens",
+      "physical_kv_bytes",
+      "cache_hit_cells",
+      "internal_fragmentation",
+      "max_completed_sessions"
+    ],
+    "expected_gain_threshold": null,
+    "quality_risks": [
+      "有损候选：per-head 降级 token 级选择可能掉点",
+      "long-CoT 误差累积",
+      "needle 位置敏感"
+    ],
+    "performance_risks": [
+      "radix tree 维护开销",
+      "radix 命中率低时 overhead",
+      "FA 下分数输出通道成本"
+    ],
+    "minimal_reproducer": "W07_exact_prefix_4_sessions / W08_partial_prefix（见 workload_manifest.json）",
+    "rollback_condition": "任一 correctness/isolation 红线触发（active victim、错误复用、静默截断、泄漏）→ 关闭候选开关回退原行为",
+    "status": "REJECT_UNSUPPORTED_HARDWARE",
+    "reason": "依赖 CUDA VMM API + NVIDIA 开源驱动修改（64KB/128KB/256KB 页），仅 CUDA 后端；记录 blocker：cuMemCreate/cuMemMap 驱动页粒度限制。"
+  }
+]

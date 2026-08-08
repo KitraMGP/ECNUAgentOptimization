@@ -1,0 +1,51 @@
+{
+  "phase": "E6.0",
+  "generated_at_utc": "2026-08-07T00:00:00Z",
+  "article_mcp_status": "AVAILABLE_BUT_LIMITED",
+  "minimum_paper_requirements": {
+    "candidates": 15,
+    "fulltext": 10,
+    "full_read": 8,
+    "deep_read": 5
+  },
+  "counts": {
+    "candidates_collected": 21,
+    "pdf_downloaded": 21,
+    "fulltext_read": 19,
+    "deep_read": 8,
+    "abstract_only": 2
+  },
+  "papers": [
+    {"id": "pagedattention", "title": "Efficient Memory Management for Large Language Model Serving with PagedAttention", "arxiv": "2309.06180", "venue": "SOSP 2023", "read_status": "FULL_TEXT_READ", "pdf_sha256": "55b3b324d779a67c59dac2519445e3b07c14e6ff5c656fadb47a3d7b5997469e", "notes": "notes/pagedattention.md", "candidate": "REJECT_INCOMPATIBLE_ARCHITECTURE (kernel rewrite needed)"},
+    {"id": "vattention", "title": "vAttention: Dynamic Memory Management for Serving LLMs without PagedAttention", "arxiv": "2405.04437", "venue": "ASPLOS 2025", "read_status": "FULL_TEXT_READ", "pdf_sha256": "89017c3e7f5900cdf2b7295d647fc19bf45e674dddd3525ba86a5f203861c701", "notes": "notes/vattention.md", "candidate": "REJECT_UNSUPPORTED_HARDWARE (CUDA VMM+driver)"},
+    {"id": "h2o", "title": "H2O: Heavy-Hitter Oracle for Efficient Generative Inference", "arxiv": "2306.14048", "venue": "NeurIPS 2023", "read_status": "FULL_TEXT_READ", "pdf_sha256": "f2d699db2c1fe34b53677067ba6f3b903a6f87dbd04e4f6ad5b9fa324cdb36df", "notes": "notes/h2o.md", "candidate": "REJECT_INCOMPATIBLE_ARCHITECTURE (per-head eviction vs token cells)"},
+    {"id": "snapkv", "title": "SnapKV: LLM Knows What You are Looking for Before Generation", "arxiv": "2404.14469", "venue": "NeurIPS 2024", "read_status": "FULL_TEXT_READ", "pdf_sha256": "d17ce59a5a3342c9b0560c3503b0136f794fae92910421aa07dbca32e4279bf4", "notes": "notes/snapkv.md", "candidate": "SELECTED (P1 lossy prototype)"},
+    {"id": "kivi", "title": "KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache", "arxiv": "2402.02750", "venue": "ICML 2024", "read_status": "FULL_TEXT_READ", "pdf_sha256": "df31ef32d71bfb280c533c5db8220cadf5ef42076bf45d82ba4c8da8e50ea5f4", "notes": "notes/kivi.md", "candidate": "REJECT (missing 2bit type/per-channel layout)"},
+    {"id": "kvquant", "title": "KVQuant: Towards 10 Million Context Length LLM Inference", "arxiv": "2401.18079", "venue": "NeurIPS 2024", "read_status": "FULL_TEXT_READ", "pdf_sha256": "7ca1001fee6be5013d40ebf00e81df3bb677c90f1feb5c78b413cba64589ecfc", "notes": "notes/kvquant.md", "candidate": "REJECT (calibration pipeline+new kernels)"},
+    {"id": "radixattention_sglang", "title": "SGLang: Efficient Execution of Structured Language Model Programs (RadixAttention)", "arxiv": "2312.07104", "venue": "SOSP 2024", "read_status": "FULL_TEXT_READ", "pdf_sha256": "161e0a0123a89cd8a57d68734ae704680b0e577fee41e1e7e1029c37a9d99b57", "notes": "notes/radixattention_sglang.md", "candidate": "SELECTED (P0 lossless, server-layer radix tree)"},
+    {"id": "quest", "title": "Quest: Query-Aware Sparsity for Efficient Long-Context LLM Inference", "arxiv": "2406.10774", "venue": "ICML 2024", "read_status": "FULL_TEXT_READ", "pdf_sha256": "93cda144859b4e38d595c42dbc578e4e0c8d436fa0891e3dfeb74716bacc4ce8", "notes": "notes/quest.md", "candidate": "REJECT_UNSUPPORTED_HARDWARE (kernel needed)"},
+    {"id": "chunkattention", "title": "ChunkAttention: Efficient Self-Attention with Prefix-Aware KV Cache", "arxiv": "2402.15220", "venue": "VENUE_UNVERIFIED", "read_status": "FULL_TEXT_READ", "pdf_sha256": "7201aa42e0f0020c", "notes": "notes/chunkattention.md", "candidate": "PARTIAL (prefix dedup feasible, TPP kernel not)"},
+    {"id": "infinigen", "title": "InfiniGen: Efficient Generative Inference with Dynamic KV Cache Management", "arxiv": "2406.19707", "venue": "VENUE_UNVERIFIED", "read_status": "FULL_TEXT_READ", "pdf_sha256": "267d689a1ded953f", "notes": "notes/infinigen.md", "candidate": "DEFERRED (long-term offload)"},
+    {"id": "cacheblend", "title": "CacheBlend: Fast LLM Serving for RAG with Cached Knowledge Fusion", "arxiv": "2405.16444", "venue": "EuroSys 2025", "read_status": "FULL_TEXT_READ", "pdf_sha256": "034b9f230930f20e", "notes": "notes/cacheblend.md", "candidate": "DEFERRED (mid-term P3)"},
+    {"id": "pyramidkv", "title": "PyramidKV: Dynamic KV Cache Compression based on Pyramidal Information Funneling", "arxiv": "2406.02069", "venue": "VENUE_UNVERIFIED", "read_status": "FULL_TEXT_READ", "pdf_sha256": "0bcd6c0fba461e76", "notes": "notes/pyramidkv.md", "candidate": "DEFERRED (P2 lossy)"},
+    {"id": "duoattention", "title": "DuoAttention: Efficient Long-Context LLM Inference with Retrieval and Streaming Heads", "arxiv": "2410.10819", "venue": "ICLR 2025", "read_status": "FULL_TEXT_READ", "pdf_sha256": "0c121d19e5092019", "notes": "notes/duoattention.md", "candidate": "DEFERRED (needs head-classification training)"},
+    {"id": "palu", "title": "Palu: Compressing KV-Cache with Low-Rank Projection", "arxiv": "2407.21118", "venue": "VENUE_UNVERIFIED", "read_status": "FULL_TEXT_READ", "pdf_sha256": "676754dec64711c3", "notes": "notes/palu.md", "candidate": "DEFERRED (architecture-level change)"},
+    {"id": "scissorhands", "title": "Scissorhands: Exploiting the Persistence of Importance Hypothesis", "arxiv": "2305.17118", "venue": "NeurIPS 2023", "read_status": "FULL_TEXT_READ", "pdf_sha256": "2b75201ee3a7f636", "notes": "notes/scissorhands.md", "candidate": "DEFERRED (P2 lossy, eviction+mask)"},
+    {"id": "memserve", "title": "MemServe: Context Caching for Disaggregated LLM Serving", "arxiv": "2406.17565", "venue": "VENUE_UNVERIFIED", "read_status": "FULL_TEXT_READ", "pdf_sha256": "a3023cef82e7ba13", "notes": "notes/memserve.md", "candidate": "REJECT_INCOMPATIBLE_ARCHITECTURE (disaggregated)"},
+    {"id": "leankv_diffkv", "title": "DiffKV: Differentiated Memory Management with Parallel KV Compaction", "arxiv": "2412.03131", "venue": "VENUE_UNVERIFIED", "read_status": "FULL_TEXT_READ", "pdf_sha256": "5e191c11d28a7d2e", "notes": "notes/leankv_diffkv.md", "candidate": "REJECT (needs paged+GPU memory manager)"},
+    {"id": "streamingllm", "title": "Efficient Streaming Language Models with Attention Sinks", "arxiv": "2309.17453", "venue": "ICLR 2024", "read_status": "FULL_TEXT_READ", "pdf_sha256": "e8a7de67c7c57642", "notes": "notes/streamingllm.md", "candidate": "DEFERRED (P2 lossy)"},
+    {"id": "tova", "title": "TOVA: Token Omission Via Attention", "arxiv": "2401.06104", "venue": "VENUE_UNVERIFIED", "read_status": "FULL_TEXT_READ", "pdf_sha256": "fe234eea437d5893", "notes": "notes/tova.md", "candidate": "DEFERRED (P2 lossy)"},
+    {"id": "lminfinite", "title": "LM-Infinite: Simple On-the-Fly Length Generalization", "arxiv": "2308.16137", "venue": "VENUE_UNVERIFIED", "read_status": "FULL_TEXT_READ", "pdf_sha256": "77ca6902d34c3ab3", "notes": "notes/lminfinite.md", "candidate": "DEFERRED (P2 lossy)"},
+    {"id": "vpid", "title": "vPID: Virtual Processing-In-Disk Architecture for Sub-Millisecond Multi-Model LLM Inference Switching", "doi": "10.32388/7mldm5", "venue": "PREPRINT", "read_status": "ABSTRACT_ONLY", "note": "via article-mcp Europe PMC; RTX4060 8GB, KV persistence O(1) context queries, 95-97% cache hit", "candidate": "NOT_APPLICABLE (external system)"}
+  ],
+  "article_mcp_calls_log": "benchmark/results/kv_optimization/article_mcp_log.json",
+  "download_note": "PDF 存 papers/kv-cache/pdf/（git 忽略）；SHA256 记录于本 manifest；文本提取存 llama.cpp/tmp/papertext/（git 忽略）",
+  "error_corrections": [
+    "2406.01142 实为中微子物理论文（DuoAttention 正确 ID 2410.10819，已重下）",
+    "2405.05331 实为凝聚态论文（LeanKV/DiffKV 正确 ID 2412.03131，已重下）",
+    "2407.03618 实为 BM25S 检索论文（Palu 正确 ID 2407.21118，已重下）",
+    "2501.11092 实为 Gegenbauer 数学论文（MemServe 正确 ID 2406.17565，已重下）",
+    "2504.07836 实为 AerialVG CV 论文（vCache 未重下，不纳入）",
+    "2405.08518 实为分布式优化论文（ScissorHands 正确 ID 2305.17118，已重下）"
+  ]
+}

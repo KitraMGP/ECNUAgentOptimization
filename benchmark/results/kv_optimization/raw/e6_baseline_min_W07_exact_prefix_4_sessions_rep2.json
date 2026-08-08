@@ -1,0 +1,93 @@
+{
+  "experiment_id": "e6_baseline_min_W07_exact_prefix_4_sessions_rep2",
+  "candidate_id": "BASELINE",
+  "variant": "baseline_or_candidate",
+  "workload_id": "W07_exact_prefix_4_sessions",
+  "repetition": 2,
+  "git_commit": "69711a2d6bd67e0d4f1a8a6c14c7d61a32110b0f",
+  "model_sha256": "de8e96cd0d0c358487091aaaed1346bc02e61da3d4b412c833662702e233e78c",
+  "config_sha256": "4d3ad5a92a0d534596b3aebc53429b840e9374acb27687df94f356882158ab4b",
+  "start_time_utc": "2026-08-07T16:18:46Z",
+  "end_time_utc": "2026-08-07T16:18:50Z",
+  "exit_code": 0,
+  "timeout": false,
+  "completed_sessions": 4,
+  "failed_sessions": 0,
+  "rejected_sessions": 0,
+  "prompt_tokens": 5708,
+  "generated_tokens": 173,
+  "output_token_sha256": "2430bd12abcaf66843e5d4c45d6feb63de8e981fa9c533d4e32ef12f68711d1d",
+  "peak_physical_kv_bytes": null,
+  "final_physical_kv_bytes": 192577536,
+  "logical_kv_tokens": 5708,
+  "unique_physical_kv_tokens": 5877,
+  "internal_fragmentation_bytes": null,
+  "stranded_capacity_bytes": null,
+  "shared_blocks": null,
+  "cow_operations": null,
+  "prefix_hit_tokens": 5692,
+  "recompute_tokens": 16,
+  "purge_count": 0,
+  "active_victim_count": 0,
+  "cross_session_mismatch_count": 0,
+  "prefill_tokens_per_second": 3183.758519824313,
+  "decode_tokens_per_second": 96.49443306405155,
+  "request_latency_ms": 1402.6616215705872,
+  "quality_score": null,
+  "quality_gate": "PASS_HOLD_REJECT_NOT_APPLICABLE",
+  "notes": [
+    "prefix_pattern=exact_common_prefix",
+    "concurrency=4",
+    "sessions=4"
+  ],
+  "kv_stats_snapshot": {
+    "schema_version": 1,
+    "capacity_bytes": 268435456,
+    "used_bytes": 192577536,
+    "used_bytes_valid": true,
+    "capacity_cells": 8192,
+    "used_cells": 5877,
+    "active_sequences": 4,
+    "shared_cells": 0,
+    "physical_sharing": false,
+    "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+  },
+  "per_request": [
+    {
+      "status": "ok",
+      "content": "The state value is confirmed as **S0**.",
+      "prompt_tokens": 1427,
+      "generated_tokens": 11,
+      "cached_tokens": 1423,
+      "latency_ms": 331.00318908691406,
+      "output_sha256": "c8ec6fe8791de48718ed37a96329c680e6931bb1f80c641e0ace8d0275b7c5cd"
+    },
+    {
+      "status": "ok",
+      "content": "Based on the text provided, the state value is confirmed as:\n\n**S1**\n\nThe text explicitly contains the tag `TAG: S1` and the instruction `END STATE: S1`, indicating that the final state of the system described is **S1**.",
+      "prompt_tokens": 1427,
+      "generated_tokens": 56,
+      "cached_tokens": 1423,
+      "latency_ms": 1792.4559116363525,
+      "output_sha256": "1a9095d17e51be0b8ad020a94406e9e3695ae924ac3e6f277bafc2218ea3ae2a"
+    },
+    {
+      "status": "ok",
+      "content": "Based on the text provided, the state value is confirmed as:\n\n**S2**\n\nThe text explicitly contains the tags `TAG: S2` and `END STATE: S2`, indicating that the final state of the system described is **S2**.",
+      "prompt_tokens": 1427,
+      "generated_tokens": 54,
+      "cached_tokens": 1423,
+      "latency_ms": 1759.7951889038086,
+      "output_sha256": "013afd2bf3b2bd789e9615637351c7722a11bec882bb1e4536e5012148573247"
+    },
+    {
+      "status": "ok",
+      "content": "Based on the text provided, the state value is **S3**.\n\nThe text explicitly contains the tag `TAG: S3` and the end state `END STATE: S3`. Therefore, the confirmed state value is:\n\n**S3**",
+      "prompt_tokens": 1427,
+      "generated_tokens": 52,
+      "cached_tokens": 1423,
+      "latency_ms": 1727.3921966552734,
+      "output_sha256": "974f4a8a2dc3e05f6732f1018e8b0ece6bff2aef97e44cd2e752be5456b4f2a4"
+    }
+  ]
+}

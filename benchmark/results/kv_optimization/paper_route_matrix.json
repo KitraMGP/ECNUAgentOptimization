@@ -1,0 +1,145 @@
+{
+  "generated_at_utc": "2026-08-08T00:14:22Z",
+  "papers": [
+    {
+      "id": "pagedattention",
+      "route": "P0-A",
+      "feasible_in_llamacpp": "no",
+      "reason": "kernel rewrite for all backends",
+      "candidate_id": "C3"
+    },
+    {
+      "id": "vattention",
+      "route": "P0-D",
+      "feasible_in_llamacpp": "no",
+      "reason": "CUDA VMM + driver mod",
+      "candidate_id": "C6"
+    },
+    {
+      "id": "h2o",
+      "route": "P2-H",
+      "feasible_in_llamacpp": "partial",
+      "reason": "per-head eviction conflicts token cells; token-level approx possible",
+      "candidate_id": "C2_sibling"
+    },
+    {
+      "id": "snapkv",
+      "route": "P2-G",
+      "feasible_in_llamacpp": "yes",
+      "reason": "prefill-once compression, zero decode overhead",
+      "candidate_id": "C2"
+    },
+    {
+      "id": "kivi",
+      "route": "P1-E",
+      "feasible_in_llamacpp": "partial",
+      "reason": "no 2bit type/per-channel layout; Q4_1 approx",
+      "candidate_id": "C5"
+    },
+    {
+      "id": "kvquant",
+      "route": "P1-E",
+      "feasible_in_llamacpp": "partial",
+      "reason": "needs calibration pipeline + new kernels; IQ4_NL approx",
+      "candidate_id": "C5"
+    },
+    {
+      "id": "radixattention_sglang",
+      "route": "P0-B",
+      "feasible_in_llamacpp": "yes",
+      "reason": "CPU-side radix tree over unified pool, no kernel change",
+      "candidate_id": "C1"
+    },
+    {
+      "id": "quest",
+      "route": "P2-J",
+      "feasible_in_llamacpp": "partial",
+      "reason": "stage1 feasible, stage2 needs sparse-load kernel",
+      "candidate_id": "none"
+    },
+    {
+      "id": "chunkattention",
+      "route": "P0-B",
+      "feasible_in_llamacpp": "partial",
+      "reason": "prefix dedup feasible; TPP kernel not",
+      "candidate_id": "C1_sibling"
+    },
+    {
+      "id": "infinigen",
+      "route": "P3-K",
+      "feasible_in_llamacpp": "partial",
+      "reason": "long-term offload; SVD transform standalone",
+      "candidate_id": "none"
+    },
+    {
+      "id": "cacheblend",
+      "route": "P3-M",
+      "feasible_in_llamacpp": "partial",
+      "reason": "chunk KV store + selective recompute, mid-term",
+      "candidate_id": "none"
+    },
+    {
+      "id": "pyramidkv",
+      "route": "P2-G",
+      "feasible_in_llamacpp": "yes",
+      "reason": "layer budget + original rotary positions compatible",
+      "candidate_id": "C2_sibling"
+    },
+    {
+      "id": "duoattention",
+      "route": "P2-H",
+      "feasible_in_llamacpp": "partial",
+      "reason": "needs head-classification training toolchain",
+      "candidate_id": "none"
+    },
+    {
+      "id": "palu",
+      "route": "P3-L",
+      "feasible_in_llamacpp": "partial",
+      "reason": "architecture-level change + new kernels",
+      "candidate_id": "none"
+    },
+    {
+      "id": "scissorhands",
+      "route": "P2-H",
+      "feasible_in_llamacpp": "yes",
+      "reason": "eviction+mask, medium complexity",
+      "candidate_id": "C2_sibling"
+    },
+    {
+      "id": "memserve",
+      "route": "P0-B",
+      "feasible_in_llamacpp": "no",
+      "reason": "disaggregated architecture",
+      "candidate_id": "none"
+    },
+    {
+      "id": "leankv_diffkv",
+      "route": "P1-F",
+      "feasible_in_llamacpp": "no",
+      "reason": "needs paged + GPU memory manager",
+      "candidate_id": "none"
+    },
+    {
+      "id": "streamingllm",
+      "route": "P2-G",
+      "feasible_in_llamacpp": "yes",
+      "reason": "sink cells + rolling window, medium",
+      "candidate_id": "C2_sibling"
+    },
+    {
+      "id": "tova",
+      "route": "P2-H",
+      "feasible_in_llamacpp": "no",
+      "reason": "needs position remap + token-level eviction",
+      "candidate_id": "none"
+    },
+    {
+      "id": "lminfinite",
+      "route": "P2-G",
+      "feasible_in_llamacpp": "yes",
+      "reason": "lambda mask + RoPE clamp, medium",
+      "candidate_id": "C2_sibling"
+    }
+  ]
+}

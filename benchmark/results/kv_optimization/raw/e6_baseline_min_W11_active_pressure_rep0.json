@@ -1,0 +1,102 @@
+{
+  "experiment_id": "e6_baseline_min_W11_active_pressure_rep0",
+  "candidate_id": "BASELINE",
+  "variant": "baseline_or_candidate",
+  "workload_id": "W11_active_pressure",
+  "repetition": 0,
+  "git_commit": "69711a2d6bd67e0d4f1a8a6c14c7d61a32110b0f",
+  "model_sha256": "de8e96cd0d0c358487091aaaed1346bc02e61da3d4b412c833662702e233e78c",
+  "config_sha256": "db77d53eb9dd5154e8f8f022bb530ef72212cff4eda7f02c2c2a2b07e2486492",
+  "start_time_utc": "2026-08-07T16:20:14Z",
+  "end_time_utc": "2026-08-07T16:20:19Z",
+  "exit_code": 0,
+  "timeout": false,
+  "completed_sessions": 5,
+  "failed_sessions": 0,
+  "rejected_sessions": 0,
+  "prompt_tokens": 5750,
+  "generated_tokens": 316,
+  "output_token_sha256": "080ae1d42a9549fec907a911152834845496544b306eb03d2e5222881ba0e103",
+  "peak_physical_kv_bytes": null,
+  "final_physical_kv_bytes": 158990336,
+  "logical_kv_tokens": 5750,
+  "unique_physical_kv_tokens": 4852,
+  "internal_fragmentation_bytes": null,
+  "stranded_capacity_bytes": null,
+  "shared_blocks": null,
+  "cow_operations": null,
+  "prefix_hit_tokens": 634,
+  "recompute_tokens": 5116,
+  "purge_count": 0,
+  "active_victim_count": 0,
+  "cross_session_mismatch_count": 0,
+  "prefill_tokens_per_second": 1383.6874015114665,
+  "decode_tokens_per_second": 76.04264676132581,
+  "request_latency_ms": 3386.402702331543,
+  "quality_score": null,
+  "quality_gate": "PASS_HOLD_REJECT_NOT_APPLICABLE",
+  "notes": [
+    "prefix_pattern=active_pressure",
+    "concurrency=4",
+    "sessions=5"
+  ],
+  "kv_stats_snapshot": {
+    "schema_version": 1,
+    "capacity_bytes": 268435456,
+    "used_bytes": 158990336,
+    "used_bytes_valid": true,
+    "capacity_cells": 8192,
+    "used_cells": 4852,
+    "active_sequences": 4,
+    "shared_cells": 0,
+    "physical_sharing": false,
+    "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+  },
+  "per_request": [
+    {
+      "status": "ok",
+      "content": "The state value is confirmed as **S0**.\n\nThe input text contains a repeated list of monitoring activities from various locations (Corvus Delta, Meridian Plateau, Azura Harbor, etc.), but the specific tags and state definitions provided at the beginning and end of the text are consistent:\n*   **TAG",
+      "prompt_tokens": 1150,
+      "generated_tokens": 64,
+      "cached_tokens": 0,
+      "latency_ms": 3300.814151763916,
+      "output_sha256": "c7300a6170f2a4fcb9a195f82f80cff022379a1693eacc7a202dd90c6fcf5dbe"
+    },
+    {
+      "status": "ok",
+      "content": "Based on the text provided, the state value is explicitly defined at the beginning and end of the input block.\n\nThe text contains the following directives:\n*   `TAG: S1`\n*   `END STATE: S1`\n\nTherefore, the confirmed state value is:\n**S1**",
+      "prompt_tokens": 1150,
+      "generated_tokens": 64,
+      "cached_tokens": 0,
+      "latency_ms": 3270.031690597534,
+      "output_sha256": "a8d085d97163651a1d9cc435372e6fe84069348c91a4da6dcd2c9d3d723e0dc1"
+    },
+    {
+      "status": "ok",
+      "content": "Based on the text provided, the state value is explicitly defined at the beginning and end of the input block.\n\nThe text contains the following directives:\n`TAG: S2`\n`END STATE: S2`\n\nTherefore, the confirmed state value is:\n**S2**",
+      "prompt_tokens": 1150,
+      "generated_tokens": 60,
+      "cached_tokens": 0,
+      "latency_ms": 2937.3438358306885,
+      "output_sha256": "45e9b08e9e27aa903224463314a2783010fde560f2f0d617f736fc2494093fc2"
+    },
+    {
+      "status": "ok",
+      "content": "The state value is **S3**.\n\nThe input text contains a repeated list of monitoring activities from various locations (Corvus Delta, Meridian Plateau, etc.), but the specific tags and state definitions provided at the end of the text are:\n*   **TAG**: S3\n*   **END STATE",
+      "prompt_tokens": 1150,
+      "generated_tokens": 64,
+      "cached_tokens": 634,
+      "latency_ms": 4154.705047607422,
+      "output_sha256": "b15963cdf23f77637cecec2d32fe62e170838a4693414f5667cb270002773eb1"
+    },
+    {
+      "status": "ok",
+      "content": "Based on the text provided, the state value is explicitly defined at the end of the input block:\n\n**S4**\n\nThe text contains the specific tag and state declaration:\n`TAG: S4`\n`END STATE: S4`\n\nTherefore, the confirmed state value is **S4**.",
+      "prompt_tokens": 1150,
+      "generated_tokens": 64,
+      "cached_tokens": 0,
+      "latency_ms": 3269.1187858581543,
+      "output_sha256": "7e0d0eeb46693dd8773c383c656014e8f36b7f916ccb8b5a9f2726c85be59c3a"
+    }
+  ]
+}

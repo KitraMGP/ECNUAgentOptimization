@@ -1,0 +1,40 @@
+{
+  "experiment_id": "e6_c1_probe_on",
+  "candidate_id": "C1_RADIX_PREFIX_SHARING",
+  "variant": "on",
+  "workload_id": "C1_PROBE",
+  "repetition": 0,
+  "git_commit": "69711a2d6bd67e0d4f1a8a6c14c7d61a32110b0f",
+  "mode": "on",
+  "req1": {
+    "status": "ok",
+    "prompt_tokens": 2495,
+    "cache_n_past": 0,
+    "prompt_n": 1240,
+    "completion_tokens": 16,
+    "output": "\nAppend observation X: flow 12.4 m3/s, temp",
+    "output_sha256": "8a85763bb945eb23b4591bdfa5ca0a705b5725111cef795c63b92c9a0004dd75"
+  },
+  "req2": {
+    "status": "ok",
+    "prompt_tokens": 2495,
+    "cache_n_past": 0,
+    "prompt_n": 1240,
+    "completion_tokens": 16,
+    "output": "\nAppend observation Y: flow 10.5 m3/s, temp",
+    "output_sha256": "bd505e40cdf08fa469e0b678e3b643637af95858fb38d0b1431f4215c26cbfae"
+  },
+  "kv_stats": {
+    "schema_version": 1,
+    "capacity_bytes": 268435456,
+    "used_bytes": 82247680,
+    "used_bytes_valid": true,
+    "capacity_cells": 8192,
+    "used_cells": 2510,
+    "active_sequences": 2,
+    "shared_cells": 0,
+    "physical_sharing": false,
+    "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+  },
+  "lossless_match": null
+}

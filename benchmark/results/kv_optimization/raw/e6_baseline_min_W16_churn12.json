@@ -1,0 +1,260 @@
+{
+  "experiment_id": "e6_baseline_min_W16_churn12",
+  "candidate_id": "BASELINE",
+  "variant": "baseline",
+  "workload_id": "W16",
+  "repetition": 0,
+  "git_commit": "69711a2d6bd67e0d4f1a8a6c14c7d61a32110b0f",
+  "model_sha256": "de8e96cd0d0c358487091aaaed1346bc02e61da3d4b412c833662702e233e78c",
+  "config_sha256": "",
+  "start_time_utc": "2026-08-07T16:19:01Z",
+  "end_time_utc": "2026-08-07T16:19:54Z",
+  "exit_code": 0,
+  "timeout": false,
+  "completed_sessions": 48,
+  "failed_sessions": 0,
+  "rejected_sessions": 0,
+  "prompt_tokens": 0,
+  "generated_tokens": 0,
+  "output_token_sha256": "",
+  "peak_physical_kv_bytes": null,
+  "final_physical_kv_bytes": 0,
+  "logical_kv_tokens": null,
+  "unique_physical_kv_tokens": 0,
+  "internal_fragmentation_bytes": null,
+  "stranded_capacity_bytes": null,
+  "shared_blocks": null,
+  "cow_operations": null,
+  "prefix_hit_tokens": 0,
+  "recompute_tokens": 0,
+  "purge_count": 0,
+  "active_victim_count": 0,
+  "cross_session_mismatch_count": 0,
+  "prefill_tokens_per_second": null,
+  "decode_tokens_per_second": null,
+  "request_latency_ms": null,
+  "quality_score": null,
+  "quality_gate": "PASS_HOLD_REJECT_NOT_APPLICABLE",
+  "notes": [
+    "cycles=12",
+    "churn endurance"
+  ],
+  "kv_stats_snapshot": {
+    "schema_version": 1,
+    "capacity_bytes": 268435456,
+    "used_bytes": 0,
+    "used_bytes_valid": true,
+    "capacity_cells": 8192,
+    "used_cells": 0,
+    "active_sequences": 0,
+    "shared_cells": 0,
+    "physical_sharing": false,
+    "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+  },
+  "cycle_samples": [
+    {
+      "cycle": 0,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 84344832,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 2574,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    },
+    {
+      "cycle": 1,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 89489408,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 2731,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    },
+    {
+      "cycle": 2,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 96731136,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 2952,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    },
+    {
+      "cycle": 3,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 102367232,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 3124,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    },
+    {
+      "cycle": 4,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 109445120,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 3340,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    },
+    {
+      "cycle": 5,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 114294784,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 3488,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    },
+    {
+      "cycle": 6,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 120422400,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 3675,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    },
+    {
+      "cycle": 7,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 127107072,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 3879,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    },
+    {
+      "cycle": 8,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 131235840,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 4005,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    },
+    {
+      "cycle": 9,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 138936320,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 4240,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    },
+    {
+      "cycle": 10,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 144670720,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 4415,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    },
+    {
+      "cycle": 11,
+      "samples": [
+        {
+          "schema_version": 1,
+          "capacity_bytes": 268435456,
+          "used_bytes": 151420928,
+          "used_bytes_valid": true,
+          "capacity_cells": 8192,
+          "used_cells": 4621,
+          "active_sequences": 4,
+          "shared_cells": 0,
+          "physical_sharing": false,
+          "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+        }
+      ]
+    }
+  ]
+}

@@ -20,3 +20,7 @@ venv/
 
 # 运行期临时输出（正式基线归档至 benchmark/baseline/）
 benchmark/results/
+!benchmark/results/kv_optimization/
+!benchmark/results/kv_optimization/*.json
+!benchmark/results/kv_optimization/raw/
+papers/kv-cache/pdf/
