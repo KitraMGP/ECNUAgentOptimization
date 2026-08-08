@@ -42,7 +42,7 @@ pkill -x llama-server            # 停止（SIGTERM → graceful，15s 超时）
 |---|---|
 | 二进制 `llama.cpp/build-cuda/bin/llama-server` | `74a6b18bf2af8fc55a35cc0fc445f8722faa8c4400c5e2dd3cb8665af5dd6336` |
 | 模型 `models/qwen3-5-4B-Q4_K_M.gguf` | `de8e96cd0d0c358487091aaaed1346bc02e61da3d4b412c833662702e233e78c` |
-| 生产配置 `benchmark/configs/qwen35_4b_q8_production.yaml` | `d860ca4e959596ceef0cb1a6d40009c366957f6d1ba09fa09d72facd10048ae1` |
+| 生产配置 `benchmark/configs/qwen35_4b_q8_production.yaml` | `868f85a93fc3dcd56426cffbdf4084cb5e3b39684f6497305651fd3c943e0dc1` |
 
 ## 6. 正常指标范围（q8_0，8GB 卡）
 
