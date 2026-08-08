@@ -1,0 +1,117 @@
+{
+  "reps": 30,
+  "warmup": 5,
+  "git": "8d1b2b1e144e72909d69b5f1a2c558a88acc4715",
+  "p1_t1": {
+    "off_e2e": {
+      "n": 30,
+      "median": 7.12,
+      "p95": 12.72,
+      "mean": 7.88
+    },
+    "on_e2e": {
+      "n": 30,
+      "median": 7.42,
+      "p95": 9.18,
+      "mean": 7.67
+    },
+    "off_prompt_n_t0": {
+      "n": 30,
+      "median": 179.0,
+      "p95": 179,
+      "mean": 179
+    },
+    "on_prompt_n_t0": {
+      "n": 30,
+      "median": 24.0,
+      "p95": 24,
+      "mean": 24
+    },
+    "off_failed": 0,
+    "on_failed": 0
+  },
+  "p1_t4": {
+    "off_e2e": {
+      "n": 30,
+      "median": 27.7,
+      "p95": 34.92,
+      "mean": 29.03
+    },
+    "on_e2e": {
+      "n": 30,
+      "median": 14.99,
+      "p95": 17.62,
+      "mean": 15.63
+    },
+    "off_prompt_n_t0": {
+      "n": 30,
+      "median": 179.0,
+      "p95": 179,
+      "mean": 179
+    },
+    "on_prompt_n_t0": {
+      "n": 30,
+      "median": 24.0,
+      "p95": 24,
+      "mean": 24
+    },
+    "off_failed": 0,
+    "on_failed": 0
+  },
+  "p4_t1": {
+    "off_e2e": {
+      "n": 30,
+      "median": 52.7,
+      "p95": 55.97,
+      "mean": 53.17
+    },
+    "on_e2e": {
+      "n": 30,
+      "median": 9.95,
+      "p95": 10.44,
+      "mean": 9.9
+    },
+    "off_prompt_n_t0": {
+      "n": 30,
+      "median": 647.0,
+      "p95": 647,
+      "mean": 647
+    },
+    "on_prompt_n_t0": {
+      "n": 30,
+      "median": 24.0,
+      "p95": 24,
+      "mean": 24
+    },
+    "off_failed": 0,
+    "on_failed": 0
+  },
+  "p4_t4": {
+    "off_e2e": {
+      "n": 30,
+      "median": 229.63,
+      "p95": 233.65,
+      "mean": 229.95
+    },
+    "on_e2e": {
+      "n": 30,
+      "median": 36.49,
+      "p95": 37.44,
+      "mean": 36.39
+    },
+    "off_prompt_n_t0": {
+      "n": 30,
+      "median": 647.0,
+      "p95": 647,
+      "mean": 647
+    },
+    "on_prompt_n_t0": {
+      "n": 30,
+      "median": 24.0,
+      "p95": 24,
+      "mean": 24
+    },
+    "off_failed": 0,
+    "on_failed": 0
+  }
+}
