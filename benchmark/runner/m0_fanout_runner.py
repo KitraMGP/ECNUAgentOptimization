@@ -49,6 +49,15 @@ class ServerError(Exception):
     """server 启动/health/端点失败（基础设施归因）。"""
 
 
+class CalibrationLengthMissing(Exception):
+    """校准长度缺失：配置/内部不变量（v58）。
+
+    独立于 ServerError——不进入 _INFRA_EXCEPTIONS（warmup 不吞），任何路径
+    （warmup/formal）均不可恢复，上层 run_safe 归 INTERNAL_RUNNER_ERROR +
+    EXIT_SOFTWARE(70)。
+    """
+
+
 _INFRA_EXCEPTIONS = (OSError, openai.OpenAIError, ServerError)
 
 SEED = 42
@@ -155,7 +164,14 @@ class M0FanoutRunner:
         self.branch_n_predict = branch_n_predict
         self.tool_rounds = tool_rounds
         self.out_path = out_path
-        self.tmp_dir = tmp_dir or tempfile.mkdtemp(prefix="m0_fanout_")
+        if tmp_dir:
+            # v58：--tmp-dir 视为父目录，创建本 run 专用唯一子目录（不污染、
+            # 绝不递归删除用户提供的既有共享目录；cleanup 只删自己创建的专用目录）
+            self.tmp_dir = os.path.join(
+                tmp_dir, f"m0_fanout_{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}")
+            os.makedirs(self.tmp_dir, exist_ok=True)
+        else:
+            self.tmp_dir = tempfile.mkdtemp(prefix="m0_fanout_")
         self.ngl = ngl
         self.adapter_cls = adapter_cls
         self._next_port = port_base
@@ -255,7 +271,7 @@ class M0FanoutRunner:
                 self._server_meta[tag] = {
                     "port": port,
                     "pid": pid,
-                    "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "started_at": sch.now_utc(),  # v58：RFC3339 UTC（Z 后缀）
                     "log_path": log_path,
                 }
                 return adapter
@@ -459,8 +475,11 @@ class M0FanoutRunner:
 
         启动失败（重试 3 次后）→ 立即停止验证阶段，返回不完整（上层归因
         PREFLIGHT_INFRA / partial）。
+        v58：函数开始清空 self.decision_sessions；每完成一个 session 立即同步
+        （异常中断时已完成 session 保留在 self.decision_sessions，供上层构造
+        partial 证据）。
         """
-        sessions: List[Dict[str, Any]] = []
+        self.decision_sessions = []
         for s in range(VALIDATION_SESSIONS):
             # v54：session 0 → control off、session 1 → control on（G-M0-1 验证
             # 不依赖 control 开关，两开关各验证一次更完整）
@@ -472,13 +491,14 @@ class M0FanoutRunner:
                 break
             try:
                 recs = self._run_decision_session(adapter.port)
-                sessions.append(self._session_from_recs(recs, control))
             finally:
                 self._stop_server()
-        complete = len(sessions) == VALIDATION_SESSIONS and all(
+            # v58：session 完成立即同步（异常时本 session 不 append，已完成保留）
+            self.decision_sessions.append(self._session_from_recs(recs, control))
+        complete = len(self.decision_sessions) == VALIDATION_SESSIONS and all(
             s["requests"] >= VALIDATION_REQUESTS and s["error_count"] == 0
-            for s in sessions)
-        return complete, sessions
+            for s in self.decision_sessions)
+        return complete, self.decision_sessions
 
     @staticmethod
     def _session_from_recs(recs: List[Dict[str, Any]], control: str) -> Dict[str, Any]:
@@ -683,7 +703,8 @@ class M0FanoutRunner:
         # （apply-template+tokenize），禁止 BUCKET_TARGETS 近似值落结果。
         cal = self.calibrated_lengths.get((bucket, fanout))
         if cal is None:
-            raise ServerError(f"校准长度缺失: {bucket}/fanout={fanout}（校准阶段必须先行）")
+            raise CalibrationLengthMissing(
+                f"校准长度缺失: {bucket}/fanout={fanout}（校准阶段必须先行，v58）")
         self._last_prefix_len = int(cal["prefix"])
         self._last_branch_len = int(cal["branch"])
         # Critical 1：每个 formal rep 独立 begin_run/end_run 边界（KV 快照按

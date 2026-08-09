@@ -111,7 +111,9 @@ class TestSmoke:
         assert isinstance(rep["calibrated_lengths"], dict)
         assert isinstance(rep["preflight_rejections"], list)
         dv = rep["decision_validation"]
-        assert dv["complete"] is False or dv["complete"] is True
+        # v58：标准结构 sessions/total_valid_rate/partial（无第二 schema complete）
+        assert set(dv.keys()) == {"sessions", "total_valid_rate", "partial"}
+        assert isinstance(dv["partial"], bool)
         assert isinstance(dv["sessions"], list) and len(dv["sessions"]) <= 2
         for s in dv["sessions"]:
             assert "representative_output" in s and "representative_output_sha256" in s
@@ -219,7 +221,7 @@ class TestSmoke:
     # ---- v57 审查（Medium 3）：tmp 仅成功写盘后且非 --keep-tmp 才删除 ----
 
     def test_main_success_cleans_tmp(self, tmp_path, fake_adapter_cls):
-        """报告成功写盘且非 --keep-tmp → tmp-dir 被删除。"""
+        """报告成功写盘且非 --keep-tmp → 本 run 唯一子目录被删除（v58）。"""
         bin_p = tmp_path / "llama-server"
         model_p = tmp_path / "mock.gguf"
         bin_p.write_text("#!/bin/sh\n")
@@ -229,7 +231,9 @@ class TestSmoke:
                    "--out", str(tmp_path / "rep.json"),
                    "--tmp-dir", str(tmp_dir), "--run-id", "cli-run"])
         assert rc == 0
-        assert not os.path.isdir(tmp_dir)
+        # v58：--tmp-dir 视为父目录——父目录本身保留、仅本 run 子目录被删
+        assert os.path.isdir(tmp_dir)
+        assert not os.path.isdir(tmp_dir / "m0_cal_cli-run")
 
     def test_main_keep_tmp_preserves(self, tmp_path, fake_adapter_cls):
         """--keep-tmp → tmp-dir 保留。"""
@@ -243,6 +247,8 @@ class TestSmoke:
                    "--tmp-dir", str(tmp_dir), "--run-id", "cli-run",
                    "--keep-tmp"])
         assert rc == 0
+        # v58：keep-tmp 保留本 run 唯一子目录（父目录为共享父级，保留）
+        assert os.path.isdir(tmp_dir / "m0_cal_cli-run")
         assert os.path.isdir(tmp_dir)
 
     def test_main_report_write_failure_keeps_tmp(self, tmp_path, fake_adapter_cls):
@@ -319,20 +325,32 @@ class TestSmoke:
 
     def test_dv_failure_preserves_partial_sessions(self, tmp_path, fake_adapter_cls,
                                                    monkeypatch):
-        """decision_validation 中途失败：保留已收集 sessions（partial）与结构化 error。"""
-        def _dv_fail_after_partial(self):
-            self.decision_sessions = [sch.build_decision_session(
-                requests=10, valid=8, invalid=2, error_count=0,
-                representative_output="ACTION: branch(b1)")]
-            raise RuntimeError("mock dv boom")
+        """decision_validation 中途失败：保留已收集 sessions（partial）与结构化 error。
 
-        monkeypatch.setattr(m0r.M0FanoutRunner, "run_decision_validation",
-                            _dv_fail_after_partial)
+        v58：不再 monkeypatch 整方法手写属性——只替换子方法 _run_decision_session
+        （真实 run_decision_validation 流程：session 0 完成、session 1 中途抛异常），
+        report 落标准结构（sessions/total_valid_rate/partial，无第二 schema）。
+        """
+        calls = {"n": 0}
+
+        def fake_run_session(self, port):
+            calls["n"] += 1
+            if calls["n"] == 2:  # session 1（control=on）中途抛异常
+                raise RuntimeError("mock dv boom")
+            return [dict(ok=True, error=None, finish_reason="stop",
+                         text="ACTION: branch(b1)")] * 10
+
+        monkeypatch.setattr(m0r.M0FanoutRunner, "_run_decision_session", fake_run_session)
         rep = run_short_calibration(**cal_args(tmp_path))
-        assert rep["decision_validation"]["complete"] is False
-        assert len(rep["decision_validation"]["sessions"]) == 1
+        dv = rep["decision_validation"]
+        assert set(dv.keys()) == {"sessions", "total_valid_rate", "partial"}
+        assert "complete" not in dv  # v58：不造第二 schema（由 partial 派生）
+        assert dv["partial"] is True
+        assert len(dv["sessions"]) == 1
+        assert dv["sessions"][0]["requests"] == 10
         assert rep["errors"][0]["stage"] == "decision_validation"
         assert rep["errors"][0]["count"] == 1
+        assert rep["errors"][0]["code"] == "validation_incomplete"
 
     def test_pid_alive_semantics(self):
         import os as _os

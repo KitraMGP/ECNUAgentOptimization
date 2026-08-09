@@ -58,7 +58,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                     help="llama-server 可执行文件路径")
     ap.add_argument("--model", default=DEFAULT_MODEL, help="GGUF 模型路径")
     ap.add_argument("--out", default="", help="报告 JSON 输出路径（默认 results/ 下派生）")
-    ap.add_argument("--tmp-dir", default="", help="server 日志/临时目录（默认 results/m0_cal_<ts>）")
+    ap.add_argument("--tmp-dir", default="",
+                    help="临时文件父目录（v58：视为父目录、创建本 run 唯一子目录；"
+                         "cleanup 只删子目录，绝不递归删除用户既有共享目录）")
     ap.add_argument("--ctx-size", type=int, default=4096)
     ap.add_argument("--ngl", type=int, default=99)
     ap.add_argument("--run-id", default="", help="run_id（默认 m0-cal-<model_id>-<ts>）")
@@ -162,13 +164,26 @@ def _server_logs_summary(runner: M0FanoutRunner, run_id: str) -> List[Dict[str, 
 
 
 def _read_log_refresh(log_path: str, fallback: str) -> str:
-    """停止后刷新：优先重新读盘（完整日志），读失败回退启动期快照。"""
-    if log_path:
-        try:
-            with open(log_path, encoding="utf-8", errors="replace") as f:
-                return f.read()
-        except OSError:
-            pass
+    """停止后刷新：流式筛选关键行（v58，不整文件 f.read），读失败回退启动期快照。
+
+    关键行 = 校准/验证/探针归因用 pattern（RS/KV buffer、capability、启动成功等）
+    或诊断行；输出仍为 str，与 _grep_from_text 兼容。
+    """
+    if not log_path:
+        return fallback
+    keys = ("rs buffer size", "kv buffer size", "capability rejected",
+            "server is listening", "build:", "kv self size", "kv unified size",
+            "kv prefix share", "memory_breakdown", "slot save path", "n_ctx")
+    try:
+        out: List[str] = []
+        with open(log_path, encoding="utf-8", errors="replace") as f:
+            for ln in f:
+                low = ln.lower()
+                if any(k in low for k in keys):
+                    out.append(ln.rstrip("\n"))
+        return "\n".join(out)
+    except OSError:
+        pass
     return fallback
 
 
@@ -280,7 +295,10 @@ def run_short_calibration(
         # ---- 步骤 2：decision-validation（off/on 各一 session，每 session ≥10） ----
         try:
             complete, sessions = r.run_decision_validation()
-            report["decision_validation"] = {"complete": complete, "sessions": sessions}
+            # v58：统一 sch.build_decision_validation 标准结构
+            # （sessions + total_valid_rate + partial），不造第二 schema
+            report["decision_validation"] = sch.build_decision_validation(
+                sessions, partial=not complete)
             report["rs_observations"]["dv"] = {}
             for i, s in enumerate(sessions):
                 ctl = s.get("control", f"dv{i}")
@@ -293,10 +311,11 @@ def run_short_calibration(
             # v57：dv 阶段异常同样保留已完成 sessions（run_decision_validation
             # 异常前可能已收集部分 session）
             if r.decision_sessions:
-                report["decision_validation"] = {
-                    "complete": False,
-                    "sessions": sch.build_decision_validation(
-                        r.decision_sessions, partial=True)["sessions"]}
+                # v58：统一 sch.build_decision_validation 标准结构
+                # （sessions + total_valid_rate + partial），不造第二 schema
+                # {complete, sessions}；complete 由 partial 派生
+                report["decision_validation"] = sch.build_decision_validation(
+                    r.decision_sessions, partial=True)
             report["errors"].append({
                 "code": "validation_incomplete", "stage": "decision_validation",
                 "count": 1, "detail": f"{type(e).__name__}: {e}"})
@@ -390,7 +409,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
     model_id = os.path.basename(args.model).rsplit(".", 1)[0]
     run_id = args.run_id or f"m0-cal-{model_id}-{time.strftime('%Y%m%d_%H%M%S')}"
-    tmp_dir = args.tmp_dir or os.path.join(DEFAULT_RESULTS_DIR, f"m0_cal_{run_id}")
+    if args.tmp_dir:
+        # v58：--tmp-dir 视为父目录，创建本 run 专用唯一子目录——绝不递归删除
+        # 用户提供的既有共享目录；cleanup 只删本 run 创建的专用子目录
+        tmp_dir = os.path.join(args.tmp_dir, f"m0_cal_{run_id}")
+    else:
+        tmp_dir = os.path.join(DEFAULT_RESULTS_DIR, f"m0_cal_{run_id}")
     os.makedirs(tmp_dir, exist_ok=True)
     out_path = _derive_report_path(args.model, args.out, run_id)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
