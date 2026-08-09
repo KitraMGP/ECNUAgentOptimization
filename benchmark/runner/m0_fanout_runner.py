@@ -451,16 +451,18 @@ class M0FanoutRunner:
             return "http_5xx" if code >= 500 else None
         if isinstance(e, openai.APIResponseValidationError):
             return None  # malformed 成功响应不重试
-        # 其余（urllib.HTTPError 等旧路径）：**仅明确 transient 文本**才重试——
-        # 未知异常（IndexError/RuntimeError 等内部 bug，如 driver.py 空 choices）
-        # 一律不重试（与"内部 bug 不重试"一致：宁可标 ERROR 也不重试内部缺陷）
+        # 其余（urllib.HTTPError 等旧路径）：文本 fallback **与 classify_error
+        # 完全一致**（v67 统一 connection 模式——"Connection error." 等文本也
+        # 可重试；openai 真实类型分支优先不变）。未知异常（IndexError/
+        # RuntimeError 等内部 bug，如 driver.py 空 choices）消息不含 connection/
+        # timeout/refused → 不重试（与"内部 bug 不重试"一致）
         if isinstance(e, urllib.error.HTTPError):
             code = getattr(e, "code", 0)
             return "http_5xx" if 500 <= code < 600 else None
         low = str(e).lower()
         if "timed out" in low or "timeout" in low:
             return "timeout"
-        if "refused" in low or "connection reset" in low:
+        if "connection" in low or "refused" in low or "connect" in low:
             return "connection_error"
         return None
 
@@ -617,6 +619,15 @@ class M0FanoutRunner:
                 invalid = fp.decision_invalid(text, str(fr), 8)
                 recs.append({"ok": not invalid, "error": None, "text": text,
                              "finish_reason": str(fr)})
+            except ServerCrash:
+                # v67：server 崩溃（wrapper poll 已确认进程退出）——当前请求
+                # 计入 requests/error_count/error_summary code=server_crash，
+                # 立即 break 不再执行剩余请求（server 已死，剩余必败）；
+                # 上层 run_decision_validation 依 requests<target 停止后续
+                # session → partial dv → 合法 PREFLIGHT_INFRA 落盘
+                recs.append({"ok": False, "error": "server_crash", "text": "",
+                             "finish_reason": ""})
+                break
             except Exception as e:
                 recs.append({"ok": False, "error": classify_error(e), "text": "",
                              "finish_reason": ""})
@@ -658,6 +669,13 @@ class M0FanoutRunner:
                 break
             # v58：session 完成立即同步（异常时本 session 不 append，已完成保留）
             self.decision_sessions.append(self._session_from_recs(recs, control))
+            if len(recs) < VALIDATION_REQUESTS:
+                # v67：session 因 server 崩溃中断（requests<target——仅 ServerCrash
+                # break 会提前返回；请求级 error 不中断循环）→ 停止后续 session
+                # （崩溃后不再启动新 server）；partial session 已 append 保留
+                # 证据（尾部含 code=server_crash）→ 上层构造 partial dv →
+                # PREFLIGHT_INFRA 合法落盘
+                break
         complete = len(self.decision_sessions) == VALIDATION_SESSIONS and all(
             s["requests"] >= VALIDATION_REQUESTS and s["error_count"] == 0
             for s in self.decision_sessions)

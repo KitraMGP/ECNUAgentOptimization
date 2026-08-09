@@ -20,6 +20,7 @@
 """
 from __future__ import annotations
 
+import threading
 import urllib.error
 
 import pytest
@@ -275,19 +276,30 @@ class TestStageCoverage:
             adapter.stop()
 
     def test_branch_threadpool_uses_wrapper_no_deadlock(self, tmp_path, monkeypatch):
-        """ThreadPool branch：分支第一条 transient 500 → wrapper 重试成功 →
-        所有分支无 error、barrier 正常放行（重试 sleep 不阻塞其他线程）。"""
+        """ThreadPool branch：分支阶段恰好一次 transient 500 → wrapper 重试成功 →
+        所有分支无 error、barrier 正常放行（重试 sleep 不阻塞其他线程）。
+
+        v67：分支线程并发，计数/注入用 Lock 保护——只有**一个**分支线程触发
+        set_fail(1)（inject.done 保证恰好一次）；断言注入被消费
+        （_FAIL.remaining==0 = 某分支 chat 收到 500 后 wrapper 重试成功，
+        即 retry 确实发生，而非注入未命中）。"""
         adapter = FakeAdapter([], "", 0)
         adapter.start()
         try:
             r = make_runner(tmp_path, adapter)
             calls = {"n": 0}
+            inject = {"done": False}
+            lock = threading.Lock()
             orig_chat = r._chat
 
             def counting_chat(msgs, **kw):
-                calls["n"] += 1
-                if calls["n"] == 2:  # 分支阶段第一条 chat（决策已成功）
-                    mserver.set_fail(1)
+                with lock:
+                    calls["n"] += 1
+                    # 决策（1 次）成功后，分支阶段（fanout=2 并发）首个进入的
+                    # 线程注入恰好一次 500；其余线程（inject.done）不再注入
+                    if not inject["done"] and 2 <= calls["n"] <= 3:
+                        inject["done"] = True
+                        mserver.set_fail(1)
                 return orig_chat(msgs, **kw)
 
             monkeypatch.setattr(r, "_chat", counting_chat)
@@ -296,11 +308,16 @@ class TestStageCoverage:
             assert not any(b.get("error") for b in rep["metrics"]["branches"])
             # barrier 正常放行：分支观测齐（fanout=2）
             assert len(rep["metrics"]["branches"]) == 2
+            # v67：注入确实发生且被 wrapper 重试吸收（retry 发生）
+            assert inject["done"] is True
+            assert mserver._FAIL["remaining"] == 0
         finally:
             adapter.stop()
 
     def test_tool_round_uses_wrapper(self, tmp_path, monkeypatch):
-        """工具轮 chat：工具轮第一条 transient 500 → wrapper 重试成功 → rep OK。"""
+        """工具轮 chat：工具轮第一条 transient 500 → wrapper 重试成功 → rep OK。
+
+        v67：补 retry 发生断言——注入被消费（_FAIL.remaining==0）。"""
         adapter = FakeAdapter([], "", 0)
         adapter.start()
         try:
@@ -317,6 +334,7 @@ class TestStageCoverage:
             monkeypatch.setattr(r, "_chat", counting_chat)
             rep = r._run_unit(UID, 2, "short", "q8_0", "q8_0", GID, 0)
             assert rep["status"] in ("OK", "INVALID_DECISION")  # 工具轮恢复，无 ERROR
+            assert mserver._FAIL["remaining"] == 0  # v67：注入被消费 = retry 发生
         finally:
             adapter.stop()
 
@@ -384,5 +402,6 @@ class TestRepPeakMem:
             # 已有成功样本（决策 + 分支）保留，非 0.0 占位
             assert rep["metrics"]["peak_rss_mb"] == 99.0
             assert rep["metrics"]["peak_gpu_mb"] == 44.0
+            assert mserver._FAIL["remaining"] == 0  # v67：3 次注入全消费（retry 耗尽）
         finally:
             adapter.stop()
