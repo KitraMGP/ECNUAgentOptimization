@@ -64,15 +64,20 @@ G-M0-6 定义：同配置两次独立 run，TTFT/latency 中位数偏差 ≤10%�
 | ttft 中位数 | 261.3 ms | 267.0 ms | **2.15%** ≤10% |
 | decision_fallback | 全 False | 全 False | 一致 |
 
-→ **G-M0-6 = PASS**（跨轮计算；单轮内 gates 报 NOT_APPLICABLE 是单轮自证限制，
-正式结论取跨轮判定）。
+**分支归属一致量化（按实际复算字段）**：
+- 跨轮：同 unit+rep 120 对 `decision_fallback` mismatch = **0/120**（全 False）；
+- off-on 严格配对：run6/run7 各 60 对 `decision_fallback` mismatch = **0/60**（全 False）。
+
+→ **G-M0-6 = PASS**（**归档后跨轮计算**——G-M0-6 为跨两次独立 run 的复现性
+判定，非单 run 机器 gate；单轮 gates 报 NOT_APPLICABLE 是单轮自证限制，
+正式结论取 run6-vs-run7 跨轮计算）。
 
 同 unit+rep 120 对逐对比较：
 - status 一致性：120/120（0 mismatch）
 - latency 差异：median +0.36%、max|.| 19.38%（个别长桶 rep 噪音）
 - ttft 差异：median +0.57%、max|.| 52.77%（个别 rep 首 token 噪音）
 - peak_gpu_mb：median 0.0 MiB、max 2.0 MiB（两轮一致）
-- peak_rss_mb：median -0.5 MiB（进程采样抖动，个别 rep 大值）
+- peak_rss_mb：median -0.5 MiB（系统/进程级观测不稳定，个别 rep 跨轮差异大）
 - kv peak used_cells：median 0、max 4（两轮一致）
 
 资源峰值（两轮一致）：
@@ -98,9 +103,10 @@ G-M0-6 定义：同配置两次独立 run，TTFT/latency 中位数偏差 ≤10%�
 | bucket=medium | 20 | -0.18% | -0.07% | 20 | +0.89% | +1.48% |
 | bucket=long | 10 | +2.61% | +2.85% | 10 | +0.39% | +0.99% |
 
-结论：全部维度 ±≤3%（除 run7 fanout=f8 ttft +10.27%——n=10 小样本、
-parallel 10 高并发下首 token 噪音），**无系统性 on 方向收益**；两轮方向/量级
-不一致（run6 f8 ttft -1.88% vs run7 +10.27%）→ 纯噪音。
+结论：**run7 fanout=f8 同时 latency +6.88%、ttft +10.27% 为 n=10 小样本
+（parallel 10 高并发）下的噪音例外**；其余全部维度 ±≤3%。**无系统性 on
+方向收益**；两轮方向/量级不一致（run6 f8 ttft -1.88% vs run7 +10.27%）
+→ 纯噪音。
 
 ## 6. 两层结论（M0 最终判定）
 
@@ -113,10 +119,13 @@ gates G-M0-1/2/3a/4/5/6/7 全 PASS（G-M0-3b 恒 N/A）。M0 benchmark 基础设
 下 `--kv-prefix-share` 被 capability gate 拒绝（key-lines 证据：
 `E8-C1: capability rejected: memory implementation does not support cross-slot
 prefix metadata sharing (only standard unified attention KV is audited)`，
-G-M0-5 PASS 验证），`shared_cells` 恒 0（两轮全部 /metrics/kv 样本），
-**不存在共享发生**；严格 paired off/on 差异为噪音级（§5）且两轮不一致。
-**不得把 benchmark PASS 称为共享优化 PASS**——on 与 off 在本模型上运行同一
-未共享路径，差异仅开关本身的开销/噪音。
+G-M0-5 PASS 验证）。**主证据是 on control 的 g6–g11 六个 group 启动日志中的
+capability rejection 行——共享机制未建立**；两轮 24 个 group baseline
+`/metrics/kv` 快照 `shared_cells` 全 0 仅作为**一致性佐证**（不称全部周期
+样本——基线快照不等于运行期周期样本全集）。**不存在共享发生**；严格 paired
+off/on 差异为噪音级（§5）且两轮不一致。**不得把 benchmark PASS 称为共享
+优化 PASS**——on 与 off 在本模型上运行同一未共享路径，差异仅开关本身的开
+销/噪音。
 
 ## 7. 归档（benchmark/baseline/）
 
@@ -135,10 +144,15 @@ G-M0-5 PASS 验证），`shared_cells` 恒 0（两轮全部 /metrics/kv 样本�
 
 ## 8. 限制（如实声明）
 
-- G-M0-6 单轮 gates 报 NOT_APPLICABLE（单轮内无法自证复现性）；正式判定取
-  run6-vs-run7 跨轮计算（PASS）。
-- rep 级 RSS 采样含进程级抖动（个别 rep 跨轮差异大）；GPU/RSS 峰值跨轮
-  median 一致、max 差异 ≤100 MiB。
+- G-M0-6 为**归档后跨轮计算**（run6-vs-run7 复现性判定，非单 run 机器 gate）；
+  单轮 gates 报 NOT_APPLICABLE（单轮内无法自证复现性）。
+- **dv 决策多样性受限**：decision validation 仅固定 short 桶 + fanout=8 的
+  决策 prompt，模型输出均为 `ACTION: branch(b1)`——**不覆盖决策输出多样性**
+  （b1-b8 多分支路由未在 dv 中实证；正式矩阵 120/120 决策 OK 亦全为 b1 固定
+  路由，fallback 未触发）。
+- rep 级 RSS 差异属**系统/进程级观测不稳定**（进程 RSS 采样受系统调度/内存
+  状态影响，个别 rep 跨轮差异大），非采样抖动断言；GPU/RSS 峰值跨轮 median
+  一致、max 差异 ≤100 MiB。
 - 无代码改动（本轮纯运行+归档）——全量 pytest 沿用 v68 HEAD 实测
   **758 passed**（`cd benchmark && uv run pytest -q`，2026-08-09）。
 - run5 保持 INVALID_INTERMEDIATE（wrapper 未启用的中间结果，不作为正式结论）。

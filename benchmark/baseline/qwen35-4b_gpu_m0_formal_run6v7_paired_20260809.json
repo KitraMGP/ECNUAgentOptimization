@@ -14,7 +14,14 @@
   "ttft_dev_pct": 2.15,
   "decision_fallback_consistent": true,
   "threshold_pct": 10.0,
-  "verdict": "PASS"
+  "verdict": "PASS",
+  "computed_as": "归档后跨轮计算（run6-vs-run7 复现性判定，非单 run 机器 gate——单轮 gates 报 NOT_APPLICABLE）",
+  "branch_mismatch": {
+   "cross_run_120_pairs": 0,
+   "off_on_paired_run6_60": 0,
+   "off_on_paired_run7_60": 0,
+   "note": "decision_fallback 全 False（120+120 reps），跨轮与 off-on 严格配对均无分支归属分歧"
+  }
  },
  "paired_off_on": {
   "note": "on 机制在 4B hybrid 被 capability gate 拒绝（shared_cells=0）——off/on 差异为噪音级，不构成共享优化收益（见结论 B）",
@@ -133,6 +140,10 @@
      }
     }
    }
+  },
+  "shared_cells_evidence": {
+   "group_baseline_snapshots": "run6/run7 各 12 group baseline /metrics/kv 快照 shared_cells 全 0（共 24 个快照）",
+   "role": "一致性佐证（基线快照，不称全部周期样本）；主证据为 on g6-g11 capability rejection 日志——共享未建立"
   }
  }
 }
