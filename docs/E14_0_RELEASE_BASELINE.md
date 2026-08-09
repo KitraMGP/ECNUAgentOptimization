@@ -28,6 +28,7 @@
 | 最终二进制 `llama.cpp/build-cuda/bin/llama-server` | `74a6b18bf2af8fc55a35cc0fc445f8722faa8c4400c5e2dd3cb8665af5dd6336`（ninja 重建后稳定）|
 | 模型 `models/qwen3-5-4B-Q4_K_M.gguf` | `de8e96cd0d0c358487091aaaed1346bc02e61da3d4b412c833662702e233e78c`（完整）|
 | q8_0 配置 `benchmark/configs/qwen35_4b_q8_validated.yaml` | `d860ca4e959596ceef0cb1a6d40009c366957f6d1ba09fa09d72facd10048ae1` |
+| 生产配置 `benchmark/configs/qwen35_4b_q8_production.yaml` | `868f85a93fc3dcd56426cffbdf4084cb5e3b39684f6497305651fd3c943e0dc1`（E14.1 固化，sha256sum 实测）|
 
 ## 4. 最终 build 回归（E13.1 轻量 q8_0 重跑，基于 afbf375c）
 

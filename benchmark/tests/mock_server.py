@@ -14,7 +14,25 @@ from typing import Tuple
 
 _COUNTER = {"n": 0}
 # E2.0.5：可变的 KV 状态（completion 后 used_cells 增长，slot erase 后归 0）
-_KV = {"used_cells": 0, "active_sequences": 0, "erase_disabled": False}
+_KV = {"used_cells": 0, "active_sequences": 0, "erase_disabled": False,
+       "metrics_fail": False,   # v50：/metrics/kv 端点失败开关（after_erase_missing 生产路径）
+       "slots_malformed": False}  # v52：/slots 返回空列表开关（clean_all_slots 返回 (0,0) 真实路径）；erase_failed 为框架防御码（monkeypatch e2e），无真实端点路径
+# M0（Critical 2）：可配置 finish_reason（"stop" 默认 / "length" 测试决策截断）
+_FINISH = {"reason": "stop"}
+# M0 v49（任务 4）：一次性请求失败开关（500 一次后复位）——模拟"请求级异常但
+# server 进程健康"（warmup 决策异常路径测试；非进程崩溃）
+_ERROR_ONCE = {"on": False}
+# M0 v66（transient retry）：连续 N 次 **chat** 请求失败注入（status 可配置，
+# 默认 500）后自动复位——wrapper 重试测试（首失败后成功 / 连续 3 次失败 /
+# HTTP 400 等）；只作用于 chat.completions 路径（/apply-template、/tokenize、
+# /metrics/kv、/slots、/props、/health 不受影响）。helper：mserver.set_fail(n, status)
+_FAIL = {"remaining": 0, "status": 500}
+
+
+def set_fail(n: int, status: int = 500) -> None:
+    """连续 n 次 chat 请求返回 status（n=0 关闭注入；transient retry 测试用）。"""
+    _FAIL["remaining"] = max(0, n)
+    _FAIL["status"] = status
 
 
 def _make_body(n: int) -> dict:
@@ -28,7 +46,7 @@ def _make_body(n: int) -> dict:
         "choices": [{
             "index": 0,
             "message": {"role": "assistant", "content": f"模拟回复 {n}"},
-            "finish_reason": "stop",
+            "finish_reason": _FINISH["reason"],
         }],
         "usage": {
             "prompt_tokens": 100,
@@ -47,6 +65,12 @@ def _make_body(n: int) -> dict:
 class _Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/metrics/kv"):
+            if _KV["metrics_fail"]:
+                # v50（任务 1）：/metrics/kv 端点失败（生产路径：_fetch 返回 None、
+                # last_error 更新；非 mock 抛异常）→ after_erase 观测缺失
+                self.send_response(500)
+                self.end_headers()
+                return
             body = {
                 "schema_version": 1,
                 "capacity_bytes": 104857600,
@@ -66,6 +90,20 @@ class _Handler(BaseHTTPRequestHandler):
                 "build_info": "b3-mockcommit",
             }
         elif self.path.startswith("/slots"):
+            if _KV["slots_malformed"]:
+                # v52（任务 4）：slots_malformed = /slots 返回空列表 → list_slots 空 →
+                # clean_all_slots 返回 (0,0)（真实可达路径，server 健康）。
+                # erase_failed 是框架防御码（clean_all_slots 抛异常场景），
+                # 不宣称存在真实"端点返回非 JSON → erase_failed"路径——
+                # list_slots 对非 JSON/非 200 一律返回 []（吞错），
+                # 非 JSON 端点路径实际不可达；erase_failed 由 monkeypatch e2e 覆盖。
+                data = b"[]"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             body = [{"id": 0, "n_ctx": 512, "is_processing": False, "speculative": False},
                     {"id": 1, "n_ctx": 512, "is_processing": False, "speculative": False}]
         else:
@@ -97,8 +135,56 @@ class _Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
+        # M0 v49（任务 4）：一次性 500（请求级失败、进程健康）
+        if _ERROR_ONCE["on"]:
+            _ERROR_ONCE["on"] = False
+            self.send_response(500)
+            self.end_headers()
+            return
         length = int(self.headers.get("Content-Length", 0))
-        self.rfile.read(length)
+        payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        # 实例级崩溃模拟（M0 测试：crash_at 后返回 500 且计数冻结）
+        srv = getattr(self, "server", None)
+        if srv is not None and getattr(srv, "crash_at", None) is not None:
+            srv.count = getattr(srv, "count", 0) + 1
+            if srv.count > srv.crash_at:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error": "mock crash"}')
+                return
+        # M0（§4.2）：/apply-template → 渲染后 prompt；/tokenize → token ids
+        if self.path.startswith("/apply-template"):
+            msgs = payload.get("messages", [])
+            rendered = "\n".join(
+                f"<{msg.get('role', 'user')}>{msg.get('content', '')}"
+                for msg in msgs) + "\n<assistant>"
+            data = json.dumps({"prompt": rendered}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if self.path.startswith("/tokenize"):
+            content = payload.get("content", "")
+            n = 100  # 与 chat usage.prompt_tokens=100 一致（parity 偏差=0）；固定值保证预算不超限
+            data = json.dumps({"tokens": list(range(n))}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        # v66（transient retry）：chat.completions 路径——连续 N 次失败注入
+        # （只作用于 chat；/apply-template、/tokenize、/metrics/kv、/slots、
+        # /props、/health 均不受影响——校准 parity 的 apply-template/tokenize
+        # 前置请求不会被误注入）
+        if _FAIL["remaining"] > 0:
+            _FAIL["remaining"] -= 1
+            self.send_response(_FAIL["status"])
+            self.end_headers()
+            return
         _COUNTER["n"] += 1
         data = json.dumps(_make_body(_COUNTER["n"])).encode("utf-8")
         self.send_response(200)
@@ -114,9 +200,14 @@ class _Handler(BaseHTTPRequestHandler):
 class MockOpenAIServer:
     """上下文管理器：启动/关闭 mock server，暴露实际端口。"""
 
-    def __init__(self) -> None:
+    def __init__(self, crash_at: int | None = None,
+                 finish_reason: str = "stop") -> None:
         self.httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
+        self.crash_at = crash_at
+        self.finish_reason = finish_reason
+        # Critical 8：不设实例 count 属性——崩溃计数唯一挂在 httpd.count
+        # （handler 经 self.server 读取；实例属性从未被更新/使用，删除防误导）
 
     @property
     def port(self) -> int:
@@ -128,7 +219,14 @@ class MockOpenAIServer:
         _KV["used_cells"] = 0
         _KV["active_sequences"] = 0
         _KV["erase_disabled"] = False
+        _FINISH["reason"] = self.finish_reason
+        # v66：transient retry 失败注入复位（避免跨测试累积）
+        _FAIL["remaining"] = 0
+        _FAIL["status"] = 500
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        # M0 崩溃模拟：crash_at/count 挂到 httpd（handler 经 self.server 读取）
+        self.httpd.crash_at = self.crash_at
+        self.httpd.count = 0
         self._thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self._thread.start()
         return self

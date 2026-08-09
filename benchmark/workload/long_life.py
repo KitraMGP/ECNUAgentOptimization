@@ -18,7 +18,7 @@ from framework.sampler import mem_str
 from framework.workload import Workload, WorkloadSpec, register
 
 from .multi_turn import POOL, SYSTEM
-from .tool_call import MOCK_TOOLS, TOOL_SYSTEM
+from .tool_call import TOOL_SYSTEM, ToolPayloadRun, normalize_tool_payload_mode
 
 
 @register
@@ -32,6 +32,8 @@ class LongLifeWorkload(Workload):
             "rounds": config.long_rounds,
             "secret": config.long_secret,
             "ctx_size": config.ctx_size,
+            "tool_payload_mode": normalize_tool_payload_mode(
+                config.extra.get("tool_payload_mode")),
         }
 
     def generate(self, params: Dict[str, Any]) -> WorkloadSpec:
@@ -54,6 +56,7 @@ class LongLifeWorkload(Workload):
         rows: List[dict] = []
         truncations = 0
         secret_round = min(5, max(1, rounds - 3))
+        tp = ToolPayloadRun(spec.params.get("tool_payload_mode"))
         for i in range(rounds):
             n = i + 1
 
@@ -77,15 +80,28 @@ class LongLifeWorkload(Workload):
                 tool_msgs = [{"role": "system", "content": TOOL_SYSTEM}] + history[1:] + \
                             [{"role": "user", "content": "请查询客户 C10086 的最新一笔订单详情。"}]
                 r = driver.chat(tool_msgs)
+                # 局部工具消息同样遵守 one-shot restore 语义（r 请求返回后恢复 pending）
+                tp.after_chat(tool_msgs)
                 m = re.search(r"ACTION:\s*(\w+)\(([^)]*)\)", r["text"])
                 if m:
+                    # E15.2：工具轮与 tool_call 同一语义（resolve 拦截 / put / projection）
+                    content, audit, placeholder = tp.tool_response(
+                        m.group(1), m.group(2), r["text"])
                     tool_msgs.append({"role": "assistant", "content": r["text"]})
-                    tool_msgs.append({
-                        "role": "user",
-                        "content": f"<tool_response>\n{MOCK_TOOLS[m.group(1)](m.group(2))}\n</tool_response>",
-                    })
+                    idx = len(tool_msgs)
+                    full_content = f"<tool_response>\n{content}\n</tool_response>"
+                    tool_msgs.append({"role": "user", "content": full_content})
+                    if placeholder is not None:
+                        tp.mark_pending(
+                            idx, f"<tool_response>\n{placeholder}\n</tool_response>",
+                            expected_content=full_content)
                     r2 = driver.chat(tool_msgs)
-                    rows.append({"round": n, "kind": "tool", "tool": m.group(1), **r2})
+                    # 完整 payload 仅此一次局部请求可见；返回后原位恢复为 projection 占位
+                    tp.after_chat(tool_msgs)
+                    row: dict = {"round": n, "kind": "tool", "tool": m.group(1), **r2}
+                    if audit is not None:
+                        row["tool_payload"] = audit
+                    rows.append(row)
                     # 只追加本轮新增的交互，绝不复制旧 history（避免二次方膨胀）
                     history.append({"role": "user", "content": "请查询客户 C10086 的最新一笔订单详情。"})
                     history.append({"role": "assistant", "content": r2["text"]})
@@ -100,6 +116,9 @@ class LongLifeWorkload(Workload):
 
             history.append({"role": "user", "content": q})
             r = driver.chat(history)
+            # 统一 one-shot 语义：普通轮也调用 after_chat(history)——
+            # pending 不得跨轮残留（若有残留会在此 fail-fast，而非静默带入下一轮）
+            tp.after_chat(history)
             rows.append({"round": n, **r})
             history.append({"role": "assistant", "content": r["text"]})
             print(
@@ -111,7 +130,10 @@ class LongLifeWorkload(Workload):
         success = secret in last_text
         print(f"  [任务成功率] 秘密数字 '{secret}' 是否在最终回答中: {success}")
         print(f"  [截断次数] {truncations}")
-        return {"rows": rows, "meta": {"task_success": success, "truncations": truncations}}
+        meta: Dict[str, Any] = {"task_success": success, "truncations": truncations}
+        if tp.mode == "externalized":
+            meta["tool_payload"] = tp.stats()
+        return {"rows": rows, "meta": meta}
 
     def evaluate(self, results: Dict[str, Any], spec: WorkloadSpec) -> Dict[str, Any]:
         """长期 Agent 关键状态保持评估（E0.6）。

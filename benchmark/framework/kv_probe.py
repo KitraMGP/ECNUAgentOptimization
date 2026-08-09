@@ -178,6 +178,8 @@ class KVProbe:
         """按 run_id 聚合：每个正式 run 的 used_cells first/last/peak 与样本数。
 
         run_id=None 的样本（start/end/periodic 全局快照）不计入 run 聚合。
+        M0（Critical 1）：同时聚合 active_sequences（G-M0-3a 需要 erase 后
+        active_sequences==0 的真实检查；E1 兼容增量）。
         """
         runs: Dict[str, Dict[str, Any]] = {}
         for s in self.samples:
@@ -185,14 +187,42 @@ class KVProbe:
             if not rid:
                 continue
             r = runs.setdefault(rid, {"samples": 0, "first_used_cells": None,
-                                      "last_used_cells": None, "peak_used_cells": None})
+                                      "last_used_cells": None, "peak_used_cells": None,
+                                      "first_active_sequences": None,
+                                      "last_active_sequences": None,
+                                      "peak_active_sequences": None,
+                                      # v49 任务 3：after_erase 归零观测单独暂存，
+                                      # 防止 periodic 迟到样本（stop join 超时后
+                                      # daemon 线程仍在写）覆盖 last
+                                      "_ae_used": None, "_ae_active": None})
             r["samples"] += 1
-            v = s["data"].get("used_cells") if isinstance(s.get("data"), dict) else None
+            data = s.get("data") if isinstance(s.get("data"), dict) else {}
+            tag = s.get("tag")
+            v = data.get("used_cells")
             if isinstance(v, (int, float)):
                 if r["first_used_cells"] is None:
                     r["first_used_cells"] = v
+                if tag == "after_erase":
+                    r["_ae_used"] = v
                 r["last_used_cells"] = v
                 r["peak_used_cells"] = max(r["peak_used_cells"] or 0, v)
+            a = data.get("active_sequences")
+            if isinstance(a, (int, float)):
+                if r["first_active_sequences"] is None:
+                    r["first_active_sequences"] = a
+                if tag == "after_erase":
+                    r["_ae_active"] = a
+                r["last_active_sequences"] = a
+                r["peak_active_sequences"] = max(r["peak_active_sequences"] or 0, a)
+        # v49 任务 3：last 优先 tag=after_erase 样本（周期/迟到样本不得覆盖
+        # G-M0-3a 依赖的归零观测）
+        for r in runs.values():
+            if r["_ae_used"] is not None:
+                r["last_used_cells"] = r["_ae_used"]
+            if r["_ae_active"] is not None:
+                r["last_active_sequences"] = r["_ae_active"]
+            r.pop("_ae_used", None)
+            r.pop("_ae_active", None)
         return runs
 
     def _field_vals(self, field: str, run_id: Optional[str] = None) -> List[float]:

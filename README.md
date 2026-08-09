@@ -3,12 +3,17 @@
 基于 llama.cpp 扩展，针对智能体长生命周期推理（多轮对话、工具调用、多路径决策）的
 **KV Cache 生命周期管理**与**分支共享**优化，配套可复现的 Agent 工作流 Benchmark。
 
-> **当前阶段状态（2026-08）**：E0-E4 已完成。核心结论——
+> **当前阶段状态（2026-08）**：E0-E14 已完成，发布决策 `RELEASE_STATUS: READY_FOR_DEPLOYMENT`
+> （Qwen3.5-4B q8_0 operational profile，见 `docs/E14_FINAL_RELEASE_DECISION.md`）。
+> 核心结论——
 > ① KV buffer 启动时预分配、运行时不可扩展 → **生命周期策略不能降低显存峰值**，
 > 优化空间在"池满防 OOM、压力下保热点、降低重算"；
 > ② 已实现 unified idle-sequence 价值感知淘汰（`--unified-idle-slot-policy lru`，
 > experimental）与精确归属诊断（`--lifecycle-trace`）；
-> ③ A2 分支共享路由已 REJECT 冻结；④ 真实流量回放（E3.6）等待用户提供匿名 trace。
+> ③ A2 分支共享路由已 REJECT 冻结；④ 真实流量回放（E3.6）**未执行**——硬前置 =
+> 用户提供且 validator（`benchmark/schemas/lifecycle_trace_v1.json`）通过的真实匿名 trace；
+> ⑤ **真实生产灰度未执行**（`PRODUCTION_ROLLOUT_STATUS: NOT_EXECUTED`，无生产环境，
+> 本机 dry-run 完成）——不虚构。
 
 ## 目录结构
 
@@ -17,14 +22,15 @@
 ├── benchmark/        # Agent 工作流 Benchmark（Python，OpenAI 兼容 API）
 │   ├── framework/    # 核心框架：config/driver/sampler/workload/metrics
 │   ├── workload/     # 场景：multi_turn / tool_call / branch / long_life / branch_pressure
-│   ├── scripts/      # 各阶段实验 runner（e2-e4 系列）
+│   ├── scripts/      # 各阶段实验 runner（e2-e4 / e10-e13 系列）
+│   ├── configs/      # 示例配置 + q8_0 生产/验证配置（qwen35_4b_q8_*.yaml）
 │   ├── tests/        # pytest（不依赖 GPU/真实 server，含 mock server e2e）
 │   ├── schemas/      # 匿名 lifecycle trace schema（E3.5）
 │   ├── baseline/     # 正式基线归档（可读命名）
 │   └── results/      # 运行期临时输出（不入库）
 ├── models/           # GGUF 模型目录（模型文件不入库，用 download_models.sh 拉取）
 │   └── download_models.sh
-└── docs/             # 各阶段报告（E0-E4，见下方"阶段报告索引"）
+└── docs/             # 各阶段报告（E0-E14，见下方"阶段报告索引"）
 ```
 
 ## 环境要求
@@ -63,7 +69,7 @@ cd models
 
 ```bash
 ./llama.cpp/build-cuda/bin/llama-server \
-  -m models/Qwen3.5-4B-Q4_K_M.gguf \
+  -m models/qwen3-5-4B-Q4_K_M.gguf \
   --host 127.0.0.1 --port 8080 -ngl 99 --ctx-size 8192 \
   --kv-unified --parallel 4 \
   --unified-idle-slot-policy default   # 或 lru（experimental：unified 下价值感知淘汰）
@@ -92,15 +98,20 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40
 | unified idle-sequence 价值感知淘汰 | `--unified-idle-slot-policy default\|lru`（E3.2） | `lru` experimental，默认 `default` |
 | 精确归属诊断（trace_id→slot/seq/generation + pressure/purge/retry/resume 事件链） | `--lifecycle-trace`（E3.5） | 默认关闭，debug-only |
 | purge 决策诊断（candidates/unique/shared cells） | `--lifecycle-stats`（E3.2） | 默认关闭，debug-only |
+| C1 跨 slot 前缀 KV 共享 | `--kv-prefix-share`（E6/E7） | experimental、**默认关闭**；仅标准 unified attention-only 架构（非 hybrid/recurrent/SWA）生效；TinyLlama exact-prefix recompute **-89.5%**（E6.4 实测，无损）；**Qwen3.5-4B（hybrid）自动禁用**（capability rejected，E8.4 VERIFIED） |
 | 已 REJECT 候选 | A2 prefix-branch 路由（E2.5） | 冻结，不重开 |
 
 ## 模型清单
 
-| 模型 | GGUF 文件 | 用途 |
-|---|---|---|
-| Qwen2.5-0.5B | `qwen2.5-0.5b-instruct-q4_k_m.gguf` | 最小功能验证 |
-| Qwen3.5-0.8B | `Qwen3.5-0.8B-Q4_K_M.gguf` | CPU 开发验证 |
-| Qwen3.5-4B | `Qwen3.5-4B-Q4_K_M.gguf` | GPU 正式基线 / 优化对比 |
+| 模型 | GGUF 文件 | 用途 | 本地状态（2026-08） |
+|---|---|---|---|
+| Qwen2.5-0.5B | `qwen2.5-0.5b-instruct-q4_k_m.gguf` | 最小功能验证 | 未下载，`./download_models.sh 0.5b` 可拉取 |
+| Qwen3.5-0.8B | `Qwen3.5-0.8B-Q4_K_M.gguf` | CPU 开发验证 | 未下载，`./download_models.sh 0.8b` 可拉取 |
+| Qwen3.5-4B | `qwen3-5-4B-Q4_K_M.gguf` | GPU 正式基线 / 优化对比 / 生产 profile | **已下载**（sha256 `de8e96cd…`） |
+
+> 模型文件不入 git；统一用 `models/download_models.sh` 拉取（幂等，已存在自动跳过）。
+> 注意 4B 文件名是 `qwen3-5-4B-Q4_K_M.gguf`（小写 `qwen`、连字符 `3-5`），与 ModelScope 仓库
+> `diodel/Qwen3.5-4B-Q4_K_M-GGUF` 一致，启动命令 `-m` 参数须写全该文件名。
 
 ## 阶段报告索引（docs/）
 
@@ -113,6 +124,15 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40
 | E3.2-3.4（A1/A4 实现验证） | E3_2 / E3_3 / E3_4 | lru 实现 PROMOTE → 集成/多会话 KEEP_EXPERIMENTAL |
 | E3.5-3.5.3（诊断与性能门禁） | E3_5 / E3_5_1 / E3_5_2 / E3_5_3 | 契约闭环；性能门禁 HOLD（GPU 环境噪声） |
 | E4（内存容量） | E4_MEMORY_CAPACITY_CONCURRENCY_GATE | 并发承载 ≥8 session、OOM 边界 >96%（exploratory） |
+| E6（KV 优化实施） | E6_KV_OPTIMIZATION_FINAL_REPORT | 真实 KV 路径无损优化 + TinyLlama attention-only 收益；主模型 hybrid 限制如实标注 |
+| E7（项目复核） | E7_FINAL_REVIEW_REPORT | E6 的 PASS 降级为 **PARTIAL**（主模型无收益）；C1 真实且正确 |
+| E8（证据收敛） | E8_FINAL_REVIEW_REPORT | PARTIAL 维持；tenant 限定 TRUSTED_SINGLE_TENANT；hybrid capability rejected VERIFIED |
+| E9（C1 关闭+主模型转向） | E9_FINAL_REPORT | C1_ATTENTION_ONLY_PASS；4B clone NO_GO；q8_0 候选验证 |
+| E10（q8_0 生产化+checkpoint 原型） | E10_FINAL_DECISION | checkpoint 原型 PROTOTYPE_PASS；q8_0 PASS_DEPLOYABLE |
+| E11（server 集成+生产化决策） | E11_FINAL_DECISION | checkpoint server 集成 PARTIAL（4B 未命中）；q8_0 PASS_VALIDATED_DEPLOYMENT_PROFILE |
+| E12（hybrid 命中验证+工程收口） | E12_FINAL_DECISION | checkpoint reuse **NO_GO_WITH_EVIDENCE**；正确性靠安全 fallback |
+| E13（最终收口+部署固化） | E13_FINAL_DECISION | checkpoint prototype 保留 experimental attention-only；q8_0 部署 profile 固化 |
+| E14（发布/灰度/运维交接） | E14_0~E14_5 + E14_FINAL_RELEASE_DECISION | **RELEASE_STATUS: READY_FOR_DEPLOYMENT**；真实灰度 **NOT_EXECUTED**（不虚构） |
 
 ## 关键结论（详见各报告）
 
@@ -124,8 +144,11 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40
 3. **A2（prefix-branch）**：4B 长分支混合序列下 revisit 判定失效 → REJECT 冻结；
 4. **性能门禁**：Laptop GPU boost 抖动使 wall-time <1% 门槛不可测（E3.5.2/3.3
    HOLD）——容量指标不受影响（E4）；
-5. **下一步（E3.6）**：真实匿名 trace 回放——**硬前置 = 用户提供且 validator
-   （`benchmark/schemas/lifecycle_trace_v1.json`）通过的真实流量**。
+5. **E3.6（真实流量回放）未执行**：硬前置 = 用户提供且 validator
+   （`benchmark/schemas/lifecycle_trace_v1.json`）通过的真实匿名 trace；
+6. **E14 发布边界**：q8_0 生产 profile 发布候选通过全部验收（`RELEASE_STATUS:
+   READY_FOR_DEPLOYMENT`），但**真实生产灰度未执行**（无生产环境；`PRODUCTION_ROLLOUT_STATUS:
+   NOT_EXECUTED`）；checkpoint hybrid NO_GO、attention-only experimental 默认关闭。
 
 ## Git 说明
 

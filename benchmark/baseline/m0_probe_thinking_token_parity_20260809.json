@@ -1,0 +1,57 @@
+{
+  "probe": "m0_thinking_and_token_parity",
+  "date": "2026-08-09",
+  "server": {
+    "binary": "build-cuda/bin/llama-server",
+    "version": "8569 (afbf375c6)",
+    "model": "qwen3-5-4B-Q4_K_M.gguf",
+    "args": [
+      "-ngl 99",
+      "--ctx-size 4096",
+      "--parallel 4",
+      "--kv-unified",
+      "--cache-type-k q8_0",
+      "--cache-type-v q8_0"
+    ]
+  },
+  "messages": [
+    {
+      "role": "system",
+      "content": "你是严格执行指令的中文助手，回答需简洁。"
+    },
+    {
+      "role": "user",
+      "content": "公共任务：分析周末短途旅行方案。请输出 ACTION: branch(b1)。"
+    }
+  ],
+  "thinking_render": {
+    "default": {
+      "prompt_chars": 147,
+      "tokens": 44,
+      "prompt_tail": "ACTION: branch(b1)。<|im_end|>\n<|im_start|>assistant\n<think>\n",
+      "prompt_sha256": "6fe4c9f6dd8f7c084974d054b769c52702f5a515802f59887e0cb2e40b341ec7"
+    },
+    "false": {
+      "prompt_chars": 158,
+      "tokens": 46,
+      "prompt_tail": "nch(b1)。<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+      "prompt_sha256": "91c6bbaca3ecfd642e6dd2e61055a7ba4d1eb25b32dd79b81169d69a3d7a70a5"
+    },
+    "true": {
+      "prompt_chars": 147,
+      "tokens": 44,
+      "prompt_tail": "ACTION: branch(b1)。<|im_end|>\n<|im_start|>assistant\n<think>\n",
+      "prompt_sha256": "6fe4c9f6dd8f7c084974d054b769c52702f5a515802f59887e0cb2e40b341ec7"
+    }
+  },
+  "token_parity": {
+    "apply_template_prompt_chars": 158,
+    "tokenize_add_special_false": 46,
+    "tokenize_add_special_true": 46,
+    "chat_usage_prompt_tokens": 46,
+    "chat_finish_reason": "length",
+    "parity": true,
+    "explanation": "add_special=false/true 幂等的真实原因：该 GGUF tokenizer.ggml.add_bos_token=false 且 bos_token_id 缺失（无 BOS token 可加）；add_eos_token 字段缺失（默认 false）、eos_token_id=248046、tokenizer model=gpt2。结论仅限本 GGUF/配置，换模型必须重验。chat usage.prompt_tokens=46 与两者完全一致（偏差 0）。"
+  },
+  "notes": "无敏感公共消息；chat 探针 max_tokens=1 仅触发 1 token decode（轻量，非正式 benchmark）"
+}

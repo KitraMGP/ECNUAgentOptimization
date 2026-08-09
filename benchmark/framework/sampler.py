@@ -10,6 +10,7 @@ GPU 显存采样仅宿主机有效：容器内 pynvml 报 NVMLError_DriverNotLoa
 """
 from __future__ import annotations
 
+import re
 import subprocess
 from typing import Optional
 
@@ -29,11 +30,30 @@ def find_server_pid(host: str = "127.0.0.1", port: int = 8080) -> Optional[int]:
                 return int(pid)
     except Exception:
         pass
-    # 兜底：遍历进程，按 cmdline 含 llama-server 匹配
+    # 兜底（Critical 3）：按端口过滤的 net_connections 查找——绝不返回
+    # 与请求端口无关的"第一个 llama-server"（多 server / 残留进程会错配）。
+    # 端口已精确匹配监听，不再要求 cmdline 含 llama-server（mock/真实均适用）。
+    try:
+        for conn in psutil.net_connections(kind="inet"):
+            if conn.status == "LISTEN" and conn.laddr.port == port:
+                if host in ("127.0.0.1", "localhost", "0.0.0.0", "::", "::1") or \
+                        conn.laddr.ip in (host, "0.0.0.0", "::", "::1"):
+                    pid = conn.pid
+                    if pid is not None:
+                        return int(pid)
+    except (psutil.AccessDenied, psutil.NoSuchProcess):
+        pass
+    # 最后兜底（v48，任务 8）：端口连接匹配失败后，cmdline 只接受显式含目标
+    # `--port <port>` 或 `--port=<port>` 的进程；否则 None——绝不返回无关端口进程
+    # （多 server / 残留进程会错配）。
     for p in psutil.process_iter(["cmdline"]):
         try:
             cl = p.info["cmdline"] or []
-            if cl and any("llama-server" in c for c in cl):
+            if not cl or not any("llama-server" in c for c in cl):
+                continue
+            joined = " ".join(cl)
+            # `--port 8080` 或 `--port=8080`，后随空白/行尾（避免 8080 匹配 80809）
+            if re.search(rf"--port(?: |=){port}(?:\s|$)", joined):
                 return p.pid
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue

@@ -1,0 +1,173 @@
+{
+  "date": "2026-08-09T12:21:41+0800",
+  "model": "qwen3-5-4B-Q4_K_M.gguf",
+  "model_path": "/home/kitra/Projects/ECNUTraining-worktrees/benchmark-enhance/models/qwen3-5-4B-Q4_K_M.gguf",
+  "server_bin": "/home/kitra/Projects/ECNUTraining-worktrees/benchmark-enhance/llama.cpp/build-cuda/bin/llama-server",
+  "binary_version": "b8570-4a699aaad",
+  "ctx_size": 4096,
+  "ngl": 99,
+  "protocol": "OAI /v1/chat/completions, temp=0, seed=42, no-think",
+  "parity_ok": true,
+  "parity_progress": {
+    "completed": [
+      "short-P",
+      "short-B",
+      "medium-P",
+      "medium-B",
+      "long-P",
+      "long-B"
+    ],
+    "errors": []
+  },
+  "calibrated_lengths": {
+    "short/fanout2": {
+      "prefix": 260,
+      "branch": 344
+    },
+    "medium/fanout2": {
+      "prefix": 420,
+      "branch": 504
+    },
+    "long/fanout2": {
+      "prefix": 551,
+      "branch": 635
+    },
+    "short/fanout4": {
+      "prefix": 274,
+      "branch": 359
+    },
+    "medium/fanout4": {
+      "prefix": 434,
+      "branch": 519
+    },
+    "short/fanout8": {
+      "prefix": 302,
+      "branch": 386
+    }
+  },
+  "preflight_rejections": [],
+  "decision_validation": {
+    "complete": true,
+    "sessions": [
+      {
+        "requests": 10,
+        "valid": 10,
+        "invalid": 0,
+        "error_count": 0,
+        "invalid_length": 0,
+        "invalid_no_action": 0,
+        "finish_reasons": {
+          "stop": 10
+        },
+        "output_hashes": [
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b"
+        ],
+        "error_summary": [],
+        "control": "off"
+      },
+      {
+        "requests": 10,
+        "valid": 10,
+        "invalid": 0,
+        "error_count": 0,
+        "invalid_length": 0,
+        "invalid_no_action": 0,
+        "finish_reasons": {
+          "stop": 10
+        },
+        "output_hashes": [
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+          "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b"
+        ],
+        "error_summary": [],
+        "control": "on"
+      }
+    ]
+  },
+  "probe_p10": {
+    "pid": 2014980,
+    "gpu_mb": 3354.0,
+    "rss_mb": 992.1,
+    "rs_buffer_lines": [
+      "0.00.447.009 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+      "0.01.134.735 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB"
+    ],
+    "capability_rejected_lines": [
+      "0.01.186.950 W srv    load_model: E8-C1: capability rejected: memory implementation does not support cross-slot prefix metadata sharing (only standard unified attention KV is audited)"
+    ],
+    "health": true
+  },
+  "rs_observations": {
+    "calib_p4": [
+      "0.00.533.533 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB",
+      "0.01.182.444 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB"
+    ],
+    "calib_capability": [],
+    "dv": {
+      "off_p10": [
+        "0.00.447.398 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+        "0.01.101.717 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB"
+      ],
+      "off_capability": [],
+      "on_p10": [
+        "0.00.463.937 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+        "0.01.101.591 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB"
+      ],
+      "on_capability": [
+        "0.01.153.329 W srv    load_model: E8-C1: capability rejected: memory implementation does not support cross-slot prefix metadata sharing (only standard unified attention KV is audited)"
+      ]
+    },
+    "p10": [
+      "0.00.447.009 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+      "0.01.134.735 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB"
+    ],
+    "p10_capability": [
+      "0.01.186.950 W srv    load_model: E8-C1: capability rejected: memory implementation does not support cross-slot prefix metadata sharing (only standard unified attention KV is audited)"
+    ]
+  },
+  "gpu_rss_samples": {
+    "peak_gpu_mb": 3358.0,
+    "peak_rss_mb": 2992.6
+  },
+  "metrics_kv": {
+    "snapshot": {
+      "ts": 1786249312.342,
+      "tag": "p10_probe",
+      "run_id": null,
+      "data": {
+        "schema_version": 1,
+        "capacity_bytes": 71303168,
+        "used_bytes": 0,
+        "used_bytes_valid": true,
+        "capacity_cells": 4096,
+        "used_cells": 0,
+        "active_sequences": 0,
+        "shared_cells": 0,
+        "physical_sharing": false,
+        "shared_cells_semantics": "multi-sequence cell association (metadata-level, not COW)"
+      }
+    }
+  },
+  "errors": [],
+  "cleanup": {
+    "leftover_pids": []
+  },
+  "run_mode": "short-calibration (no formal matrix)"
+}

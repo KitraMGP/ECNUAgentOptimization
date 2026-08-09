@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 
 from framework.config import BenchmarkConfig
 from framework.driver import Driver
+from framework.prompt_preprocessor import Preprocessor, normalize_preprocessor_mode
 from framework.workload import Workload
 from metrics.metrics import mean, p50, p95, std, summarize
 from workload import all_workloads, get_workload
@@ -44,6 +45,11 @@ def select_workloads(scenario: str) -> List[Workload]:
 class Runner:
     def __init__(self, config: BenchmarkConfig, driver: Optional[Driver] = None) -> None:
         self.config = config
+        # E15.3 B1：preprocessor opt-in（config.extra["preprocessor"]，默认 off）。
+        # off → Preprocessor=None → Driver 行为与旧版逐字节一致（可回滚）。
+        preprocessor: Optional[Preprocessor] = None
+        if normalize_preprocessor_mode(config.extra.get("preprocessor")) == "structured_lossless":
+            preprocessor = Preprocessor()
         self.driver = driver or Driver(
             base_url=config.base_url,
             model=config.model,
@@ -51,6 +57,7 @@ class Runner:
             port=config.port,
             enable_thinking=config.enable_thinking,
             timings_per_token=config.timings_per_token,
+            preprocessor=preprocessor,
         )
         self._last_protocol: Optional[Dict[str, Any]] = None
 
@@ -320,6 +327,14 @@ def cli_main(argv: Optional[List[str]] = None) -> int:
     }
     config = config.merge_cli(cli_vals)
 
+    # E15.3 B1：preprocessor opt-in（config.extra["preprocessor"]，默认 off）；
+    # Runner 在无显式 driver 时自行按 config 构造；kv_probe 分支需手动传
+    # preprocessor（保持与 Runner 同一逻辑）。
+    from framework.prompt_preprocessor import Preprocessor, normalize_preprocessor_mode
+    preprocessor = None
+    if normalize_preprocessor_mode(config.extra.get("preprocessor")) == "structured_lossless":
+        preprocessor = Preprocessor()
+
     # E1：KV probe（可选，endpoint 不可用时自动降级，不阻塞实验）
     probe = None
     if config.kv_probe_enabled:
@@ -335,6 +350,7 @@ def cli_main(argv: Optional[List[str]] = None) -> int:
             enable_thinking=config.enable_thinking,
             timings_per_token=config.timings_per_token,
             kv_probe=probe,
+            preprocessor=preprocessor,
         )
         runner = Runner(config, driver=driver)
     else:

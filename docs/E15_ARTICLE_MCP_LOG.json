@@ -1,0 +1,225 @@
+{
+  "phase": "E15.0（final，v3）",
+  "generated_at_utc": "2026-08-08T19:50:00Z",
+  "purpose": "E15 分阶段技术方案与验收计划的 article-mcp 调研证据日志（reviewer 修订要求 #9 + 工具数据专项调研）。只记录工具调用、查询、标识符、读取章节/状态与链接，不存大段正文。**E15 唯一权威 article-mcp 日志即本文件**；`benchmark/results/kv_optimization/article_mcp_log.json`（E6）仅作历史对照，不混入 E15 统计。",
+  "tool": "article-mcp",
+  "entries": [
+    {
+      "seq": 1,
+      "operation": "search_literature",
+      "query": "R-KV Redundancy-aware KV Cache Compression Reasoning Models",
+      "search_type": "fast",
+      "sources": ["europe_pmc", "pubmed"],
+      "result_status": "SUCCESS",
+      "key_identifiers": [
+        {
+          "title": "R-KV: Redundancy-aware KV Cache Compression for Reasoning Models.",
+          "pmcid": "PMC13183371",
+          "pmid": "42158289",
+          "venue": "Advances in Neural Information Processing Systems",
+          "publication_date": "2025-12-01",
+          "link": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13183371/",
+          "read_state": "ABSTRACT_ONLY（本条目）"
+        }
+      ],
+      "note": "检索在 Europe PMC 源存在 arXiv 时间排序噪音（同日检索返回 5 条，其中 2 条无关主题），与 E6 综述记录的 article-mcp 行为一致。"
+    },
+    {
+      "seq": 2,
+      "operation": "search_literature",
+      "query": "PartPrompt Parse Trees Guided LLM Prompt Compression",
+      "search_type": "fast",
+      "sources": ["europe_pmc", "pubmed"],
+      "result_status": "SUCCESS",
+      "key_identifiers": [
+        {
+          "title": "Parse Trees Guided LLM Prompt Compression.",
+          "pmcid": null,
+          "pmid": "40953431",
+          "doi": "10.1109/TPAMI.2025.3609956",
+          "venue": "IEEE Transactions on Pattern Analysis and Machine Intelligence",
+          "publication_date": "2026-01-01",
+          "link": "https://pubmed.ncbi.nlm.nih.gov/40953431/",
+          "read_state": "ABSTRACT_ONLY"
+        }
+      ],
+      "note": "PartPrompt 仅获得摘要（ABSTRACT_ONLY），无 PMC 全文；其数值不作为工程验收依据。"
+    },
+    {
+      "seq": 3,
+      "operation": "get_article_details",
+      "format": "text",
+      "pmcid": "PMC13183371",
+      "sections_requested": ["abstract", "introduction", "conclusion"],
+      "sections_found": ["abstract", "introduction", "conclusion"],
+      "sections_missing": [],
+      "fulltext_available": true,
+      "processing_time_sec": 4.41,
+      "result_status": "SUCCESS",
+      "read_state": "PARTIAL_TEXT_READ / SECTIONS_READ（仅 3 章节，非全文）",
+      "key_identifiers": [
+        {
+          "title": "R-KV: Redundancy-aware KV Cache Compression for Reasoning Models.",
+          "pmcid": "PMC13183371",
+          "pmid": "42158289",
+          "venue": "NeurIPS 2025（Advances in Neural Information Processing Systems）",
+          "link": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13183371/"
+        }
+      ],
+      "facts_from_sections": [
+        "摘要：保留 10-34% KV 达 full-KV 性能；16% KV 达 105% full-KV 性能（AIME-24, DeepSeek-R1-Distill-Llama-8B）；90% 内存节省、6.6x throughput。",
+        "引言：reasoning 模型（DeepSeek-R1 类）长 CoT 输出 >50% token 冗余；attention-based 简单剪枝对重复段失效。",
+        "结论：decoding-time 联合 importance+redundancy 打分；13x batch、9x 长序列加速（vs FullKV）；training-free、model-agnostic。"
+      ]
+    },
+    {
+      "seq": 4,
+      "operation": "search_literature",
+      "query": "Lost in the Middle How Language Models Use Long Contexts",
+      "search_type": "fast",
+      "sources": ["europe_pmc", "pubmed"],
+      "result_status": "NO_RELEVANT_HIT（Europe PMC/Pubmed 均返回无关主题；目标论文未收录）",
+      "key_identifiers": [
+        {
+          "title": "Lost in the Middle: How Language Models Use Long Contexts",
+          "arxiv": "2307.03172",
+          "venue": "arXiv 页标注 TACL 2023（**本仓库无一级来源，venue 标 VENUE_UNVERIFIED**）",
+          "link": "https://arxiv.org/abs/2307.03172",
+          "read_state": "ABSTRACT_ONLY（经 arXiv 官方页面 web_fetch 确认）"
+        }
+      ],
+      "note": "article-mcp 未命中；权威来源改用 arXiv 官方页面（web_fetch 已核实摘要：位置敏感性——相关信息在开头/结尾时性能最高、中段显著退化）。"
+    },
+    {
+      "seq": 5,
+      "operation": "search_literature",
+      "query": "LLMLingua task-oriented prompt compression",
+      "search_type": "fast",
+      "sources": ["europe_pmc", "pubmed"],
+      "result_status": "NO_RELEVANT_HIT（返回无关主题）",
+      "key_identifiers": [
+        {
+          "title": "LLMLingua: Compressing Prompts for Accelerated Inference of Large Language Models",
+          "arxiv": "2310.05736",
+          "venue": "EMNLP 2023（arXiv 页面标注）",
+          "link": "https://arxiv.org/abs/2310.05736",
+          "read_state": "ABSTRACT_ONLY（经 arXiv 官方页面 web_fetch 确认）"
+        }
+      ],
+      "note": "article-mcp 未命中；arXiv 官方页面确认：coarse-to-fine 压缩 + budget controller，最高 20x 压缩少量性能损失。"
+    },
+    {
+      "seq": 6,
+      "operation": "search_literature",
+      "query": "Cognitive Architectures for Language Agents CoALA",
+      "search_type": "fast",
+      "sources": ["europe_pmc"],
+      "result_status": "NO_RELEVANT_HIT（返回无关综述）",
+      "key_identifiers": [
+        {
+          "title": "Cognitive Architectures for Language Agents",
+          "arxiv": "2309.02427",
+          "venue": "TMLR 2024（arXiv 页面标注 v3 camera-ready）",
+          "link": "https://arxiv.org/abs/2309.02427",
+          "read_state": "ABSTRACT_ONLY（经 arXiv 官方页面 web_fetch 确认）"
+        }
+      ],
+      "note": "article-mcp 未命中；arXiv 官方页面确认：模块化记忆组件 + 结构化动作空间 + 通用决策过程。"
+    },
+    {
+      "seq": 7,
+      "operation": "search_literature",
+      "query": "LongMemEval benchmark long-term memory agents",
+      "search_type": "fast",
+      "sources": ["pubmed"],
+      "result_status": "NO_RELEVANT_HIT（返回无关主题）",
+      "key_identifiers": [
+        {
+          "title": "LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory",
+          "arxiv": "2410.10813",
+          "venue": "ICLR 2025（arXiv 页面标注）",
+          "link": "https://arxiv.org/abs/2410.10813",
+          "read_state": "ABSTRACT_ONLY（经 arXiv 官方页面 web_fetch 确认）"
+        }
+      ],
+      "note": "article-mcp 未命中；arXiv 官方页面确认：五类长期记忆能力（信息抽取/多会话推理/时间推理/知识更新/abstention），500 问、30% 准确率下降。"
+    },
+    {
+      "seq": 8,
+      "operation": "search_literature",
+      "query": "MemGPT memory-augmented operating system LLM agents",
+      "search_type": "fast",
+      "sources": ["europe_pmc"],
+      "result_status": "NO_RELEVANT_HIT（返回无关主题）",
+      "key_identifiers": [
+        {
+          "title": "MemGPT: Towards LLMs as Operating Systems",
+          "arxiv": "2310.08560",
+          "venue": "arXiv 2023（v2 2024-02）",
+          "link": "https://arxiv.org/abs/2310.08560",
+          "read_state": "ABSTRACT_ONLY（经 arXiv 官方页面 web_fetch 确认）"
+        }
+      ],
+      "note": "article-mcp 未命中；arXiv 官方页面确认：virtual context management（快慢内存分层、数据搬移、interrupts），文档分析与多会话聊天验证。"
+    }
+  ],
+  "framework_docs_verified": [
+    {
+      "framework": "LangGraph",
+      "version": "v1.2.10（2026-07-28）",
+      "links": [
+        "https://docs.langchain.com/oss/python/langgraph/persistence",
+        "https://pypi.org/pypi/langgraph/json"
+      ],
+      "read_state": "OFFICIAL_DOCS（web_fetch 核实）"
+    },
+    {
+      "framework": "SGLang",
+      "version": "v0.5.17（2026-08）",
+      "links": [
+        "https://docs.sglang.ai/docs/advanced_features/session_radix_cache",
+        "https://raw.githubusercontent.com/sgl-project/sglang/main/python/sglang/srt/mem_cache/radix_cache.py",
+        "https://arxiv.org/abs/2312.07104"
+      ],
+      "read_state": "OFFICIAL_DOCS（radix cache 文档 + 源码文件，web_fetch 核实）＋论文 FULL_TEXT_READ（E6 manifest，venue 按 E8.1 更正为 NeurIPS 2024）"
+    },
+    {
+      "framework": "vLLM",
+      "version": "v0.26.0（2026-07）",
+      "links": [
+        "https://docs.vllm.ai/en/latest/design/prefix_caching/",
+        "https://pypi.org/project/vllm/"
+      ],
+      "read_state": "OFFICIAL_DOCS（prefix caching 设计文档 + PyPI，web_fetch 核实）"
+    },
+    {
+      "framework": "LlamaIndex",
+      "version": "stable（docs 当前版）",
+      "links": [
+        "https://docs.llamaindex.ai/en/stable/",
+        "https://github.com/run-llama/llama_index"
+      ],
+      "read_state": "OFFICIAL_DOCS（web_fetch 核实：agents/workflows/chat engines/memory 模块）"
+    },
+    {
+      "framework": "AutoGen",
+      "version": "stable（AgentChat/Core，docs 当前版）",
+      "links": [
+        "https://microsoft.github.io/autogen/stable/",
+        "https://github.com/microsoft/autogen"
+      ],
+      "read_state": "OFFICIAL_DOCS（web_fetch 核实：AgentChat/Core/Extensions）"
+    }
+  ],
+  "cross_reference": {
+    "仓库既有 FULL_TEXT_READ 论文（E6，21 篇候选清单与 SHA256）": "papers/kv-cache/manifest.json（注意：manifest 数组为 20 FULL + 1 ABSTRACT，而 counts 字段记录 fulltext_read=19/abstract_only=2，为 E6 既有差异；E15 新增条目不并入 E6 统计）",
+    "E8.1 venue 纠正（RadixAttention → NeurIPS 2024）": "docs/E8_1_LITERATURE_CORRECTION_ADDENDUM.md",
+    "E6 旧 article-mcp 日志（历史对照）": "benchmark/results/kv_optimization/article_mcp_log.json"
+  },
+  "limitations": [
+    "R-KV 为 PARTIAL_TEXT_READ（abstract+introduction+conclusion），不得标注 FULL_TEXT_READ；其数值是论文结论，未在本仓库复现。",
+    "PartPrompt 为 ABSTRACT_ONLY，不得引用其具体数字。",
+    "Lost in the Middle / LLMLingua / CoALA / LongMemEval / MemGPT 均经 arXiv 官方页面 ABSTRACT 级确认（article-mcp 未命中），无任何 FULL_TEXT；不得伪称全文。",
+    "工具数据专项调研来源概括于 E15 文档（E15_1 §1.1），未落盘为独立报告文件。"
+  ]
+}
