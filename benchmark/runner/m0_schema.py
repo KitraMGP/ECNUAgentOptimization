@@ -16,6 +16,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -1134,6 +1135,58 @@ def cleanup_stale_tmp(results_dir: str, max_age_seconds: float = 3600.0) -> List
         except OSError:
             pass
     return removed
+
+
+# v59（任务 6）：陈旧 M0 专属目录前缀（cleanup_stale_dirs 只删这些一级子目录；
+# 父目录 / 用户既有共享目录绝不删除）。
+STALE_DIR_PREFIXES = ("m0_fanout_", "m0_cal_")
+
+
+def cleanup_stale_dirs(results_dir: str, max_age_seconds: float = 3600.0) -> List[str]:
+    """清理 results 目录下陈旧的 M0 专属子目录（v59，任务 6）。
+
+    formal 运行后专属子目录（`m0_fanout_<ts>_<pid>` / `m0_cal_<run_id>`）内含
+    完整 -lv5 日志，按设计保留在 results 供排障（不视为泄漏；baseline 只归档
+    key lines）。本函数用于按 age 清理陈旧目录：只删名字以 STALE_DIR_PREFIXES
+    开头的一级子目录、且**递归最新 mtime 超龄**（目录 mtime 只随子项增删更新、
+    不随日志内容写入更新——活跃运行中的 server 持续写日志，目录 mtime 可能很旧；
+    必须取目录树内最新文件 mtime 判定，mtime 新 = 活跃并发写入，不删）；绝不
+    递归进入并删除无关目录、绝不删除父目录。返回被删目录名列表。
+    """
+    removed: List[str] = []
+    if not os.path.isdir(results_dir):
+        return removed
+    now = time.time()
+    try:
+        entries = os.listdir(results_dir)
+    except OSError:
+        return removed
+    for name in entries:
+        if not name.startswith(STALE_DIR_PREFIXES):
+            continue
+        fp = os.path.join(results_dir, name)
+        if not os.path.isdir(fp):
+            continue
+        try:
+            newest = _dir_newest_mtime(fp)
+        except OSError:
+            continue
+        if now - newest > max_age_seconds:
+            shutil.rmtree(fp, ignore_errors=True)
+            removed.append(name)
+    return removed
+
+
+def _dir_newest_mtime(fp: str) -> float:
+    """目录树内最新 mtime（目录本身 + 递归子项；缺失条目跳过）。"""
+    newest = os.path.getmtime(fp)
+    for root, _dirs, files in os.walk(fp):
+        for name in files:
+            try:
+                newest = max(newest, os.path.getmtime(os.path.join(root, name)))
+            except OSError:
+                pass
+    return newest
 
 
 def content_sha256(text: str) -> str:

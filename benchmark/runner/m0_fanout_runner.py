@@ -189,6 +189,7 @@ class M0FanoutRunner:
         self.any_fallback = False
         self.any_rep_error = False
         self.notes: List[str] = []  # v50：可诊断 note（warmup erase 异常等），落盘 doc.notes
+        self._stop_errors: List[str] = []  # v59：_stop_server 捕获的 stop 异常诊断（不传播，不掩盖 primary）
         self.phase = "preflight"
         self.rule = "PREFLIGHT_INFRA"
         self.binary_version = ""
@@ -281,12 +282,24 @@ class M0FanoutRunner:
             time.sleep(0.5)
         raise ServerError(last_err)
 
-    def _stop_server(self) -> None:
+    def _stop_server(self) -> bool:
+        """停止当前 server。
+
+        v59：stop 异常不传播——finally 中调用绝不掩盖 try 块 primary 异常；
+        错误记入 self._stop_errors（调用方在无 primary 异常时按基础设施处理）。
+        返回 True=stop 干净、False=stop 出错（进程可能残留）。
+        """
+        clean = True
         if self._adapter is not None:
-            self._adapter.stop()
+            try:
+                self._adapter.stop()
+            except Exception as e:  # noqa: BLE001
+                clean = False
+                self._stop_errors.append(f"{type(e).__name__}: {e}")
             self._adapter = None
         self._driver = None
         self._kv = None
+        return clean
 
     def _cleanup_all(self) -> None:
         if self._adapter is not None:
@@ -489,10 +502,21 @@ class M0FanoutRunner:
                                              control=control, tag=f"dv{s}")
             except ServerError:
                 break
+            before_stop = len(self._stop_errors)
             try:
                 recs = self._run_decision_session(adapter.port)
+            except _INFRA_EXCEPTIONS:
+                # v59：session 级基础设施异常（连接失败等）→ 停止验证阶段
+                # （本 session 不 append），已完成 session 保留 → 上层构造
+                # partial dv 落盘；AssertionError/KeyError 等内部 bug 不在此
+                # 捕获，传播 → run_safe 归 INTERNAL_RUNNER_ERROR + 70
+                break
             finally:
                 self._stop_server()
+            if len(self._stop_errors) > before_stop:
+                # v59：try 块无 primary 异常但 stop 失败（进程可能残留）→
+                # 按基础设施处理（session 不完整）
+                break
             # v58：session 完成立即同步（异常时本 session 不 append，已完成保留）
             self.decision_sessions.append(self._session_from_recs(recs, control))
         complete = len(self.decision_sessions) == VALIDATION_SESSIONS and all(
@@ -645,7 +669,12 @@ class M0FanoutRunner:
                                         baseline=baseline, replicates=reps)
                 self._append_group(control, group)
             finally:
-                self._stop_server()
+                stop_clean = self._stop_server()
+            if not stop_clean and not crashed:
+                # v59：try 块无 primary 异常但 stop 失败（进程可能残留）→
+                # 按基础设施处理（matrix_complete=false）；primary 异常存在时
+                # 异常优先传播、此判断不执行（stop 不传播不掩盖 primary）
+                raise FormalIncomplete("group 停止失败（进程可能残留）")
 
     def _rejected_ids(self) -> List[str]:
         return [r.get("unit_id") for r in self.preflight_rejections]
@@ -1013,6 +1042,10 @@ class M0FanoutRunner:
         # 3) decision validation（G-M0-1 数据源，2×≥10）
         complete, sessions = self.run_decision_validation()
         if not complete:
+            # v59：partial dv（保留已完成 session 证据），以合法 preflight 结果落盘；
+            # 不丢 decision_sessions 中已完成部分
+            self.decision_validation = sch.build_decision_validation(
+                self.decision_sessions, partial=True)
             return self._fail_preflight("validation_incomplete", True, self.preflight_rejections, "")
         self.decision_validation = sch.build_decision_validation(sessions, partial=False)
         # 4) formal 矩阵（12 groups）
@@ -1450,6 +1483,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.out:
         sch.cleanup_stale_tmp(os.path.dirname(os.path.abspath(args.out)),
                               args.cleanup_tmp_age)
+        # v59（任务 6）：清理 results 目录陈旧 M0 专属子目录（-lv5 完整日志保留
+        # 在 results 供排障；此处仅清理超过 age 的陈旧目录，不删活跃/父目录）
+        sch.cleanup_stale_dirs(os.path.dirname(os.path.abspath(args.out)),
+                               args.cleanup_tmp_age)
     runner = M0FanoutRunner(
         server_bin=args.server_bin, model=args.model, ctx_size=args.ctx_size,
         port_base=args.port_base, decision_n_predict=args.decision_n_predict,

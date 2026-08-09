@@ -49,6 +49,18 @@ from runner import m0_fanout_runner as m0r  # noqa: E402
 from runner import m0_schema as sch  # noqa: E402
 from runner.m0_fanout_runner import M0FanoutRunner  # noqa: E402
 
+# v59：日志筛选 pattern 单一常量（_read_log_refresh 与 server_logs_summary 共用，
+# 新增 pattern 只改此处一处，防漏同步；其余模块一律引用，不再内联字面量）。
+LOG_KEY_LINE_KEYS = (
+    "rs buffer size", "kv buffer size", "capability rejected",
+    "server is listening", "build:", "kv self size", "kv unified size",
+    "kv prefix share", "memory_breakdown", "slot save path", "n_ctx",
+)
+LOG_RS_BUFFER = "RS buffer size"
+LOG_CAPABILITY = "capability rejected"
+LOG_KV_BUFFER = "KV buffer size"
+
+
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(
@@ -154,9 +166,9 @@ def _server_logs_summary(runner: M0FanoutRunner, run_id: str) -> List[Dict[str, 
             "phase": _phase_for_tag(tag),
             "started_at": meta.get("started_at"),
             "key_lines": {
-                "rs_buffer": _grep_from_text(log, "RS buffer size"),
-                "capability_rejected": _grep_from_text(log, "capability rejected"),
-                "kv_alloc": _grep_from_text(log, "KV buffer size"),
+                "rs_buffer": _grep_from_text(log, LOG_RS_BUFFER),
+                "capability_rejected": _grep_from_text(log, LOG_CAPABILITY),
+                "kv_alloc": _grep_from_text(log, LOG_KV_BUFFER),
             },
         }
         out.append(entry)
@@ -171,9 +183,7 @@ def _read_log_refresh(log_path: str, fallback: str) -> str:
     """
     if not log_path:
         return fallback
-    keys = ("rs buffer size", "kv buffer size", "capability rejected",
-            "server is listening", "build:", "kv self size", "kv unified size",
-            "kv prefix share", "memory_breakdown", "slot save path", "n_ctx")
+    keys = LOG_KEY_LINE_KEYS  # v59：单一常量（模块级），不在此内联
     try:
         out: List[str] = []
         with open(log_path, encoding="utf-8", errors="replace") as f:
@@ -215,7 +225,7 @@ def run_short_calibration(
     report: Dict[str, Any] = {
         "run_id": run_id,
         "run_mode": "short-calibration (no formal matrix)",
-        "date": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "date": sch.now_utc(),  # v59：统一 RFC3339 UTC（与 started_at 同格式，替换 %z 本地时间）
         "model": os.path.basename(model),
         "model_path": model,
         "server_bin": server_bin,
@@ -276,10 +286,10 @@ def run_short_calibration(
                 f"{k[0]}/fanout{k[1]}": v for k, v in r.calibrated_lengths.items()}
             report["preflight_rejections"] = r.preflight_rejections
             report["binary_version"] = r.binary_version
-            calib_log = os.path.join(tmp_dir, "server_calib.log")
-            report["rs_observations"]["calib_p4"] = _grep_log(calib_log, "RS buffer size")
+            calib_log = os.path.join(r.tmp_dir, "server_calib.log")  # v59：r.tmp_dir = M0FanoutRunner 专属子目录（真实日志位置）
+            report["rs_observations"]["calib_p4"] = _grep_log(calib_log, LOG_RS_BUFFER)
             report["rs_observations"]["calib_capability"] = _grep_log(
-                calib_log, "capability rejected")
+                calib_log, LOG_CAPABILITY)
         except Exception as e:  # noqa: BLE001
             # v57（审查 Medium 5）：异常时保留已完成部分（parity_progress /
             # calibrated_lengths / preflight_rejections 如实记录，不丢已收集证据）
@@ -302,11 +312,11 @@ def run_short_calibration(
             report["rs_observations"]["dv"] = {}
             for i, s in enumerate(sessions):
                 ctl = s.get("control", f"dv{i}")
-                dv_log = os.path.join(tmp_dir, f"server_dv{i}.log")
+                dv_log = os.path.join(r.tmp_dir, f"server_dv{i}.log")  # v59：r.tmp_dir（真实日志位置）
                 report["rs_observations"]["dv"][f"{ctl}_p10"] = _grep_log(
-                    dv_log, "RS buffer size")
+                    dv_log, LOG_RS_BUFFER)
                 report["rs_observations"]["dv"][f"{ctl}_capability"] = _grep_log(
-                    dv_log, "capability rejected")
+                    dv_log, LOG_CAPABILITY)
         except Exception as e:  # noqa: BLE001
             # v57：dv 阶段异常同样保留已完成 sessions（run_decision_validation
             # 异常前可能已收集部分 session）
@@ -334,14 +344,14 @@ def run_short_calibration(
                 pid = sampler.find_server_pid("127.0.0.1", adapter.port)
                 g = sampler.find_server_gpu_mb(pid) if pid else None
                 rs = sampler.find_server_rss_mb(pid) if pid else None
-                p10_log = os.path.join(tmp_dir, "server_p10.log")
+                p10_log = os.path.join(r.tmp_dir, "server_p10.log")  # v59：r.tmp_dir（真实日志位置）
                 report["probe_p10"] = {
                     "pid": pid,
                     "stage": "probe_p10",  # v57：显式阶段标识（与 server_logs_summary 的 tag 对应）
                     "phase": "post-validation static probe (p10, kv-prefix-share on)",
                     "gpu_mb": g, "rss_mb": rs,
-                    "rs_buffer_lines": _grep_log(p10_log, "RS buffer size"),
-                    "capability_rejected_lines": _grep_log(p10_log, "capability rejected"),
+                    "rs_buffer_lines": _grep_log(p10_log, LOG_RS_BUFFER),
+                    "capability_rejected_lines": _grep_log(p10_log, LOG_CAPABILITY),
                     "health": adapter.wait_health(timeout=30.0),
                 }
                 report["rs_observations"]["p10"] = report["probe_p10"]["rs_buffer_lines"]

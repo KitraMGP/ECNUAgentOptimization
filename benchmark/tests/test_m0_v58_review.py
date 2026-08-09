@@ -164,8 +164,9 @@ class TestDecisionValidationSync:
         assert r.decision_sessions[0]["requests"] == 10
         assert r.decision_sessions[0]["error_count"] == 0
 
-    def test_exception_does_not_append_partial_session(self, monkeypatch, tmp_path):
-        """异常 session 本身（部分完成）不得 append——decision_sessions 只含完整 session。"""
+    def test_infra_exception_does_not_append_partial_session(self, monkeypatch, tmp_path):
+        """session 级基础设施异常（TimeoutError 是 OSError 子类 → _INFRA_EXCEPTIONS，
+        v59：不再传播，停止验证阶段）→ 异常 session 不 append，返回不完整。"""
         r = _make_runner(tmp_path)
 
         class FakeAdapter:
@@ -189,9 +190,10 @@ class TestDecisionValidationSync:
         monkeypatch.setattr(r, "_run_decision_session", fake_run_session)
         monkeypatch.setattr(r, "_stop_server", fake_stop)
 
-        with pytest.raises(TimeoutError):
-            r.run_decision_validation()
-        assert [s["control"] for s in r.decision_sessions] == ["off"]
+        # v59：基础设施异常被捕获 → 不传播，返回 (False, [off])；off 保留
+        complete, sessions = r.run_decision_validation()
+        assert complete is False
+        assert [s["control"] for s in sessions] == ["off"]
 
 
 # ---- 2. calibration report decision_validation 统一标准结构 ----
