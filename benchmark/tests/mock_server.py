@@ -98,7 +98,40 @@ class _Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
         length = int(self.headers.get("Content-Length", 0))
-        self.rfile.read(length)
+        payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        # 实例级崩溃模拟（M0 测试：crash_at 后返回 500 且计数冻结）
+        srv = getattr(self, "server", None)
+        if srv is not None and getattr(srv, "crash_at", None) is not None:
+            srv.count = getattr(srv, "count", 0) + 1
+            if srv.count > srv.crash_at:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error": "mock crash"}')
+                return
+        # M0（§4.2）：/apply-template → 渲染后 prompt；/tokenize → token ids
+        if self.path.startswith("/apply-template"):
+            msgs = payload.get("messages", [])
+            rendered = "\n".join(
+                f"<{msg.get('role', 'user')}>{msg.get('content', '')}"
+                for msg in msgs) + "\n<assistant>"
+            data = json.dumps({"prompt": rendered}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if self.path.startswith("/tokenize"):
+            content = payload.get("content", "")
+            n = 100  # 与 chat usage.prompt_tokens=100 一致（parity 偏差=0）；固定值保证预算不超限
+            data = json.dumps({"tokens": list(range(n))}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         _COUNTER["n"] += 1
         data = json.dumps(_make_body(_COUNTER["n"])).encode("utf-8")
         self.send_response(200)
@@ -114,9 +147,11 @@ class _Handler(BaseHTTPRequestHandler):
 class MockOpenAIServer:
     """上下文管理器：启动/关闭 mock server，暴露实际端口。"""
 
-    def __init__(self) -> None:
+    def __init__(self, crash_at: int | None = None) -> None:
         self.httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
+        self.crash_at = crash_at
+        self.count = 0
 
     @property
     def port(self) -> int:
@@ -129,6 +164,9 @@ class MockOpenAIServer:
         _KV["active_sequences"] = 0
         _KV["erase_disabled"] = False
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        # M0 崩溃模拟：crash_at/count 挂到 httpd（handler 经 self.server 读取）
+        self.httpd.crash_at = self.crash_at
+        self.httpd.count = 0
         self._thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self._thread.start()
         return self
