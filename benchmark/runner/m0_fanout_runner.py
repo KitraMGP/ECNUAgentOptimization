@@ -48,8 +48,12 @@ SEED = 42
 TEMPERATURE = 0.0
 VALIDATION_REQUESTS = 10        # decision validation 每 session ≥10
 VALIDATION_SESSIONS = 2
+VALIDATION_CONTROLS = ("off", "on")  # v54：G-M0-1 验证覆盖两个 control 开关（off/on 各一 session）
 # G-M0-4：RS buffer 对账公式（llama-memory-recurrent.cpp，探针实测）：
 #   RS = 24 (k/v/r/s) × 548864 (dim) × 4 (bytes) × parallel
+#   v55 实测（2026-08-09 真实 4B GPU）：RS buffer = 201.00 MiB @ parallel4 /
+#   502.50 MiB @ parallel10 → 50.25 MiB/parallel，与公式 24×548864×4/1048576
+#   完全一致（qwen35 hybrid：24 recurrent 层 × (n_embd_r 24576 + n_embd_s 524288)）
 RS_BYTES_PER_ROW = 24 * 548864 * 4
 G4_TOLERANCE = 0.05             # ≤5%
 # v48（任务 4）：KVProbe periodic 采样间隔（s）——覆盖分支并发与工具轮，
@@ -179,9 +183,14 @@ class M0FanoutRunner:
 
     # ---- server 生命周期 ----
 
-    def _server_cmd(self, parallel: int, ctk: str, ctv: str, control: str) -> List[str]:
+    def _server_cmd(self, parallel: int, ctk: str, ctv: str, control: str,
+                    port: int) -> List[str]:
+        # v55 修复：--port 必须等于 adapter.port（_start_server 里 port 变量，
+        # 不是已 +1 的 self._next_port）——原实现用 self._next_port 导致真实
+        # server 监听 next_port+1、wait_health 探测 port 永远超时（mock 测试
+        # 不启动真实进程未暴露；真实 4B 校准首跑暴露，2026-08-09）
         cmd = [self.server_bin, "-m", self.model,
-               "--host", "127.0.0.1", "--port", str(self._next_port),
+               "--host", "127.0.0.1", "--port", str(port),
                "-ngl", str(self.ngl),
                "--ctx-size", str(self.ctx_size),
                "--kv-unified",
@@ -189,6 +198,12 @@ class M0FanoutRunner:
                "--cache-type-k", ctk,
                "--cache-type-v", ctv,
                "--no-webui",
+               # v55：日志级别 -lv 5 —— G-M0-4 的 RS buffer 独立观测数据源
+               # （llama-memory-recurrent.cpp:115 "RS buffer size"）与
+               # llama_kv_cache 分配行默认 verbosity=3 不打印，实测确认
+               # （2026-08-09 真实 4B 校准）；-lv 5 同时覆盖 G-M0-5
+               # capability-rejected 行（INFO 级，默认即有）
+               "-lv", "5",
                # v48 复审：slot erase（KVProbe 恢复观测）前置——llama.cpp
                # server-context.cpp:5448 要求 slot_save_path 非空，否则 POST /slots
                # 返回 ERROR_TYPE_NOT_SUPPORTED；与 e15 runner（e15_branch_concurrent.py
@@ -204,7 +219,7 @@ class M0FanoutRunner:
         """启动 server（启动/health 失败重试 3 次后抛 ServerError）。"""
         port = self._next_port
         self._next_port += 1
-        cmd = self._server_cmd(parallel, ctk, ctv, control)
+        cmd = self._server_cmd(parallel, ctk, ctv, control, port)
         log_path = os.path.join(self.tmp_dir, f"server_{tag}.log")
         adapter = self.adapter_cls(cmd, log_path, port)
         last_err = "启动失败"
@@ -429,14 +444,17 @@ class M0FanoutRunner:
         """
         sessions: List[Dict[str, Any]] = []
         for s in range(VALIDATION_SESSIONS):
+            # v54：session 0 → control off、session 1 → control on（G-M0-1 验证
+            # 不依赖 control 开关，两开关各验证一次更完整）
+            control = VALIDATION_CONTROLS[s]
             try:
                 adapter = self._start_server(parallel=10, ctk="q8_0", ctv="q8_0",
-                                             control="off", tag=f"dv{s}")
+                                             control=control, tag=f"dv{s}")
             except ServerError:
                 break
             try:
                 recs = self._run_decision_session(adapter.port)
-                sessions.append(self._session_from_recs(recs))
+                sessions.append(self._session_from_recs(recs, control))
             finally:
                 self._stop_server()
         complete = len(sessions) == VALIDATION_SESSIONS and all(
@@ -445,7 +463,7 @@ class M0FanoutRunner:
         return complete, sessions
 
     @staticmethod
-    def _session_from_recs(recs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _session_from_recs(recs: List[Dict[str, Any]], control: str) -> Dict[str, Any]:
         valid = sum(1 for r in recs if r["ok"] and r["error"] is None)
         errors = [r for r in recs if r["error"] is not None]
         invalids = [r for r in recs if not r["ok"] and r["error"] is None]
@@ -459,7 +477,7 @@ class M0FanoutRunner:
         for e in errors:
             key = (e["error"], None, None)
             err_summary[key] = err_summary.get(key, 0) + 1
-        return sch.build_decision_session(
+        sess = sch.build_decision_session(
             requests=len(recs), valid=valid, invalid=len(invalids),
             error_count=len(errors), invalid_length=invalid_length,
             invalid_no_action=invalid_no_action, finish_reasons=fr,
@@ -468,6 +486,8 @@ class M0FanoutRunner:
             error_summary=[{"code": k[0], "count": v}
                            for k, v in err_summary.items()],
         )
+        sess["control"] = control  # v54：记录验证 session 的 control 开关
+        return sess
 
     # ---- formal 矩阵（12 groups） ----
 
@@ -1152,7 +1172,8 @@ class M0FanoutRunner:
         # G-M0-4（Critical 10，v48 复审）：RS buffer 对账——derived 与独立观测分离。
         #   - derived 自检：baseline.rs_buffer_mb 与公式 RS_BYTES_PER_ROW*parallel 一致
         #     （防内部公式 bug；**仅 internal consistency detail，不参与 gate status**——
-        #     RS_BYTES_PER_ROW=24*548864*4 为 0.8B 实测校准系数，4B 正式矩阵必须重校准，
+        #     RS_BYTES_PER_ROW=24*548864*4 经 v55 真实 4B GPU 短校准实测一致
+        #     （201.00 MiB@p4 / 502.50 MiB@p10 = 50.25 MiB/parallel，2026-08-09），
         #     不宣称已验证）；
         #   - gate 仅由真实 server 启动日志独立观测决定（llama-memory-recurrent.cpp:115
         #     "RS buffer size = X MiB"）：无任何观测 → NOT_APPLICABLE（明确，非 PASS）；

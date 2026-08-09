@@ -644,7 +644,7 @@ CLI 合同（v12 收紧）：`--server-bin --model [--port-base N] --ctx-size 40
 可量化验收标准（M0 实现阶段）：
 | 门禁 | 标准 |
 |---|---|
-| G-M0-1 决策确定性（v24：专用验证协议，与矩阵分离） | **专用稳定性验证，与正式矩阵数据完全分离**：**2 次独立 server 会话，每次 ≥10 请求（总数 ≥20）**，temp=0/seed=42 下 4B 决策点合法 `ACTION: branch(bX)` 输出率 **100%**；**INVALID_DECISION 谓词（三处同一）**：`(finish_reason=="length") OR (输出不含合法 ACTION)` → 任一即该 rep `status=INVALID_DECISION`（rep 级，非顶层 verdict；length 截断即使含 ACTION 也不可信）；**合法率 <100% → G-M0-1 = FAIL → 顶层 `HOLD_NOT_VALIDATED`**；**v23-v26 边界**：验证 server 崩溃但 session 达 ≥10 且证据完整（每请求有 OK/INVALID_DECISION/ERROR 记录，含最后 in-flight 崩溃）→ **仍计入验证、继续 formal，不要求崩溃后的 health**；**任一验证 session 启动失败即停止验证阶段、不再启动后续 session（v25/v26）**；session 不完整（requests<10）/ 启动失败 / 证据无法落盘 → `PREFLIGHT_INFRA`（decision_validation：无任何证据 → null、已有第一/部分当前 session → partial）；**正式矩阵单 rep 决策失败仅记录 `status=INVALID_DECISION` 并走固定路由 fallback 继续内存压力实验，不计入 G-M0-1，不宣称真实决策 PASS**；fallback 触发 → `decision_fallback: true` + verdict 标记（§5.1） |
+| G-M0-1 决策确定性（v24：专用验证协议，与矩阵分离） | **专用稳定性验证，与正式矩阵数据完全分离**：**2 次独立 server 会话，每次 ≥10 请求（总数 ≥20；v54：session 0 → control off、session 1 → control on，`VALIDATION_CONTROLS=("off","on")`，session 记录含 `control` 字段）**，temp=0/seed=42 下 4B 决策点合法 `ACTION: branch(bX)` 输出率 **100%**；**INVALID_DECISION 谓词（三处同一）**：`(finish_reason=="length") OR (输出不含合法 ACTION)` → 任一即该 rep `status=INVALID_DECISION`（rep 级，非顶层 verdict；length 截断即使含 ACTION 也不可信）；**合法率 <100% → G-M0-1 = FAIL → 顶层 `HOLD_NOT_VALIDATED`**；**v23-v26 边界**：验证 server 崩溃但 session 达 ≥10 且证据完整（每请求有 OK/INVALID_DECISION/ERROR 记录，含最后 in-flight 崩溃）→ **仍计入验证、继续 formal，不要求崩溃后的 health**；**任一验证 session 启动失败即停止验证阶段、不再启动后续 session（v25/v26）**；session 不完整（requests<10）/ 启动失败 / 证据无法落盘 → `PREFLIGHT_INFRA`（decision_validation：无任何证据 → null、已有第一/部分当前 session → partial）；**正式矩阵单 rep 决策失败仅记录 `status=INVALID_DECISION` 并走固定路由 fallback 继续内存压力实验，不计入 G-M0-1，不宣称真实决策 PASS**；fallback 触发 → `decision_fallback: true` + verdict 标记（§5.1） |
 | G-M0-2 隔离 | canary 跨分支泄漏率 **0**（**v49：基于成功分支观测——ERROR rep 跳过；全矩阵无任何非 ERROR 分支观测 → `NOT_APPLICABLE` 绝不静默 PASS；至少 1 个非 ERROR 分支观测才判定**） |
 | G-M0-3 回收（v3：不形成伪门禁） | **G-M0-3a（门禁）**：每 rep 末 `erase` 后 `/metrics/kv` `used_cells==0 && active_sequences==0` —— **仅证明 attention cells 回收**；**G-M0-3b（smoke，非门禁）**：全部 reps 完成后 nvidia-smi `used` 回落至空载基线（±50 MiB）—— **只做显存泄漏 smoke，不证明 recurrent state 回收**；recurrent 回收**保持不可观测缺口**（无运行期接口，§5.1），M0 不承诺、不验收 |
 | G-M0-4 内存归因（v4：启动日志精确值门禁） | **主门禁**：**group.baseline 内联字段（v42：rs_buffer_mb / kv_buffer_mb，不依赖易丢日志路径）**对账 `RS buffer size`（`llama-memory-recurrent.cpp:115`）精确值 vs 公式 `24×548864×4×parallel` 误差 **≤5%**；attention KV 同理（`llama_kv_cache` 分配 68/128 MiB vs `8×8×128×2×elem×4096`）；**按每个 server_group 的 actual profile/parallel（v42：baseline 内联字段与 group.ctk/ctv/parallel 对账，错配 → G-M0-4 FAIL/SCHEMA_INVALID）**；按每个 server_group 的 parallel/ctk/ctv 分别对账启动日志 RS/KV 与公式（v41）**；**GPU used 差分只作总量 sanity**（阈值 ±10%，口径 = nvidia-smi `memory.used` 增量，探针观测 run-to-run 波动 <10%） |
@@ -678,3 +678,85 @@ CLI 合同（v12 收紧）：`--server-bin --model [--port-base N] --ctx-size 40
 4. 0.8B 决策点校准 → 4B 决策确定性验证（G-M0-1，<100% → `HOLD_NOT_VALIDATED`）；
 5. 跑合法矩阵（§4.2，6 组合 × 2 ctk × 2 对照 = 24 单元）→ 落盘 → 归因报告（§8 输出）→ 对照 G-M0-2..7；
 6. 结果归档 `benchmark/baseline/` + 报告文档 + AGENTS.md 状态更新。
+
+---
+
+## 12. 阶段 0 实测记录（2026-08-09，v55）
+
+> 真实 Qwen3.5-4B GPU 短校准（**未跑 24-unit formal 矩阵**）。证据归档：
+> `benchmark/baseline/qwen35-4b_gpu_m0_calibration_20260809.json`（主结果）与
+> `benchmark/baseline/qwen35-4b_gpu_m0_probe_evidence_20260809.json`（GGUF/pynvml/nvidia-smi/RS/KV 探针）。
+> 复现命令（精确）：`cd benchmark && uv run python ../benchmark/results/m0_cal_4b.py`
+> （runner 现有 API 短脚本，不调用 CLI/run()/run_formal()；脚本在 results/ 临时目录，不入库）。
+
+### 12.1 环境与构建
+
+- **llama.cpp 重建**：`cmake --build build-cuda -j $(nproc)`（GGML_CUDA=ON，CMAKE_CUDA_ARCHITECTURES=89）；
+  `llama-server --version` → **`8570 (4a699aaad)`**（与 HEAD 一致）；llama.cpp 零源码改动。
+- **GPU**：NVIDIA GeForce RTX 4060 Laptop GPU，8188 MiB，driver 610.43.03；`nvidia-smi` 可用。
+- **pynvml 依赖**：`sampler.find_server_gpu_mb` 曾返回 null——根因是旧 `.venv` 未安装
+  `nvidia-ml-py`（pyproject.toml 已声明 `nvidia-ml-py>=13.610.43`）；`uv sync` 后 `pynvml OK, devices=1`。
+  注意：**校准脚本须用 `uv run python` 运行**（系统 python3 无 pynvml）。
+- 无遗留 llama-server（校准全程每阶段清理，最终 `leftover_pids=[]`）。
+
+### 12.2 代码修复（v55，真实首跑暴露）
+
+1. **端口错配（根因）**：`_server_cmd` 原用 `--port self._next_port`（已 +1），而 `adapter.port` 为递增前
+   值——真实 server 监听 `next_port+1`、`wait_health` 探测 `port` 永远超时（mock 测试不启动真实进程未暴露）。
+   修复：`_server_cmd(..., port)` 显式传参；回归测试 `test_server_cmd_port_matches_adapter`。
+2. **日志级别**：`RS buffer size`（llama-memory-recurrent.cpp:115）与 `llama_kv_cache` 分配行
+   默认 verbosity=3 不打印（实测确认）→ `_server_cmd` 加 `-lv 5`（G-M0-4 独立观测前置）；测试断言。
+3. **decision-validation 双 control（v54）**：2 sessions = off/on 各一（`VALIDATION_CONTROLS`），
+   session 记录含 `control` 字段；测试 `test_m0_v54_validation_controls.py`（5 例）。
+
+### 12.3 校准结果（parity）
+
+- **parity_ok = true**：6 桶（short-P/B, medium-P/B, long-P/B）全部 completed、`errors=[]`；
+  三次独立运行结果完全一致（apply-template+tokenize 与 chat prompt_tokens 一致，add_special 归因正确）。
+- **calibrated_lengths（真实 apply-template+tokenize，P prefix / B branch tokens）**：
+
+  | (bucket, fanout) | prefix | branch |
+  |---|---|---|
+  | short / 2 | 260 | 344 |
+  | medium / 2 | 420 | 504 |
+  | long / 2 | 551 | 635 |
+  | short / 4 | 274 | 359 |
+  | medium / 4 | 434 | 519 |
+  | short / 8 | 302 | 386 |
+
+- **preflight_rejections = []**：24 候选预算（`budget(P,B,N) ≤ 3481`）全部通过，无排除。
+- **binary_version**：8570（/props build_info 尽力而为记录）。
+
+### 12.4 decision-validation（G-M0-1 前置）
+
+- **complete = true**：off/on 两 session 各 `requests=10, valid=10, invalid=0, error_count=0`；
+  `invalid_length=0, invalid_no_action=0`；`finish_reasons={stop:10}`；`error_summary=[]`。
+- **确定性 100%**：每 session 内 10/10 输出哈希完全相同（`03c79f28...`），且 off/on 哈希也相同
+  ——temp=0/seed=42 下 4B 决策点稳定输出合法 `ACTION: branch(bX)`，control 开关不影响决策输出。
+- **结论：G-M0-1 前置通过**（合法率 100%，无 length 截断、无 error）。
+
+### 12.5 探针（parallel10 q8_0 + --kv-prefix-share）
+
+- **RS buffer（G-M0-4 数据源）**：`llama_memory_recurrent: CUDA0 RS buffer size`——
+  parallel4 = **201.00 MiB**、parallel10 = **502.50 MiB** → **50.25 MiB/parallel**；
+  **与常量 `RS_BYTES_PER_ROW = 24×548864×4 / 1048576 = 50.25 MiB/parallel` 完全一致**（无需改常量，
+  注释"0.8B 实测"实为 4B 架构参数，证据已更新）。
+- **attention KV**：`llama_kv_cache: size = 68.00 MiB (4096 cells, 8 layers, 10/1 seqs), K q8_0 34 + V q8_0 34`
+  ——与公式一致（qwen35 hybrid：8 attention 层 + 24 recurrent 层）；`/metrics/kv` 实测
+  `capacity_bytes=71303168`（68 MiB）、`capacity_cells=4096`、`shared_cells=0`、`physical_sharing=false`。
+- **G-M0-3b 前置**：pynvml 峰值 **3358 MiB**（probe 存活时 3354 MiB，4B ctx4096 p10 q8_0），
+  空载 40 MiB → 显存增量 3318 MiB，8 GB 卡（8188 MiB）无 OOM 风险；nvidia-smi CLI 口径可用。
+- **G-M0-5**：control=on 会话日志含 `E8-C1: capability rejected: memory implementation does not
+  support cross-slot prefix metadata sharing (only standard unified attention KV is audited)`
+  （dv_on + probe 各 1 行）；control=off 无该行——**真实 hybrid capability-rejected 日志存在**。
+
+### 12.6 结论与限制
+
+- **PASS**：parity（6 桶全对）、决策确定性（off/on 各 10/10）、24 候选预算（0 拒绝）、
+  RS 系数（50.25 MiB/parallel 与常量一致）、KV 容量（68 MiB）、G-M0-5 日志存在。
+- **具备进入完整 24-unit formal 矩阵条件**（parity 与决策门禁前置全过；剩余 G-M0-2..7 与
+  TTFT/latency 主成分需正式矩阵采集）。
+- **限制**：① 本次未跑 formal groups（12 server group 生命周期与 per-unit 落盘未实测）；
+  ② 决策点使用 short/fanout8 模板（与正式矩阵一致）；③ GPU 采样需 `uv run`（pynvml 在
+  uv 环境）；④ `-lv 5` 日志量较大（~2.6k 行/15s），正式矩阵单 group 日志保留策略需确认；
+  ⑤ build-cuda 重建（含 -lv 5 无影响，llama.cpp 零改动）。

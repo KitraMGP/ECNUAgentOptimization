@@ -572,11 +572,50 @@ class TestServerCmdContract:
         os.makedirs(r.tmp_dir, exist_ok=True)
         for ctl in ("off", "on"):
             for p in (4, 6, 10):
-                cmd = r._server_cmd(p, "q8_0", "f16", ctl)
+                cmd = r._server_cmd(p, "q8_0", "f16", ctl, port=9000 + p)
                 assert "--slot-save-path" in cmd, cmd
                 sp = cmd[cmd.index("--slot-save-path") + 1]
                 assert sp == r.tmp_dir
                 assert os.path.isdir(sp)  # 目录存在、每生命周期可用
+                # v55：-lv 5 前置（G-M0-4 RS buffer 行观测；默认 verbosity=3 不打印）
+                assert cmd[cmd.index("-lv") + 1] == "5", cmd
+
+    def test_server_cmd_port_matches_adapter(self, tmp_path, monkeypatch):
+        """v55 回归：--port 必须等于 adapter.port（_start_server 的 port 变量），
+        不得用已 +1 的 self._next_port——否则真实 server 监听 next_port+1、
+        wait_health 探测 port 永远超时（真实 4B 校准首跑暴露）。"""
+        started: list = []
+
+        class FakeAdapter2:
+            def __init__(self, cmd, log_path, port):
+                self.cmd, self.log_path, self.port = cmd, log_path, port
+
+            def start(self):
+                started.append((self.port, self.cmd))
+
+            def wait_health(self, timeout=120.0):
+                return True
+
+            def read_log(self):
+                return ""
+
+            def poll(self):
+                return None
+
+            def stop(self):
+                pass
+
+        r = make_runner(tmp_path, FakeAdapter2)
+        # 直接契约：_server_cmd(port=N) 的 --port == N
+        for p in (18080, 18081, 19099):
+            cmd = r._server_cmd(4, "q8_0", "q8_0", "off", port=p)
+            assert cmd[cmd.index("--port") + 1] == str(p), cmd
+        # _start_server 生命周期：cmd --port == adapter.port == 递增前 _next_port
+        os.makedirs(r.tmp_dir, exist_ok=True)
+        a = r._start_server(4, "q8_0", "q8_0", "off", "t")
+        port, cmd = started[0]
+        assert port == a.port == 18080  # 第一个 server 用递增前端口
+        assert cmd[cmd.index("--port") + 1] == str(port)
 
 
 # ---- v48 复审（任务 3）：请求 ERROR rep 仍必须 erase + after_erase ----
