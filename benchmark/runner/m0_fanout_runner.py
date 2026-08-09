@@ -317,7 +317,16 @@ class M0FanoutRunner:
                     if not ok:
                         clean = False
                         self._stop_errors.append(f"stop ok=False: {detail}")
-                # 非 tuple 返回（None 等旧契约）→ 视为干净
+                elif isinstance(result, bool):
+                    # v61（任务 5）：bool False 也记录（进程可能残留）
+                    if not result:
+                        clean = False
+                        self._stop_errors.append("stop 返回 False（进程可能残留）")
+                else:
+                    # v61（任务 5）：非 tuple/非 bool 返回 → 按诊断失败处理
+                    clean = False
+                    self._stop_errors.append(
+                        f"stop 返回异常类型 {type(result).__name__}（期望 tuple/bool）")
             self._adapter = None
         self._driver = None
         self._kv = None
@@ -589,45 +598,50 @@ class M0FanoutRunner:
         for gi, (control, ctk, ctv, fanout) in enumerate(group_seq):
             gid = sch.group_id_of(control, ctk, ctv, fanout)
             start_ts = sch.now_utc()
+            adapter: Optional[ServerAdapter] = None  # v61：结构化 finally 统一 stop
             try:
-                adapter = self._start_server(parallel=fanout + 2, ctk=ctk, ctv=ctv,
-                                             control=control, tag=f"g{gi}")
-            except ServerError as e:
-                if gi == 0:
-                    raise FirstGroupStartFailed(str(e))
-                self._record_group_error(gid, control, start_ts, "server_crash", str(e))
-                raise FormalIncomplete(str(e))
-            try:
-                self._driver, self._kv = self._connect(adapter.port)
-            except _INFRA_EXCEPTIONS as e:
-                # v60（任务 2）：连接基础设施异常（OSError/openai/ServerError，
-                # 含 TimeoutError）→ 首 group（尚无任何 completed group）按首
-                # group preflight/PREFLIGHT_INFRA 规则（FirstGroupStartFailed，
-                # 上层保留完整 decision_validation 落盘 preflight）；第 2+ group
-                # → 保留已完成 groups、失败 group ERROR（endpoint_unavailable）、
-                # FormalIncomplete 合法落盘，绝不 exit70 丢结果。内部 bug
-                # （AssertionError/KeyError/TypeError）不在此捕获 → run_safe 70。
-                if not self.groups_off and not self.groups_on:
-                    raise FirstGroupStartFailed(
+                try:
+                    adapter = self._start_server(parallel=fanout + 2, ctk=ctk, ctv=ctv,
+                                                 control=control, tag=f"g{gi}")
+                except ServerError as e:
+                    if gi == 0:
+                        raise FirstGroupStartFailed(str(e))
+                    self._record_group_error(gid, control, start_ts, "server_crash", str(e))
+                    raise FormalIncomplete(str(e))
+                # v61（Critical 修复）：server 已启动 → 以下全部路径（connect/baseline/
+                # warmup/formal/异常归因）由外层 finally 无条件 _stop_server，
+                # 任何异常（基础设施、FirstGroupStartFailed、FormalIncomplete、内部 bug）
+                # 均不得泄漏 server。
+                try:
+                    self._driver, self._kv = self._connect(adapter.port)
+                except _INFRA_EXCEPTIONS as e:
+                    # v60（任务 2）：连接基础设施异常（OSError/openai/ServerError，
+                    # 含 TimeoutError）→ 首 group（尚无任何 completed group）按首
+                    # group preflight/PREFLIGHT_INFRA 规则（FirstGroupStartFailed，
+                    # 上层保留完整 decision_validation 落盘 preflight）；第 2+ group
+                    # → 保留已完成 groups、失败 group ERROR（endpoint_unavailable）、
+                    # FormalIncomplete 合法落盘，绝不 exit70 丢结果。内部 bug
+                    # （AssertionError/KeyError/TypeError）不在此捕获 → run_safe 70。
+                    if not self.groups_off and not self.groups_on:
+                        raise FirstGroupStartFailed(
+                            f"connect 基础设施失败: {type(e).__name__}: {e}") from e
+                    self._record_group_error(gid, control, start_ts,
+                                             "endpoint_unavailable", f"connect: {e}")
+                    raise FormalIncomplete(
                         f"connect 基础设施失败: {type(e).__name__}: {e}") from e
-                self._record_group_error(gid, control, start_ts,
-                                         "endpoint_unavailable", f"connect: {e}")
-                raise FormalIncomplete(
-                    f"connect 基础设施失败: {type(e).__name__}: {e}") from e
-            try:
-                baseline = self._capture_baseline(gid)
-            except _INFRA_EXCEPTIONS as e:
-                # v60（任务 2）：baseline KV 快照 / 采样的基础设施异常（OSError /
-                # openai 连接失败等）→ 同 connect 归因（首 group preflight；
-                # 第 2+ group 保留已完成 + ERROR + FormalIncomplete）。
-                if not self.groups_off and not self.groups_on:
-                    raise FirstGroupStartFailed(
+                try:
+                    baseline = self._capture_baseline(gid)
+                except _INFRA_EXCEPTIONS as e:
+                    # v60（任务 2）：baseline KV 快照 / 采样的基础设施异常（OSError /
+                    # openai 连接失败等）→ 同 connect 归因（首 group preflight；
+                    # 第 2+ group 保留已完成 + ERROR + FormalIncomplete）。
+                    if not self.groups_off and not self.groups_on:
+                        raise FirstGroupStartFailed(
+                            f"baseline 基础设施失败: {type(e).__name__}: {e}") from e
+                    self._record_group_error(gid, control, start_ts,
+                                             "endpoint_unavailable", f"baseline: {e}")
+                    raise FormalIncomplete(
                         f"baseline 基础设施失败: {type(e).__name__}: {e}") from e
-                self._record_group_error(gid, control, start_ts,
-                                         "endpoint_unavailable", f"baseline: {e}")
-                raise FormalIncomplete(
-                    f"baseline 基础设施失败: {type(e).__name__}: {e}") from e
-            try:
                 reps: List[Dict[str, Any]] = []
                 crashed = False
                 crash_error_type = "server_crash"  # v49：ServerCrash 默认；EraseFailure 覆盖
@@ -711,13 +725,15 @@ class M0FanoutRunner:
                                         baseline=baseline, replicates=reps)
                 self._append_group(control, group)
             finally:
-                stop_clean = self._stop_server()
-            if not stop_clean and not crashed:
-                # v59：try 块无 primary 异常但 stop 失败（进程可能残留）→
-                # 按基础设施处理（matrix_complete=false）；primary 异常存在时
-                # 异常优先传播、此判断不执行（stop 不传播不掩盖 primary）
-                raise FormalIncomplete("group 停止失败（进程可能残留）")
-
+                if adapter is not None:
+                    stop_clean = self._stop_server()
+                    if not stop_clean:
+                        # v61（任务 2）：stop 失败——无 primary 异常 → FormalIncomplete；
+                        # 有 primary 异常 → 记 notes 不覆盖（异常优先传播）
+                        if sys.exc_info()[0] is None:
+                            raise FormalIncomplete("group 停止失败（进程可能残留）")
+                        self.notes.append(
+                            "group 停止失败（进程可能残留；primary 异常优先）")
     def _rejected_ids(self) -> List[str]:
         return [r.get("unit_id") for r in self.preflight_rejections]
 
@@ -1539,11 +1555,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         # 在 results 供排障；此处仅清理超过 age 的陈旧目录，不删活跃/父目录）
         sch.cleanup_stale_dirs(os.path.dirname(os.path.abspath(args.out)),
                                args.cleanup_tmp_age)
+    # v61（任务 4）：--tmp-dir 未提供时默认父目录 = results 目录（dirname(out)），
+    # 使 ACTIVE.marker cleanup 扫描域一致（cleanup_stale_dirs 与 runner tmp 同域），
+    # 避免系统 /tmp 目录永不清；显式 --tmp-dir 优先。
+    tmp_parent = args.tmp_dir
+    if not tmp_parent and args.out:
+        tmp_parent = os.path.dirname(os.path.abspath(args.out))
     runner = M0FanoutRunner(
         server_bin=args.server_bin, model=args.model, ctx_size=args.ctx_size,
         port_base=args.port_base, decision_n_predict=args.decision_n_predict,
         branch_n_predict=args.branch_n_predict, tool_rounds=args.tool_rounds,
-        out_path=args.out, tmp_dir=args.tmp_dir, ngl=args.ngl,
+        out_path=args.out, tmp_dir=tmp_parent, ngl=args.ngl,
     )
     # Critical 4：兜底入口（无 traceback / exit 1）
     return runner.run_safe()

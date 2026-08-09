@@ -80,6 +80,7 @@ class FakeAdapter:
         if self._server is not None:
             self._server.__exit__(None, None, None)
             self._server = None
+            return (True, "ok")  # v61 契约：tuple/bool
 
     def read_log(self):
         return ("E8-C1: capability rejected: hybrid (recurrent+attention) model\n"
@@ -603,7 +604,7 @@ class TestServerCmdContract:
                 return None
 
             def stop(self):
-                pass
+                return (True, "ok")  # v61 契约：tuple/bool
 
         r = make_runner(tmp_path, FakeAdapter2)
         # 直接契约：_server_cmd(port=N) 的 --port == N

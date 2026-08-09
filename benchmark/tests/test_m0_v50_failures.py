@@ -63,6 +63,7 @@ class FakeAdapter:
         if self._server is not None:
             self._server.__exit__(None, None, None)
             self._server = None
+            return (True, "ok")  # v61 契约：tuple/bool
 
     def read_log(self):
         return ""
