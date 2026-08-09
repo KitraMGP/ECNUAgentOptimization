@@ -362,6 +362,42 @@ class TestPreflightRejections:
         assert any("EXPECTED_UNIT_IDS" in str(e) for e in errs)
 
 
+class TestRepLatencyFields:
+    """v65：rep 级 latency_ms/ttft_ms（§5.2 定义此前未落，完整 4B 矩阵暴露）。"""
+
+    def test_build_rep_writes_latency_fields(self):
+        rep = sch.build_rep("off:q8_0-q8_0:f2:short", 0, 2, "short", "q8_0", "q8_0",
+                            150, 150, "off:q8_0-q8_0:f2", "OK", False,
+                            {"kv": {}, "branches": []},
+                            latency_ms=1234.5, ttft_ms=88.9)
+        assert rep["latency_ms"] == 1234.5
+        assert rep["ttft_ms"] == 88.9
+
+    def test_build_rep_latency_optional(self):
+        # 未传 → 不写入（ERROR rep / 旧调用）
+        rep = sch.build_rep("off:q8_0-q8_0:f2:short", 0, 2, "short", "q8_0", "q8_0",
+                            150, 150, "off:q8_0-q8_0:f2", "OK", False,
+                            {"kv": {}, "branches": []})
+        assert "latency_ms" not in rep and "ttft_ms" not in rep
+
+    def test_validator_accepts_latency_fields(self):
+        # 合法 doc 的 rep 带 latency 字段 → validate 通过（非白名单拒绝）
+        rep = sch.build_rep("off:q8_0-q8_0:f2:short", 0, 2, "short", "q8_0", "q8_0",
+                            150, 150, "off:q8_0-q8_0:f2", "OK", False,
+                            {"kv": {"last": {"used_cells": 0, "active_sequences": 0}},
+                             "branches": []},
+                            latency_ms=100.0, ttft_ms=50.0)
+        group = sch.build_group("off:q8_0-q8_0:f2", "COMPLETED", "2026-08-09T00:00:00Z",
+                                "2026-08-09T00:01:00Z", baseline=sch.build_baseline(
+                                    "v", 1.0, 1.0, 100.0, 68.0, {}),
+                                replicates=[rep])
+        modes = {"off": {"server_groups": [group]}, "on": {"server_groups": []}}
+        # matrix_complete=False（单 group 非完整矩阵）→ 无 24-unit 不变量约束，
+        # 仅验证 latency 字段被 validator 接受
+        errs = sch.validate_modes_group_rep(modes, False, set())
+        assert errs == [], errs
+
+
 class TestModesGroupRep:
     def _rep(self, unit_id="off:q8_0-q8_0:f2:short", rep_index=0, status="OK"):
         return sch.build_rep(unit_id, rep_index, 2, "short", "q8_0", "q8_0",

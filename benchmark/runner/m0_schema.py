@@ -264,6 +264,8 @@ def build_rep(
     error_type: Optional[str] = None,
     error_stage: Optional[str] = None,
     error_bucket: Optional[str] = None,
+    latency_ms: Optional[float] = None,
+    ttft_ms: Optional[float] = None,
 ) -> Dict[str, Any]:
     """单次 formal rep（v44：逐 rep 对象；unit 身份字段每 rep 内联）。"""
     rep: Dict[str, Any] = {
@@ -286,6 +288,10 @@ def build_rep(
         rep["error_stage"] = error_stage
     if error_bucket is not None:
         rep["error_bucket"] = error_bucket
+    if latency_ms is not None:
+        rep["latency_ms"] = latency_ms
+    if ttft_ms is not None:
+        rep["ttft_ms"] = ttft_ms
     return rep
 
 

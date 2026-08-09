@@ -829,6 +829,11 @@ class M0FanoutRunner:
                 f"校准长度缺失: {bucket}/fanout={fanout}（校准阶段必须先行，v58）")
         self._last_prefix_len = int(cal["prefix"])
         self._last_branch_len = int(cal["branch"])
+        # v65：收集本 rep 各请求 latency/TTFT（driver row 顶层 latency_ms +
+        # timings.prompt_ms 代理）——OK/INVALID_DECISION rep 落 avg 供 off/on
+        # 延迟对比（§5.2 定义但此前未落，完整 4B 矩阵暴露缺口）
+        latencies: List[float] = []
+        ttfts: List[float] = []
         # Critical 1：每个 formal rep 独立 begin_run/end_run 边界（KV 快照按
         # run_id 归组）；warmup 不进入 run 作用域。
         rep_run_id = f"{unit_id}#r{rep_index}" if rep_index is not None else None
@@ -848,6 +853,9 @@ class M0FanoutRunner:
             try:
                 row = self._driver.chat(msgs, temperature=TEMPERATURE, seed=SEED,
                                         max_tokens=self.decision_n_predict)
+                latencies.append(row.get("latency_ms") or 0.0)
+                _t = row.get("timings") or {}
+                ttfts.append(_t.get("prompt_ms") or 0.0)
                 text = row["text"]
                 # Critical 2：只从顶层 finish_reason 判定（choice.finish_reason）
                 fr = row.get("finish_reason") or "stop"
@@ -897,6 +905,9 @@ class M0FanoutRunner:
                     bar.wait()
                     brow = self._driver.chat(bmsgs, temperature=TEMPERATURE, seed=SEED,
                                              max_tokens=self.branch_n_predict)
+                    latencies.append(brow.get("latency_ms") or 0.0)
+                    _t2 = brow.get("timings") or {}
+                    ttfts.append(_t2.get("prompt_ms") or 0.0)
                     return {"branch": bname, "row": brow, "canary": canary}
 
                 with ThreadPoolExecutor(max_workers=fanout) as ex:
@@ -916,11 +927,14 @@ class M0FanoutRunner:
                     for tround in range(1, self.tool_rounds + 1):
                         for b in branches:
                             if b.get("row") is not None and b.get("error") is None:
-                                self._driver.chat(
+                                trow = self._driver.chat(
                                     msgs + [{"role": "assistant", "content": action}] +
                                     [fp.tool_round_message(b["branch"], tround)],
                                     temperature=TEMPERATURE, seed=SEED,
                                     max_tokens=self.branch_n_predict)
+                                latencies.append(trow.get("latency_ms") or 0.0)
+                                _t3 = trow.get("timings") or {}
+                                ttfts.append(_t3.get("prompt_ms") or 0.0)
                 except Exception as e:
                     if self._adapter is not None and self._adapter.poll() is not None:
                         raise ServerCrash(str(e)) from e
@@ -1070,9 +1084,13 @@ class M0FanoutRunner:
                           "canary_leak": self._canary_leak(b, branches)}
                          for b in branches],
         }
+        avg_lat = (sum(latencies) / len(latencies)) if latencies else None
+        avg_ttft = (sum(ttfts) / len(ttfts)) if ttfts else None
         rep = sch.build_rep(unit_id, rep_index, fanout, bucket, ctk, ctv,
                             self._last_prefix_len, self._last_branch_len, gid,
-                            status, fallback, metrics)
+                            status, fallback, metrics,
+                            latency_ms=(avg_lat if not has_error else None),
+                            ttft_ms=(avg_ttft if not has_error else None))
         if has_error:
             if decision_error is not None:
                 rep["error_type"] = classify_error(decision_error)
