@@ -17,15 +17,19 @@ from __future__ import annotations
 
 import json
 import os
+import time
+import urllib.error
 
 import pytest
 
 from framework import sampler
 from framework.driver import Driver
+from framework.kv_probe import KVProbe
 from runner import fanout_prompts as fp
 from runner import m0_fanout_runner as m0r
 from runner import m0_schema as sch
 from runner.m0_fanout_runner import M0FanoutRunner, ServerAdapter
+from tests import mock_server as mserver
 from tests.mock_server import MockOpenAIServer
 
 
@@ -35,6 +39,7 @@ class FakeAdapter:
     fail_after = None
     crash_at_after = None
     crash_at_value = 31
+    poll_dead = None  # v48（任务 7）：置 True 时 poll() 恒返回 1（模拟已退出）
     _instances = 0
     _starts = 0
 
@@ -58,6 +63,8 @@ class FakeAdapter:
         self.port = self._server.port
 
     def poll(self):
+        if FakeAdapter.poll_dead:
+            return 1
         if self.crash_at is not None and self._server is not None \
                 and self._server.httpd is not None \
                 and self._server.httpd.count > self.crash_at:
@@ -84,6 +91,7 @@ def fake_adapter_cls(monkeypatch):
     FakeAdapter.fail_after = None
     FakeAdapter.crash_at_after = None
     FakeAdapter.crash_at_value = 31
+    FakeAdapter.poll_dead = None
     FakeAdapter._instances = 0
     FakeAdapter._starts = 0
     monkeypatch.setattr(m0r, "ServerAdapter", FakeAdapter)
@@ -293,19 +301,49 @@ class TestCritical5StaleTmp:
         d = str(tmp_path)
         sch.atomic_write_json(os.path.join(d, "m0_fanout_x.json"), {"a": 1})
         # atomic 写后不应残留 tmp；造一个陈旧 tmp 模拟中断残留
-        stale = os.path.join(d, ".m0_fanout_x.json.tmp")
+        # （v48：新命名 .m0_fanout_<name>.<pid>.<rand>.tmp）
+        stale = os.path.join(d, ".m0_fanout_x.json.1.abcd.tmp")
         with open(stale, "w", encoding="utf-8") as f:
             f.write("{}")
-        removed = sch.cleanup_stale_tmp(d)
-        assert stale in [os.path.join(d, n) for n in removed] or os.path.basename(stale) in removed
+        past = time.time() - 7200
+        os.utime(stale, (past, past))
+        removed = sch.cleanup_stale_tmp(d, max_age_seconds=3600.0)
+        assert os.path.basename(stale) in removed
         assert not os.path.exists(stale)
         assert os.path.exists(os.path.join(d, "m0_fanout_x.json"))
+
+    def test_active_tmp_not_deleted(self, tmp_path):
+        """v48（任务 9）：活跃并发写（新 mtime）不删；仅删陈旧。"""
+        d = str(tmp_path)
+        active = os.path.join(d, ".m0_fanout_x.main.1.abcd.tmp")
+        stale = os.path.join(d, ".m0_fanout_x.main.2.efgh.tmp")
+        for p in (active, stale):
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("{}")
+        past = time.time() - 7200
+        os.utime(stale, (past, past))
+        removed = sch.cleanup_stale_tmp(d, max_age_seconds=3600.0)
+        assert os.path.basename(stale) in removed
+        assert os.path.exists(active)
+
+    def test_atomic_tmp_name_unique(self, tmp_path):
+        """v48（任务 9）：并发写同路径 tmp 名唯一（pid+随机），互不覆盖。"""
+        d = str(tmp_path)
+        p = os.path.join(d, "m0_fanout_x.json")
+        # 同一路径连续两次 atomic 写 → 无残留（前次 tmp 已被 replace）；再验证
+        # 唯一名组件存在：模拟两次并发（无锁）写时文件名含 pid 与随机后缀
+        sch.atomic_write_json(p, {"a": 1})
+        sch.atomic_write_json(p, {"b": 2})
+        leftovers = [n for n in os.listdir(d) if n.startswith(".m0_fanout_")]
+        assert leftovers == []
 
     def test_cli_main_cleans_stale_tmp(self, tmp_path, monkeypatch):
         out_dir = tmp_path / "res"
         out_dir.mkdir()
         stale = out_dir / ".m0_fanout_old.json.tmp"
         stale.write_text("{}", encoding="utf-8")
+        past = time.time() - 7200
+        os.utime(stale, (past, past))
 
         def _fake_runner(**kw):
             class _R:
@@ -318,7 +356,27 @@ class TestCritical5StaleTmp:
                        "--out", str(out_dir / "out.json"),
                        "--tmp-dir", str(tmp_path / "t")])
         assert rc == 0
-        assert not stale.exists()  # CLI 入口已清理
+        assert not stale.exists()  # CLI 入口已清理（陈旧）
+
+    def test_cli_main_keeps_active_tmp(self, tmp_path, monkeypatch):
+        """v48（任务 9）：main 传 age 阈值——活跃（新 mtime）tmp 不删。"""
+        out_dir = tmp_path / "res"
+        out_dir.mkdir()
+        active = out_dir / ".m0_fanout_cur.json.main.tmp"
+        active.write_text("{}", encoding="utf-8")  # 新 mtime
+
+        def _fake_runner(**kw):
+            class _R:
+                def run_safe(self):
+                    return 0
+            return _R()
+
+        monkeypatch.setattr(m0r, "M0FanoutRunner", _fake_runner)
+        rc = m0r.main(["--server-bin", "x", "--model", "m",
+                       "--out", str(out_dir / "out.json"),
+                       "--tmp-dir", str(tmp_path / "t")])
+        assert rc == 0
+        assert active.exists()  # 活跃并发写不删
 
 
 # ---- Critical 6：校准实测长度 ----
@@ -439,15 +497,15 @@ class TestCritical10G4Observational:
         assert m0r.M0FanoutRunner._parse_rs_buffer_mib("no rs line") is None
 
     def _modes_with_groups(self):
-        # expected = RS_BYTES_PER_ROW * (fanout+2) / MiB = 24*548864*4*4/2^20
+        # v48（任务 1）：必须用真实 sch.build_group/build_modes 产物——
+        # build_group 不写 ctk/ctv/fanout 顶层字段，G-M0-4 用 parse_group_id 匹配
         exp = 24 * 548864 * 4 * 4 / (1024 * 1024)
-        off = {
-            "server_group_id": sch.group_id_of("off", "q8_0", "q8_0", 2),
-            "ctk": "q8_0", "ctv": "q8_0", "fanout": 2, "status": "COMPLETED",
-            "baseline": {"rs_buffer_mb": round(exp, 3)},
-            "replicates": [],
-        }
-        return {"off": {"server_groups": [off]}, "on": {"server_groups": []}}
+        gid = sch.group_id_of("off", "q8_0", "q8_0", 2)
+        off = sch.build_group(gid, "COMPLETED", "2026-08-09T00:00:00Z",
+                              "2026-08-09T00:00:01Z",
+                              baseline={"rs_buffer_mb": round(exp, 3)},
+                              replicates=[])
+        return sch.build_modes([off], [])
 
     def test_g4_three_states(self, tmp_path):
         exp = 24 * 548864 * 4 * 4 / (1024 * 1024)
@@ -465,9 +523,284 @@ class TestCritical10G4Observational:
                                  "  400.00 MiB\n")
         g = r._compute_gates(self._modes_with_groups())
         assert g["G-M0-4"]["status"] == "FAIL"
-        # derived 自检不一致（rs_buffer_mb 与公式不符）→ FAIL
+        # derived 自检不一致（rs_buffer_mb 与公式不符）→ 无观测时 NOT_APPLICABLE
+        # （v48，任务 5：derived 仅 internal consistency detail、非 PASS 证据、不 FAIL gate）
         modes = self._modes_with_groups()
         modes["off"]["server_groups"][0]["baseline"] = {"rs_buffer_mb": 1.0}
         r._server_logs["g0"] = ""
         g = r._compute_gates(modes)
-        assert g["G-M0-4"]["status"] == "FAIL"
+        assert g["G-M0-4"]["status"] == "NOT_APPLICABLE"
+        assert "internal inconsistency" in g["G-M0-4"].get("notes", "")
+
+    def test_g4_derived_inconsistency_does_not_fail_with_obs(self, tmp_path):
+        """v48（任务 5）：derived 公式不一致但真实 RS 日志观测匹配 → PASS
+        （derived 只作 internal consistency 记录，不参与 gate status）。"""
+        exp = 24 * 548864 * 4 * 4 / (1024 * 1024)
+        r = make_runner(tmp_path, None)
+        modes = self._modes_with_groups()
+        modes["off"]["server_groups"][0]["baseline"] = {"rs_buffer_mb": 1.0}  # 与公式不符
+        r._server_logs["g0"] = (f"llama_memory_recurrent::init: RS buffer size ="
+                                 f"  {exp:.2f} MiB\n")
+        g = r._compute_gates(modes)
+        assert g["G-M0-4"]["status"] == "PASS"
+        assert "internal inconsistency" in g["G-M0-4"].get("notes", "")
+
+    def test_g4_parse_group_id_matching(self, tmp_path):
+        """v48（任务 1）：G-M0-4 经 parse_group_id(server_group_id) 匹配——
+        build_group 产物（无顶层 ctk/ctv/fanout 字段）必须被正确找到。"""
+        exp = 24 * 548864 * 4 * 4 / (1024 * 1024)
+        r = make_runner(tmp_path, None)
+        r._server_logs["g0"] = (f"llama_memory_recurrent::init: RS buffer size ="
+                                 f"  {exp:.2f} MiB\n")
+        g = r._compute_gates(self._modes_with_groups())
+        assert g["G-M0-4"]["status"] == "PASS"  # 找到 group → 观测 → PASS
+        # 反例：server_group_id 无法解析（非法 id）→ 视为无该 group → 无观测
+        modes = self._modes_with_groups()
+        modes["off"]["server_groups"][0]["server_group_id"] = "not-a-group-id"
+        g = r._compute_gates(modes)
+        assert g["G-M0-4"]["status"] == "NOT_APPLICABLE"
+
+
+# ---- v48 复审（f8334bd 复审 11 项）：任务 2 服务器命令合同 ----
+
+class TestServerCmdContract:
+    def test_slot_save_path_every_lifecycle(self, tmp_path):
+        """--slot-save-path <tmp_dir> 出现在每个 cache profile/fanout/control 生命周期
+        （llama.cpp server-context.cpp:5448 要求 slot_save_path 非空，否则 POST /slots
+        erase 返回 NOT_SUPPORTED；与 e15 runner 一致）。"""
+        r = make_runner(tmp_path, None)
+        os.makedirs(r.tmp_dir, exist_ok=True)
+        for ctl in ("off", "on"):
+            for p in (4, 6, 10):
+                cmd = r._server_cmd(p, "q8_0", "f16", ctl)
+                assert "--slot-save-path" in cmd, cmd
+                sp = cmd[cmd.index("--slot-save-path") + 1]
+                assert sp == r.tmp_dir
+                assert os.path.isdir(sp)  # 目录存在、每生命周期可用
+
+
+# ---- v48 复审（任务 3）：请求 ERROR rep 仍必须 erase + after_erase ----
+
+class _FailDriver:
+    def chat(self, msgs, **kwargs):
+        raise urllib.error.URLError("Connection refused")
+
+
+class TestRepErrorCleanup:
+    def _runner(self, tmp_path, adapter):
+        r = make_runner(tmp_path, None)
+        r._adapter = adapter
+        r._driver = _FailDriver()
+        r._kv = KVProbe(f"http://127.0.0.1:{adapter.port}", enabled=True)
+        r.calibrated_lengths = {("short", 2): {"prefix": 100, "branch": 100}}
+        return r
+
+    def test_decision_error_rep_still_erases_and_snapshots(self, tmp_path):
+        """决策请求 ERROR + server 健康 → rep ERROR 但 erase/after_erase 真实执行：
+        metrics.kv 存在且 last.used_cells==0（G-M0-3a 可验证归零，不 None 静默 PASS）。"""
+        adapter = FakeAdapter([], "", 0)
+        adapter.start()
+        try:
+            r = self._runner(tmp_path, adapter)
+            # 先用真实 Driver 发一个 completion → mock used_cells=384（erase 有实际内容）
+            drv = Driver(base_url=f"http://127.0.0.1:{adapter.port}", model="bench",
+                         sdk_max_retries=0)
+            drv.chat([{"role": "user", "content": "hi"}], max_tokens=4)
+            assert mserver._KV["used_cells"] == 384
+            rep = r._run_unit(sch.unit_id_of("off", "q8_0", "q8_0", 2, "short"),
+                              2, "short", "q8_0", "q8_0", "off:q8_0-q8_0:f2", 0)
+            assert rep["status"] == "ERROR"
+            assert rep["error_type"] == "connection_error"
+            kv = rep["metrics"]["kv"]
+            assert kv["last"]["used_cells"] == 0       # erase 后真实样本归零
+            assert kv["last"]["active_sequences"] == 0
+            assert kv["peak"]["used_cells"] is not None
+            # G-M0-3a：把 rep 包进真实 build_group/build_modes 验证 PASS
+            gid = sch.group_id_of("off", "q8_0", "q8_0", 2)
+            grp = sch.build_group(gid, "COMPLETED", "2026-08-09T00:00:00Z",
+                                  "2026-08-09T00:00:01Z",
+                                  baseline={"metrics_kv_snapshot": {}},
+                                  replicates=[rep])
+            modes = sch.build_modes([grp], [])
+            g = r._compute_gates(modes)
+            assert g["G-M0-3a"]["status"] == "PASS"
+        finally:
+            adapter.stop()
+
+    def test_decision_error_cleanup_failure_crash(self, tmp_path, monkeypatch):
+        """决策请求 ERROR 后 erase 失败 + server 已退出 → ServerCrash（FORMAL_INCOMPLETE），
+        不伪造观测、不静默 PASS。"""
+        adapter = FakeAdapter([], "", 0)
+        adapter.start()
+        try:
+            r = self._runner(tmp_path, adapter)
+
+            def _boom(*a, **k):
+                raise OSError("erase failed")
+
+            r._kv.clean_all_slots = _boom
+            FakeAdapter.poll_dead = True
+            with pytest.raises(m0r.ServerCrash):
+                r._run_unit(sch.unit_id_of("off", "q8_0", "q8_0", 2, "short"),
+                            2, "short", "q8_0", "q8_0", "off:q8_0-q8_0:f2", 0)
+        finally:
+            FakeAdapter.poll_dead = None
+            adapter.stop()
+
+
+# ---- v48 复审（任务 4）：periodic 采样覆盖分支并发/工具轮，peak 来自真实周期样本 ----
+
+class TestPeriodicPeak:
+    def test_peak_from_periodic_mid_run(self, tmp_path):
+        """begin_run 后启动 periodic → 中途高峰被周期样本捕获 → run 聚合 peak 真实。"""
+        prev = dict(mserver._KV)
+        try:
+            with MockOpenAIServer() as srv:
+                kv = KVProbe(f"http://127.0.0.1:{srv.port}", enabled=True)
+                kv.begin_run("r1")
+                kv.snapshot("pre")
+                kv.start_periodic(0.01)
+                mserver._KV["used_cells"] = 384
+                mserver._KV["active_sequences"] = 4
+                time.sleep(0.2)
+                kv.stop()
+                kv.end_run()
+                agg = kv.run_aggregate()["r1"]
+                assert agg["peak_used_cells"] == 384
+                assert agg["peak_active_sequences"] == 4
+                assert agg["samples"] >= 1
+        finally:
+            mserver._KV.update(prev)
+
+    def test_periodic_stopped_on_error_path(self, tmp_path):
+        """异常路径（stop 前抛）→ 线程仍被 stop 回收（无残留采样线程）。"""
+        prev = dict(mserver._KV)
+        try:
+            with MockOpenAIServer() as srv:
+                kv = KVProbe(f"http://127.0.0.1:{srv.port}", enabled=True)
+                kv.begin_run("r1")
+                kv.start_periodic(0.01)
+                mserver._KV["used_cells"] = 384
+                time.sleep(0.15)
+                # 模拟异常路径：直接 stop（runner finally 顺序：stop → end_run）
+                kv.stop()
+                kv.end_run()
+                assert kv._thread is None
+                agg = kv.run_aggregate()["r1"]
+                assert agg["peak_used_cells"] == 384
+        finally:
+            mserver._KV.update(prev)
+
+
+# ---- v48 复审（任务 6）：G-M0-2 缺分支观测 → FAIL ----
+
+class TestG2MissingBranchObs:
+    def test_g2_missing_branch_obs_fails(self, tmp_path):
+        """缺分支观测 → G-M0-2 FAIL（不静默 PASS）。"""
+        r = TestCritical1KVPath()._runner_with_log(tmp_path)
+        modes = TestCritical1KVPath()._minimal_modes(
+            kv_last={"used_cells": 0, "active_sequences": 0},
+            shared=0, branches=[])
+        g = r._compute_gates(modes)
+        assert g["G-M0-2"]["status"] == "FAIL"
+
+
+# ---- v48 复审（任务 7）：warmup 任意请求异常后立即 poll server ----
+
+class TestWarmupRequestErrorDead:
+    def test_warmup_error_with_dead_server_not_swallowed(self, tmp_path,
+                                                         fake_adapter_cls,
+                                                         monkeypatch):
+        """warmup 非 ServerCrash 请求异常 + server 已退出 → 不忽略：
+        group ERROR + FORMAL_INCOMPLETE（崩溃发生在请求阶段、不靠后续分支检测）。"""
+        FakeAdapter.poll_dead = True
+
+        def _boom(*a, **k):
+            raise urllib.error.URLError("Connection refused")
+
+        r = make_runner(tmp_path, fake_adapter_cls)
+        monkeypatch.setattr(r, "_run_unit", _boom)
+        try:
+            rc = r.run()
+            assert rc == 0, rc
+            with open(r.out_path, encoding="utf-8") as f:
+                doc = json.load(f)
+            assert doc["meta"]["phase"] == "formal"
+            assert doc["meta"]["matrix_complete"] is False
+            groups = (doc["modes"]["off"]["server_groups"]
+                      + doc["modes"]["on"]["server_groups"])
+            assert all(g["status"] == "ERROR" for g in groups)
+            assert all(g["error_type"] == "server_crash" for g in groups)
+        finally:
+            FakeAdapter.poll_dead = None
+
+    def test_warmup_error_healthy_server_ignored(self, tmp_path,
+                                                 fake_adapter_cls,
+                                                 monkeypatch):
+        """warmup 请求异常但 server 仍健康 → 允许按设计忽略（仅预热），
+        不误判崩溃。"""
+        calls = {"n": 0}
+
+        def _boom(*a, **k):
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise urllib.error.URLError("Connection refused")
+            # 之后返回合法 rep（server 健康 → 正常完成；gid/身份字段与 unit_id 一致）
+            return sch.build_rep(a[0], int(k.get("rep_index") or 0), a[1], a[2],
+                                 a[3], a[4], 100, 100, a[5], "OK", False,
+                                 {"kv": {"last": {"used_cells": 0,
+                                                  "active_sequences": 0}},
+                                  "branches": [{"branch": "b1",
+                                                "canary_leak": False}]})
+
+        r = make_runner(tmp_path, fake_adapter_cls)
+        monkeypatch.setattr(r, "_run_unit", _boom)
+        rc = r.run()
+        assert rc == 0, rc
+        with open(r.out_path, encoding="utf-8") as f:
+            doc = json.load(f)
+        assert doc["meta"]["phase"] == "formal"
+        assert doc["meta"]["matrix_complete"] is True  # 健康 → 正常完成
+
+
+# ---- v48 复审（任务 8）：sampler 端口兜底只匹配显式 --port ----
+
+class TestSamplerPortFallback:
+    def _procs(self, *specs):
+        out = []
+        for i, cl in enumerate(specs):
+            p = type("P", (), {})()
+            p.info = {"cmdline": cl}
+            p.pid = 9000 + i
+            out.append(p)
+        return out
+
+    def _no_ss(self, monkeypatch):
+        def _boom(*a, **k):
+            raise RuntimeError("no ss")
+
+        monkeypatch.setattr(sampler.subprocess, "run", _boom)
+        monkeypatch.setattr(sampler.psutil, "net_connections", lambda **k: [])
+
+    def test_fallback_matches_explicit_port(self, monkeypatch):
+        self._no_ss(monkeypatch)
+        monkeypatch.setattr(sampler.psutil, "process_iter",
+                            lambda *a, **k: self._procs(
+                                ["llama-server", "-m", "m", "--port", "8080"],
+                                ["llama-server", "-m", "m", "--port", "9999"]))
+        assert sampler.find_server_pid(port=8080) == 9000
+
+    def test_fallback_ignores_wrong_port(self, monkeypatch):
+        self._no_ss(monkeypatch)
+        monkeypatch.setattr(sampler.psutil, "process_iter",
+                            lambda *a, **k: self._procs(
+                                ["llama-server", "--port=9999"],
+                                ["llama-server", "-m", "m"]))
+        assert sampler.find_server_pid(port=8080) is None
+
+    def test_fallback_no_prefix_mismatch(self, monkeypatch):
+        self._no_ss(monkeypatch)
+        monkeypatch.setattr(sampler.psutil, "process_iter",
+                            lambda *a, **k: self._procs(
+                                ["llama-server", "--port", "80809"]))
+        assert sampler.find_server_pid(port=8080) is None

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 
 import pytest
 
@@ -633,10 +634,19 @@ class TestAtomicWriter:
 
     def test_stale_tmp_cleanup(self, tmp_path):
         d = str(tmp_path)
-        open(os.path.join(d, ".m0_fanout_x.main.tmp"), "w").close()
+        # v48（任务 9）：仅删超过 age 阈值的陈旧 tmp；活跃并发写（新 mtime）不删
+        old = os.path.join(d, ".m0_fanout_x.main.tmp")
+        fresh = os.path.join(d, ".m0_fanout_x.main.999.aaaa.tmp")
+        with open(old, "w") as f:
+            f.write("{}")
+        with open(fresh, "w") as f:
+            f.write("{}")
+        past = time.time() - 7200
+        os.utime(old, (past, past))
         open(os.path.join(d, "keep.json"), "w").close()
-        removed = sch.cleanup_stale_tmp(d)
+        removed = sch.cleanup_stale_tmp(d, max_age_seconds=3600.0)
         assert ".m0_fanout_x.main.tmp" in removed
+        assert os.path.exists(fresh)   # 活跃（新）不删
         assert os.path.exists(os.path.join(d, "keep.json"))
 
     def test_io_failure_raises(self, tmp_path):

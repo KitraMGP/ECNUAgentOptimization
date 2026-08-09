@@ -10,6 +10,7 @@ GPU 显存采样仅宿主机有效：容器内 pynvml 报 NVMLError_DriverNotLoa
 """
 from __future__ import annotations
 
+import re
 import subprocess
 from typing import Optional
 
@@ -42,12 +43,17 @@ def find_server_pid(host: str = "127.0.0.1", port: int = 8080) -> Optional[int]:
                         return int(pid)
     except (psutil.AccessDenied, psutil.NoSuchProcess):
         pass
-    # 最后兜底：仅当无任何端口观测时，才退化为按 cmdline 匹配
-    # （保持与旧行为兼容；调用方应优先传 port）
+    # 最后兜底（v48，任务 8）：端口连接匹配失败后，cmdline 只接受显式含目标
+    # `--port <port>` 或 `--port=<port>` 的进程；否则 None——绝不返回无关端口进程
+    # （多 server / 残留进程会错配）。
     for p in psutil.process_iter(["cmdline"]):
         try:
             cl = p.info["cmdline"] or []
-            if cl and any("llama-server" in c for c in cl):
+            if not cl or not any("llama-server" in c for c in cl):
+                continue
+            joined = " ".join(cl)
+            # `--port 8080` 或 `--port=8080`，后随空白/行尾（避免 8080 匹配 80809）
+            if re.search(rf"--port(?: |=){port}(?:\s|$)", joined):
                 return p.pid
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue

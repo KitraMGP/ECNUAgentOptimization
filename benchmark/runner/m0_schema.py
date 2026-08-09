@@ -15,7 +15,9 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import tempfile
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -1012,10 +1014,15 @@ def validate_schema_sidecar(sidecar: Any) -> Tuple[bool, List[Dict[str, Any]]]:
 # =====================================================================
 
 def atomic_write_json(path: str, obj: Any) -> None:
-    """临时文件 `.m0_fanout_<name>.<kind>.tmp` + fsync + rename + fsync 目录。"""
+    """临时文件 + fsync + 同目录 os.replace + fsync 目录。
+
+    v48（任务 9）：tmp 名改为并发安全唯一名 `.m0_fanout_<name>.<kind>.<pid>.<rand>.tmp`
+    （PID + secrets 随机后缀）——并发写同路径（多进程同 results 目录）不会互相覆盖；
+    同目录 os.replace 保证原子性（跨设备 rename 可能非原子，同目录安全）。
+    """
     d = os.path.dirname(os.path.abspath(path))
     name = os.path.basename(path)
-    tmp = os.path.join(d, f".{name}.tmp")
+    tmp = os.path.join(d, f".{name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=2)
         f.flush()
@@ -1040,18 +1047,27 @@ def write_result_pair(main_path: str, main_obj: Any,
     atomic_write_json(main_path, main_obj)
 
 
-def cleanup_stale_tmp(results_dir: str) -> List[str]:
-    """清理陈旧 `.m0_fanout_*.tmp` 残留（v30），返回清理的文件名列表。"""
+def cleanup_stale_tmp(results_dir: str, max_age_seconds: float = 3600.0) -> List[str]:
+    """清理陈旧 `.m0_fanout_*.tmp` 残留（v48，任务 9）。
+
+    仅删除 mtime 超过 max_age_seconds 的匹配文件——**不删除活跃并发写**
+    （刚创建/正在写的 tmp 的 mtime 是新的；main 显式传阈值，默认 3600s）。
+    返回清理的文件名列表。
+    """
     removed: List[str] = []
     if not os.path.isdir(results_dir):
         return removed
+    now = time.time()
     for fn in os.listdir(results_dir):
-        if fn.startswith(".m0_fanout_") and fn.endswith(".tmp"):
-            try:
-                os.remove(os.path.join(results_dir, fn))
+        if not (fn.startswith(".m0_fanout_") and fn.endswith(".tmp")):
+            continue
+        fp = os.path.join(results_dir, fn)
+        try:
+            if now - os.path.getmtime(fp) > max_age_seconds:
+                os.remove(fp)
                 removed.append(fn)
-            except OSError:
-                pass
+        except OSError:
+            pass
     return removed
 
 

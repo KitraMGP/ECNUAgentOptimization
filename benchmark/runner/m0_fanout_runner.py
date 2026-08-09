@@ -43,6 +43,9 @@ VALIDATION_SESSIONS = 2
 #   RS = 24 (k/v/r/s) × 548864 (dim) × 4 (bytes) × parallel
 RS_BYTES_PER_ROW = 24 * 548864 * 4
 G4_TOLERANCE = 0.05             # ≤5%
+# v48（任务 4）：KVProbe periodic 采样间隔（s）——覆盖分支并发与工具轮，
+# peak_used_cells/peak_active_sequences 来自真实周期样本；测试可用更小值
+PERIODIC_INTERVAL = 0.05
 
 
 class ServerError(Exception):
@@ -172,7 +175,13 @@ class M0FanoutRunner:
                "--parallel", str(parallel),
                "--cache-type-k", ctk,
                "--cache-type-v", ctv,
-               "--no-webui"]
+               "--no-webui",
+               # v48 复审：slot erase（KVProbe 恢复观测）前置——llama.cpp
+               # server-context.cpp:5448 要求 slot_save_path 非空，否则 POST /slots
+               # 返回 ERROR_TYPE_NOT_SUPPORTED；与 e15 runner（e15_branch_concurrent.py
+               # :556）一致。tmp_dir 由 CLI/__init__ 创建、runner 生命周期内持久，
+               # 每个 server group 复用同一目录（每生命周期可用）。
+               "--slot-save-path", self.tmp_dir]
         if control == "on":
             cmd += ["--kv-prefix-share"]
         return cmd
@@ -460,7 +469,14 @@ class M0FanoutRunner:
                             crashed = True
                             break
                         except Exception:
-                            pass  # warmup 请求级失败不阻断（仅预热）
+                            # v48（任务 7）：warmup 任意请求异常后立即 poll server——
+                            # 已退出 → 视同崩溃（不忽略，转 group ERROR/FORMAL_INCOMPLETE，
+                            # 崩溃发生在请求阶段、不靠后续分支检测）；仍健康才允许
+                            # 按设计忽略 warmup 请求级误差（仅预热）
+                            if (self._adapter is not None
+                                    and self._adapter.poll() is not None):
+                                crashed = True
+                                break
                     if crashed:
                         break
                     # formal 5 reps
@@ -559,6 +575,11 @@ class M0FanoutRunner:
         if rep_index is not None:
             self._kv.begin_run(rep_run_id)
             self._kv.snapshot("pre")
+            # v48 复审（任务 4）：periodic 采样覆盖分支并发与工具轮——
+            # peak_used_cells/peak_active_sequences 必须来自真实周期样本
+            # （begin_run 之后启动 → 周期样本带 run_id、进入 run 聚合）
+            self._kv.start_periodic(PERIODIC_INTERVAL)
+        decision_error: Optional[BaseException] = None
         try:
             context = fp.build_context(bucket)
             msgs = fp.decision_messages(context, fanout)
@@ -579,74 +600,83 @@ class M0FanoutRunner:
             except ServerCrash:
                 raise
             except Exception as e:
-                # rep ERROR（server 仍健康时继续；崩溃由上层检测）
+                # rep ERROR（v48 复审，任务 3）：不再提前 return——决策异常
+                # 记入 decision_error，仍走统一 erase + after_erase 路径；
+                # server 已退出 → ServerCrash → 上层 FORMAL_INCOMPLETE（不伪造观测）。
                 if rep_index is None:
                     raise
                 if self._adapter is not None and self._adapter.poll() is not None:
                     raise ServerCrash(str(e)) from e
+                decision_error = e
+                fallback = False  # v48：决策异常 rep 无决策 fallback 标记
                 self.any_rep_error = True
-                metrics = {"error_type": classify_error(e), "status": "ERROR"}
-                rep = sch.build_rep(unit_id, rep_index, fanout, bucket, ctk, ctv,
-                                    self._last_prefix_len, self._last_branch_len, gid,
-                                    "ERROR", False, metrics,
-                                    error_type=classify_error(e), error_stage="formal",
-                                    error_bucket=bucket)
-                return rep
-            if fallback:
-                self.any_fallback = True
-            # 2) 分支并发（barrier + ThreadPoolExecutor）
-            branches: List[Dict[str, Any]] = []
-            bar = threading.Barrier(fanout)
+            if decision_error is not None:
+                branches = []
+            else:
+                if fallback:
+                    self.any_fallback = True
+                # 2) 分支并发（barrier + ThreadPoolExecutor）
+                branches = []
+                bar = threading.Barrier(fanout)
 
-            def _branch(bx: int) -> Dict[str, Any]:
-                bname = f"b{bx}"
-                canary = fp.canary_for(fanout, bname)
-                bmsgs = fp.branch_messages(msgs, action, bname,
-                                           fp.build_branch_task(bucket, bname), canary)
-                bar.wait()
-                brow = self._driver.chat(bmsgs, temperature=TEMPERATURE, seed=SEED,
-                                         max_tokens=self.branch_n_predict)
-                return {"branch": bname, "row": brow, "canary": canary}
+                def _branch(bx: int) -> Dict[str, Any]:
+                    bname = f"b{bx}"
+                    canary = fp.canary_for(fanout, bname)
+                    bmsgs = fp.branch_messages(msgs, action, bname,
+                                               fp.build_branch_task(bucket, bname), canary)
+                    bar.wait()
+                    brow = self._driver.chat(bmsgs, temperature=TEMPERATURE, seed=SEED,
+                                             max_tokens=self.branch_n_predict)
+                    return {"branch": bname, "row": brow, "canary": canary}
 
-            with ThreadPoolExecutor(max_workers=fanout) as ex:
-                futures = [ex.submit(_branch, bx) for bx in range(1, fanout + 1)]
-                for f in futures:
-                    try:
-                        branches.append(f.result())
-                    except Exception as e:
-                        # 进程崩溃检测：并发请求失败且 server 已退出 → ServerCrash
-                        # （该 rep 归因 server_crash，而非请求级 connection_error）
-                        if self._adapter is not None and self._adapter.poll() is not None:
-                            raise ServerCrash(str(e)) from e
-                        branches.append({"branch": "?", "row": None, "canary": "",
-                                         "error": classify_error(e)})
-            # 3) 工具轮（M 轮固定注入）；崩溃检测（进程退出 → ServerCrash）
-            try:
-                for tround in range(1, self.tool_rounds + 1):
-                    for b in branches:
-                        if b.get("row") is not None and b.get("error") is None:
-                            self._driver.chat(
-                                msgs + [{"role": "assistant", "content": action}] +
-                                [fp.tool_round_message(b["branch"], tround)],
-                                temperature=TEMPERATURE, seed=SEED,
-                                max_tokens=self.branch_n_predict)
-            except Exception as e:
-                if self._adapter is not None and self._adapter.poll() is not None:
-                    raise ServerCrash(str(e)) from e
-                raise
-            # 4) 回收（erase 全部 slot）；崩溃检测同上
-            try:
-                self._kv.clean_all_slots()
-                # Critical 1：erase 后采样实际 /metrics/kv——G-M0-3a 从该
-                # 样本验证 used_cells==0 && active_sequences==0（last=erase 后值）
-                if rep_index is not None:
-                    self._kv.snapshot("after_erase")
-            except Exception as e:
-                if self._adapter is not None and self._adapter.poll() is not None:
-                    raise ServerCrash(str(e)) from e
-                raise
+                with ThreadPoolExecutor(max_workers=fanout) as ex:
+                    futures = [ex.submit(_branch, bx) for bx in range(1, fanout + 1)]
+                    for f in futures:
+                        try:
+                            branches.append(f.result())
+                        except Exception as e:
+                            # 进程崩溃检测：并发请求失败且 server 已退出 → ServerCrash
+                            # （该 rep 归因 server_crash，而非请求级 connection_error）
+                            if self._adapter is not None and self._adapter.poll() is not None:
+                                raise ServerCrash(str(e)) from e
+                            branches.append({"branch": "?", "row": None, "canary": "",
+                                             "error": classify_error(e)})
+                # 3) 工具轮（M 轮固定注入）；崩溃检测（进程退出 → ServerCrash）
+                try:
+                    for tround in range(1, self.tool_rounds + 1):
+                        for b in branches:
+                            if b.get("row") is not None and b.get("error") is None:
+                                self._driver.chat(
+                                    msgs + [{"role": "assistant", "content": action}] +
+                                    [fp.tool_round_message(b["branch"], tround)],
+                                    temperature=TEMPERATURE, seed=SEED,
+                                    max_tokens=self.branch_n_predict)
+                except Exception as e:
+                    if self._adapter is not None and self._adapter.poll() is not None:
+                        raise ServerCrash(str(e)) from e
+                    raise
         finally:
             if rep_index is not None:
+                # v48（任务 4）：异常路径同样 stop periodic——先 stop 采样
+                # （end_run 必须等 erase+after_erase 之后，否则 after_erase
+                #  样本 run_id=None 不进 rep 聚合——v48 复审根因）
+                self._kv.stop()
+        # 4) 回收（erase 全部 slot）+ after_erase（v48：决策 ERROR 与正常统一路径；
+        #    任务 3：ERROR rep 不跳过 erase/after_erase——server 健康则 metrics.kv
+        #    存在并由 G-M0-3a 验证归零；崩溃 → ServerCrash → FORMAL_INCOMPLETE）
+        try:
+            self._kv.clean_all_slots()
+            # Critical 1：erase 后采样实际 /metrics/kv——G-M0-3a 从该
+            # 样本验证 used_cells==0 && active_sequences==0（last=erase 后值）
+            if rep_index is not None:
+                self._kv.snapshot("after_erase")
+        except Exception as e:
+            if self._adapter is not None and self._adapter.poll() is not None:
+                raise ServerCrash(str(e)) from e
+            raise
+        finally:
+            if rep_index is not None:
+                # end_run 在 erase+after_erase 之后：保证 after_erase 样本归组
                 self._kv.end_run()
         # 5) 指标 + rep 对象
         if rep_index is None:
@@ -667,6 +697,12 @@ class M0FanoutRunner:
             }
         status = "OK" if not fallback else "INVALID_DECISION"
         has_error = any(b.get("error") for b in branches)
+        if decision_error is not None:
+            # v48（任务 3）：决策请求异常 → rep ERROR（error_type=决策异常分类）
+            status = "ERROR"
+            fallback = False
+            has_error = True
+            self.any_rep_error = True
         if has_error:
             # 状态机（v10/v16）：ERROR 必须 decision_fallback=false（错误优先，
             # 清除决策级 fallback 标记——崩溃/请求错误时该 rep 不标记 fallback）
@@ -691,7 +727,10 @@ class M0FanoutRunner:
                             self._last_prefix_len, self._last_branch_len, gid,
                             status, fallback, metrics)
         if has_error:
-            rep["error_type"] = next(b["error"] for b in branches if b.get("error"))
+            if decision_error is not None:
+                rep["error_type"] = classify_error(decision_error)
+            else:
+                rep["error_type"] = next(b["error"] for b in branches if b.get("error"))
             rep["error_stage"] = "formal"
             rep["error_bucket"] = bucket
         return rep
@@ -919,14 +958,18 @@ class M0FanoutRunner:
                         rec_ok = False
         gates["G-M0-3a"] = {"status": "PASS" if rec_ok else "FAIL"}
         gates["G-M0-3b"] = {"status": "NOT_APPLICABLE"}  # smoke 观测，非门禁
-        # G-M0-4（Critical 10）：RS buffer 对账。
-        #   - derived 自检：baseline.rs_buffer_mb 与公式 RS_BYTES_PER_ROW*parallel
-        #     一致（防内部公式 bug；非独立观测、不宣称实验验证）；
-        #   - 独立观测：真实 server 启动日志 "RS buffer size = X MiB"
-        #     （llama-memory-recurrent.cpp:115）；无任何观测 → NOT_APPLICABLE（明确）；
-        #     有观测超差（>G4_TOLERANCE）→ FAIL。
-        g4_derived = True
-        g4_obs = True
+        # G-M0-4（Critical 10，v48 复审）：RS buffer 对账——derived 与独立观测分离。
+        #   - derived 自检：baseline.rs_buffer_mb 与公式 RS_BYTES_PER_ROW*parallel 一致
+        #     （防内部公式 bug；**仅 internal consistency detail，不参与 gate status**——
+        #     RS_BYTES_PER_ROW=24*548864*4 为 0.8B 实测校准系数，4B 正式矩阵必须重校准，
+        #     不宣称已验证）；
+        #   - gate 仅由真实 server 启动日志独立观测决定（llama-memory-recurrent.cpp:115
+        #     "RS buffer size = X MiB"）：无任何观测 → NOT_APPLICABLE（明确，非 PASS）；
+        #     有观测且超差（>G4_TOLERANCE）→ FAIL；容差内 → PASS。
+        #   - group 匹配用 sch.parse_group_id(server_group_id)（build_group 不写
+        #     ctk/ctv/fanout 字段，不得 grp.get("ctk") 读取）。
+        g4_derived_consistent = True
+        g4_obs_ok = True
         g4_obs_found = False
         # 重建与 run_formal 相同的 group 序号（tag=f"g{gi}" → 日志 key）
         seq: List[Tuple[str, str, str, str, int]] = []
@@ -937,18 +980,23 @@ class M0FanoutRunner:
                         continue
                     seq.append((f"g{len(seq)}", control, ctk, ctv, fanout))
         for gi, (tag, control, ctk, ctv, fanout) in enumerate(seq):
+            def _g4_match(g: Dict[str, Any]) -> bool:
+                pid = sch.parse_group_id(str(g.get("server_group_id", "")))
+                if pid is None:
+                    return False
+                return (pid["control"] == control and pid["ctk"] == ctk
+                        and pid["ctv"] == ctv and pid["fanout"] == str(fanout))
             grp = next((g for g in modes.get(control, {}).get("server_groups", [])
-                        if g.get("ctk") == ctk and g.get("ctv") == ctv
-                        and g.get("fanout") == fanout), None)
+                        if _g4_match(g)), None)
             if grp is None:
                 continue
             bs = grp.get("baseline")
             if not isinstance(bs, dict) or not isinstance(bs.get("rs_buffer_mb"), (int, float)):
-                g4_derived = False
+                g4_derived_consistent = False
                 continue
             expected_mb = RS_BYTES_PER_ROW * (fanout + 2) / (1024 * 1024)
             if expected_mb and abs(bs["rs_buffer_mb"] - expected_mb) / expected_mb > 0.001:
-                g4_derived = False
+                g4_derived_consistent = False
             # 独立观测（该 group 的 server 启动日志）
             log = self._server_logs.get(tag, "")
             obs = self._parse_rs_buffer_mib(log)
@@ -956,15 +1004,14 @@ class M0FanoutRunner:
                 continue
             g4_obs_found = True
             if expected_mb and abs(obs - expected_mb) / expected_mb > G4_TOLERANCE:
-                g4_obs = False
-        if not g4_derived:
-            gates["G-M0-4"] = {"status": "FAIL"}  # 内部公式不一致
-        elif g4_obs_found and not g4_obs:
-            gates["G-M0-4"] = {"status": "FAIL"}  # 真实观测超差
-        elif not g4_obs_found:
-            gates["G-M0-4"] = {"status": "NOT_APPLICABLE"}  # 观测缺失（明确，非 PASS）
-        else:
-            gates["G-M0-4"] = {"status": "PASS"}
+                g4_obs_ok = False
+        g4_status = ("FAIL" if (g4_obs_found and not g4_obs_ok)
+                     else "NOT_APPLICABLE" if not g4_obs_found else "PASS")
+        g4_gate: Dict[str, Any] = {"status": g4_status}
+        if not g4_derived_consistent:
+            g4_gate["notes"] = ("derived formula internal inconsistency "
+                                "(non-gating detail); gate decided by RS log observation only")
+        gates["G-M0-4"] = g4_gate
         # G-M0-5：对照有效性（off/on 均 shared_cells==0；on 日志含 hybrid 拒绝）
         # Critical 9：真实 llama.cpp 行（server-context.cpp:1505，SRV_WRN，仅
         # --kv-prefix-share 且 hybrid 模型时输出）：
@@ -1109,6 +1156,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tmp-dir", default="")
     parser.add_argument("--port-base", type=int, default=8080)
     parser.add_argument("--ngl", type=int, default=99)
+    parser.add_argument("--cleanup-tmp-age", type=float, default=3600.0,
+                        help="陈旧 .m0_fanout_*.tmp 清理 age 阈值（秒，v48）")
     return parser
 
 
@@ -1124,9 +1173,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("INVALID_CONFIGURATION: --ctx-size 必须为正整数", file=sys.stderr)
         return sch.EXIT_USAGE
     # Critical 5：CLI 入口清理 results 目录陈旧 atomic tmp 残留
-    # （atomic_write_json 命名 .m0_fanout_<name>.<kind>.tmp 与 cleanup 匹配）
+    # （v48，任务 9：仅删超过 age 阈值的陈旧文件，不删活跃并发写；
+    #   atomic_write_json 命名 .m0_fanout_<name>.<kind>.<pid>.<rand>.tmp 与 cleanup 匹配）
     if args.out:
-        sch.cleanup_stale_tmp(os.path.dirname(os.path.abspath(args.out)))
+        sch.cleanup_stale_tmp(os.path.dirname(os.path.abspath(args.out)),
+                              args.cleanup_tmp_age)
     runner = M0FanoutRunner(
         server_bin=args.server_bin, model=args.model, ctx_size=args.ctx_size,
         port_base=args.port_base, decision_n_predict=args.decision_n_predict,
