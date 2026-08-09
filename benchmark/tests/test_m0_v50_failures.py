@@ -16,6 +16,8 @@ from __future__ import annotations
 import json
 import urllib.error
 
+import httpx
+import openai
 import pytest
 
 from framework.driver import Driver
@@ -167,18 +169,28 @@ class TestCalibrationCleanupCrashPreflight:
 
 
 class _ToolFailDriver:
-    """决策/分支请求正常；第 1+fanout+1 次调用（工具轮首个请求）抛 HTTP 500——
-    server 进程健康（mock 不退出）。"""
+    """决策/分支请求正常；工具轮首个请求抛真实 openai SDK 状态异常
+    （InternalServerError "Error code: 500"）——server 进程健康（mock 不退出）。
+
+    v53（Medium 2）：改用真实 openai.APIStatusError/InternalServerError 路径
+    （替代旧 urllib.HTTPError mock）。时序：工具轮位置由单元协议决定
+    （决策 1 + 分支 fanout 次 → 工具轮首个），armed flag 控制触发一次后
+    disarm（不重复抛、不依赖脆弱计数）。
+    """
 
     def __init__(self, inner):
         self.inner = inner
+        self.armed = True
         self.n = 0
 
     def chat(self, msgs, **kw):
         self.n += 1
-        if self.n == 1 + 2 + 1:  # 决策 1 + 分支 2 + 工具轮第 1 个
-            raise urllib.error.HTTPError(None, 500, "Internal Server Error",
-                                         None, None)
+        if self.armed and self.n == 1 + 2 + 1:  # 工具轮首个请求（协议位置）
+            self.armed = False  # 触发后 disarm
+            req = httpx.Request("POST", "http://tool")
+            resp = httpx.Response(500, request=req)
+            raise openai.InternalServerError(
+                "Error code: 500 - Internal Server Error", response=resp, body=None)
         return self.inner.chat(msgs, **kw)
 
 

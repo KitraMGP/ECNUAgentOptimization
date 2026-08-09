@@ -119,6 +119,9 @@ class ServerAdapter:
             with open(self.log_path, "r", encoding="utf-8") as f:
                 return f.read()
         except OSError:
+            # v53（Medium 5）：OSError 含文件/权限类前置错误（FileNotFoundError /
+            # PermissionError 均属 OSError 子类）——按既定设计归基础设施，日志缺失
+            # 只返回 ""，绝不 traceback 传播
             return ""
 
 
@@ -320,8 +323,16 @@ class M0FanoutRunner:
             # PREFLIGHT_INFRA），健康 → 记可诊断 note）
             if self._kv is not None:
                 try:
-                    cleared = self._kv.clean_all_slots()
-                    if cleared == (0, 0):
+                    attempt, ok = self._kv.clean_all_slots()
+                    if attempt > 0 and ok < attempt:
+                        # v53（Medium 1）：与 warmup（v50 任务 5）一致——partial
+                        # erase（attempt>0 且 ok<attempt）→ 记可诊断 note，不静默吞
+                        self._add_note(
+                            f"校准后 clean_all_slots 部分失败 {ok}/{attempt} "
+                            f"（server 健康，继续）")
+                    elif attempt == 0:
+                        # v52（任务 5）：返回 (0,0) 时 poll——死 → ServerCrash
+                        # （上层转 PREFLIGHT_INFRA），健康 → 记可诊断 note
                         if (self._adapter is not None
                                 and self._adapter.poll() is not None):
                             raise ServerCrash("校准后清理: server 已退出") from None
@@ -381,6 +392,8 @@ class M0FanoutRunner:
                         "threshold": fp.BUDGET_THRESHOLD, "reason": "budget_rejected",
                     })
         except OSError as e:
+            # v53（Medium 5）：OSError 族（连接类 + FileNotFoundError/PermissionError
+            # 等文件/权限类前置错误）→ 按既定设计归基础设施 ServerError
             raise ServerError(f"预算复核端点失败: {e}")
 
     # ---- decision validation（G-M0-1 数据源，2 sessions × ≥10） ----
@@ -508,15 +521,21 @@ class M0FanoutRunner:
                         # 不可能从 _run_unit(warmup) 抛出，删除 v49 不可达分支；
                         # warmup 的 best-effort erase 异常经 poll 判定：已退出 →
                         # ServerCrash（上层 group ERROR）；健康 → 记 note（见 finally）
-                        except Exception:
-                            # v48（任务 7）：warmup 任意请求异常后立即 poll server——
-                            # 已退出 → 视同崩溃（不忽略，转 group ERROR/FORMAL_INCOMPLETE，
-                            # 崩溃发生在请求阶段、不靠后续分支检测）；仍健康才允许
+                        except _INFRA_EXCEPTIONS:
+                            # v53（Medium 3）：warmup 只吞明确基础设施/请求异常
+                            # （OSError / openai.OpenAIError 族）——v48 任务 7 语义
+                            # 保留：异常后立即 poll server——已退出 → 视同崩溃
+                            # （转 group ERROR/FORMAL_INCOMPLETE）；仍健康才允许
                             # 按设计忽略 warmup 请求级误差（仅预热）
                             if (self._adapter is not None
                                     and self._adapter.poll() is not None):
                                 crashed = True
                                 break
+                        except Exception:
+                            # v53（Medium 3）：内部 bug（AssertionError/KeyError/
+                            # TypeError 等）不属于基础设施/请求异常——不得静默吞，
+                            # 上抛 → run_safe 归 INTERNAL_RUNNER_ERROR + 70
+                            raise
                     if crashed:
                         break
                     # formal 5 reps
@@ -1220,6 +1239,8 @@ class M0FanoutRunner:
                     with open(os.path.join(self.tmp_dir, fn), "r", encoding="utf-8") as f:
                         log += f.read()
                 except OSError:
+                    # v53（Medium 5）：OSError 含文件/权限类前置错误（目录被清理 /
+                    # 权限变化）——尽力而为，缺失日志不阻断 G-M0-5 归因
                     pass
         return log
 
