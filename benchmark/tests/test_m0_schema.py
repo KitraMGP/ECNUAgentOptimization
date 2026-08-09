@@ -617,6 +617,25 @@ class TestSidecar:
         assert not ok
 
 
+class TestToJsonPointer:
+    """v50（任务 7）：to_json_pointer 完整 RFC6901 转义（~→~0、/→~1）。"""
+
+    @pytest.mark.parametrize("path,expected", [
+        ("", "$"),                                    # 空串
+        ("$", "$"),                                   # $ 幂等
+        ("$/a/b", "$/a/b"),                           # 已是指针原样返回
+        ("a.b.c", "$/a/b/c"),                         # 点号分隔
+        ("arr[0].x", "$/arr/0/x"),                    # 数组下标
+        ("x[2].y[10]", "$/x/2/y/10"),                 # 多数组下标
+        ("modes.off.server_groups[0].error_type",
+         "$/modes/off/server_groups/0/error_type"),   # 侧car 合同示例
+        ("a~b.c/d", "$/a~0b/c~1d"),                   # RFC6901 转义 ~→~0、/→~1
+        ("esc~tilde.slash/name", "$/esc~0tilde/slash~1name"),
+    ])
+    def test_rfc6901(self, path, expected):
+        assert sch.to_json_pointer(path) == expected
+
+
 class TestAtomicWriter:
     def test_atomic_write_roundtrip(self, tmp_path):
         p = str(tmp_path / "out.json")

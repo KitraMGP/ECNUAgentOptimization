@@ -14,7 +14,8 @@ from typing import Tuple
 
 _COUNTER = {"n": 0}
 # E2.0.5：可变的 KV 状态（completion 后 used_cells 增长，slot erase 后归 0）
-_KV = {"used_cells": 0, "active_sequences": 0, "erase_disabled": False}
+_KV = {"used_cells": 0, "active_sequences": 0, "erase_disabled": False,
+       "metrics_fail": False}  # v50：/metrics/kv 端点失败开关（after_erase_missing 生产路径）
 # M0（Critical 2）：可配置 finish_reason（"stop" 默认 / "length" 测试决策截断）
 _FINISH = {"reason": "stop"}
 # M0 v49（任务 4）：一次性请求失败开关（500 一次后复位）——模拟"请求级异常但
@@ -52,6 +53,12 @@ def _make_body(n: int) -> dict:
 class _Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/metrics/kv"):
+            if _KV["metrics_fail"]:
+                # v50（任务 1）：/metrics/kv 端点失败（生产路径：_fetch 返回 None、
+                # last_error 更新；非 mock 抛异常）→ after_erase 观测缺失
+                self.send_response(500)
+                self.end_headers()
+                return
             body = {
                 "schema_version": 1,
                 "capacity_bytes": 104857600,
@@ -107,7 +114,6 @@ class _Handler(BaseHTTPRequestHandler):
             _ERROR_ONCE["on"] = False
             self.send_response(500)
             self.end_headers()
-            return
             return
         length = int(self.headers.get("Content-Length", 0))
         payload = json.loads(self.rfile.read(length).decode("utf-8"))

@@ -153,6 +153,7 @@ class M0FanoutRunner:
         self.groups_on: List[Dict[str, Any]] = []
         self.any_fallback = False
         self.any_rep_error = False
+        self.notes: List[str] = []  # v50：可诊断 note（warmup erase 异常等），落盘 doc.notes
         self.phase = "preflight"
         self.rule = "PREFLIGHT_INFRA"
         self.binary_version = ""
@@ -474,13 +475,11 @@ class M0FanoutRunner:
                             # ERROR / FORMAL_INCOMPLETE（进程已退出，后续请求必败）
                             crashed = True
                             break
-                        except EraseFailure as e:
-                            # v49（任务 2/4）：warmup 阶段 erase 失败（best-effort
-                            # erase 后 server 已退出，或严格路径 EraseFailure）——
-                            # 转 group ERROR/FORMAL_INCOMPLETE 并保留诊断 error_type
-                            crashed = True
-                            crash_error_type = e.error_type
-                            break
+                        # v50（任务 4）：warmup（rep_index=None）不执行严格 erase
+                        # 路径（严格 partial 检查只对 formal rep）——EraseFailure
+                        # 不可能从 _run_unit(warmup) 抛出，删除 v49 不可达分支；
+                        # warmup 的 best-effort erase 异常经 poll 判定：已退出 →
+                        # ServerCrash（上层 group ERROR）；健康 → 记 note（见 finally）
                         except Exception:
                             # v48（任务 7）：warmup 任意请求异常后立即 poll server——
                             # 已退出 → 视同崩溃（不忽略，转 group ERROR/FORMAL_INCOMPLETE，
@@ -608,6 +607,7 @@ class M0FanoutRunner:
             # （begin_run 之后启动 → 周期样本带 run_id、进入 run 聚合）
             self._kv.start_periodic(PERIODIC_INTERVAL)
         decision_error: Optional[BaseException] = None
+        tool_error: Optional[BaseException] = None  # v50（任务 3）
         try:
             context = fp.build_context(bucket)
             msgs = fp.decision_messages(context, fanout)
@@ -682,7 +682,11 @@ class M0FanoutRunner:
                 except Exception as e:
                     if self._adapter is not None and self._adapter.poll() is not None:
                         raise ServerCrash(str(e)) from e
-                    raise
+                    # v50（任务 3）：server 健康但工具轮请求 HTTP 异常——不裸逃逸
+                    # exit70：标当前 rep ERROR（废弃工具轮结果），继续统一
+                    # erase + after_erase 路径；server 已退出 → ServerCrash
+                    # （上一分支）→ group ERROR/FORMAL_INCOMPLETE
+                    tool_error = e
         finally:
             if rep_index is not None:
                 # v48（任务 4）：异常路径同样 stop periodic——先 stop 采样
@@ -695,10 +699,21 @@ class M0FanoutRunner:
                 # 下一个 warmup/formal rep 的 KV 基线；异常后 poll 判断：
                 # 崩溃 → ServerCrash（上层 group ERROR）；健康 → 可继续（仅预热）
                 try:
-                    self._kv.clean_all_slots()
-                except Exception:
+                    attempt, ok = self._kv.clean_all_slots()
+                    if attempt > 0 and ok < attempt:
+                        # v50（任务 5）：clean_all_slots 不抛异常（list_slots/
+                        # erase_slot 内部吞错），真实可达的 erase 异常 = partial
+                        # erase（501/部分 slot 失败）→ 记可诊断 note，不静默吞
+                        self._add_note(
+                            f"warmup best-effort erase 部分失败 {ok}/{attempt} "
+                            f"（server 健康，继续）")
+                except Exception as e:
                     if self._adapter is not None and self._adapter.poll() is not None:
                         raise ServerCrash("warmup erase: server 已退出") from None
+                    # v50（任务 5）：防御分支（kv_probe 行为改变才可达）——记录 note
+                    self._add_note(
+                        f"warmup best-effort erase 异常（server 健康，继续）: "
+                        f"{type(e).__name__}: {e}")
         # 4) 回收（erase 全部 slot）+ after_erase（v48：决策 ERROR 与正常统一路径；
         #    任务 3：ERROR rep 不跳过 erase/after_erase——server 健康则 metrics.kv
         #    存在并由 G-M0-3a 验证归零；崩溃 → ServerCrash → FORMAL_INCOMPLETE；
@@ -713,18 +728,33 @@ class M0FanoutRunner:
                 if attempt > 0 and ok < attempt:
                     raise EraseFailure("erase_partial",
                                        f"clean_all_slots 部分成功 {ok}/{attempt}", ok, attempt)
-                # Critical 1：erase 后采样实际 /metrics/kv——G-M0-3a 从该
-                # 样本验证 used_cells==0 && active_sequences==0（last=erase 后值）
-                self._kv.snapshot("after_erase")
             except EraseFailure:
                 raise
             except ServerCrash:
                 raise
             except Exception as e:
-                # v49（任务 2）：server 健康但 erase/after_erase 异常——不得裸异常
-                # exit70 无合法结果；标 EraseFailure（保留可诊断 error_type）+ 上层
-                # group ERROR/FORMAL_INCOMPLETE（优先后者以免污染后续 rep）。
-                # server 已退出 → ServerCrash（归因不变）。
+                # v50（任务 4）：clean_all_slots 异常（非 partial）与 after_erase
+                # 异常分开归因——这里归 erase_failed
+                if self._adapter is not None and self._adapter.poll() is not None:
+                    raise ServerCrash(str(e)) from e
+                raise EraseFailure("erase_failed", str(e)) from e
+            try:
+                # Critical 1：erase 后采样实际 /metrics/kv——G-M0-3a 从该
+                # 样本验证 used_cells==0 && active_sequences==0（last=erase 后值）
+                snap = self._kv.snapshot("after_erase")
+                if snap is None:
+                    # v50（任务 1）：after_erase 观测缺失（fetch 失败/端点不可用/
+                    # 非收集阶段）→ 显式 EraseFailure，真实可达分支（不靠 mock
+                    # 抛异常）；group ERROR + FORMAL_INCOMPLETE
+                    raise EraseFailure(
+                        "after_erase_missing",
+                        "after_erase 观测缺失：/metrics/kv fetch 失败或端点不可用 "
+                        f"(last_error={self._kv.last_error!r})")
+            except ServerCrash:
+                raise
+            except EraseFailure:
+                raise
+            except Exception as e:
                 if self._adapter is not None and self._adapter.poll() is not None:
                     raise ServerCrash(str(e)) from e
                 raise EraseFailure("after_erase_failed", str(e)) from e
@@ -749,7 +779,12 @@ class M0FanoutRunner:
                          "active_sequences": kv_agg.get("peak_active_sequences")},
             }
         status = "OK" if not fallback else "INVALID_DECISION"
-        has_error = any(b.get("error") for b in branches)
+        has_error = any(b.get("error") for b in branches) or tool_error is not None
+        if tool_error is not None:
+            # v50（任务 3）：工具轮失败（server 健康）→ rep ERROR，与决策异常同语义
+            status = "ERROR"
+            fallback = False
+            self.any_rep_error = True
         if decision_error is not None:
             # v48（任务 3）：决策请求异常 → rep ERROR（error_type=决策异常分类）
             status = "ERROR"
@@ -782,6 +817,11 @@ class M0FanoutRunner:
         if has_error:
             if decision_error is not None:
                 rep["error_type"] = classify_error(decision_error)
+            elif tool_error is not None:
+                # v50（任务 3）：工具轮失败（server 健康）→ error_type 取工具轮
+                # 异常分类（如 http_5xx）——原 next(...) 在工具轮失败时 StopIteration
+                # 裸逃逸（branches 无 error），已修复
+                rep["error_type"] = classify_error(tool_error)
             else:
                 rep["error_type"] = next(b["error"] for b in branches if b.get("error"))
             rep["error_stage"] = "formal"
@@ -804,13 +844,28 @@ class M0FanoutRunner:
 
     # ---- 主流程 ----
 
+    def _add_note(self, text: str) -> None:
+        """v50（任务 5）：记录可诊断 note（落盘 doc.notes；不改变 verdict）。"""
+        self.notes.append(text)
+
     def run(self) -> int:
         """完整 24-unit 矩阵一次运行；返回进程退出码（0/64/65/70/74）。"""
         # 1) 校准 + 预算精确复核（run_calibration 内在校准 server 存活期间完成）
         try:
             parity_ok = self.run_calibration()
-        except ServerError as e:
-            return self._fail_preflight("validation_incomplete", None, [], str(e))
+        except (ServerError, ServerCrash, EraseFailure) as e:
+            # v50（任务 2）：校准阶段 ServerCrash/清理异常 → PREFLIGHT_INFRA 落盘
+            # v50（review 修复）：保留已收集的 preflight_rejections（校准失败
+            # 时预算复核可能已部分完成），不传空列表丢数据
+            return self._fail_preflight("validation_incomplete", None,
+                                        self.preflight_rejections,
+                                        f"{type(e).__name__}: {e}")
+        except Exception as e:
+            # v50（任务 2）：校准阶段任何未预期异常（请求级 HTTP 异常/清理异常）也
+            # 必须落合法 preflight 结果——不得裸逃逸 run_safe exit70
+            return self._fail_preflight("validation_incomplete", None,
+                                        self.preflight_rejections,
+                                        f"{type(e).__name__}: {e}")
         if len(self.preflight_rejections) == len(sch.EXPECTED_UNIT_IDS):
             # ALL_BUDGET_REJECTED
             return self._fail_preflight("budget_rejected", False, self.preflight_rejections, "")
@@ -923,7 +978,7 @@ class M0FanoutRunner:
         })
         doc["modes"] = modes
         doc["gates"] = gates
-        doc["notes"] = []
+        doc["notes"] = list(self.notes)  # v50：含 warmup erase 等可诊断 note
         any_rej = len(self.preflight_rejections) > 0
         doc["verdict"] = sch.aggregate_verdict(
             doc, self.any_fallback, self.any_rep_error, any_rej)

@@ -441,15 +441,23 @@ def _type_name(v: Any) -> str:
 
 
 def to_json_pointer(path: str) -> str:
-    """点号/数组下标路径 → RFC6901 JSON Pointer（v49 任务 6 修复：sidecar 合同）。
+    """点号/数组下标路径 → RFC6901 JSON Pointer（v50 任务 7：完整转义）。
 
     "modes.off.server_groups[0].error_type" → "$/modes/off/server_groups/0/error_type"；
-    已是 "$"/"$/" 前缀的路径原样返回；空 → "$"。
+    已是 "$"/"$/" 前缀的路径原样返回（调用方已按 RFC6901 构造）；空 → "$"。
+    段内转义（RFC6901 §3）：~ → ~0、/ → ~1；点号即段分隔符（字段名含 "." 不支持）。
+    数组下标先转 "/n" 再按段转义。
     """
-    if not path or path == "$" or path.startswith("$/"):
-        return path or "$"
-    p = re.sub(r"\[(\d+)\]", r"/\1", path.replace(".", "/"))
-    return "$" + p
+    if not path:
+        return "$"
+    if path == "$" or path.startswith("$/"):
+        return path
+    # v50（任务 7）：先占位数组下标（避免与字段名内字面 / 混淆），再按点号
+    # 分隔字段段；段内按 RFC6901 转义字面 ~ / /；最后下标占位还原为段分隔符
+    tmp = re.sub(r"\[(\d+)\]", lambda m: "\x01" + m.group(1), path)
+    segs = [seg.replace("~", "~0").replace("/", "~1")
+            for seg in tmp.split(".")]
+    return "$/" + "/".join(seg.replace("\x01", "/") for seg in segs)
 
 
 def _push(errs: List[_ERR], code: str, path: str, expected: Any, actual: Any) -> None:
