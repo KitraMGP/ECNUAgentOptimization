@@ -36,7 +36,7 @@
 
 ### 1.2 attention KV：q8_0/f16 bytes、layers/cells
 
-- 分配（`src/llama-kv-cache.cpp:233-235`）：每 attention 层
+- 分配（`src/llama-kv-cache.cpp:231-232`）：每 attention 层
   `k = ggml_new_tensor_3d(ctx, type_k, n_embd_k_gqa, kv_size, n_stream)`（V 同理）——
   形状 `[n_embd_k_gqa, kv_size, n_stream]`；`kv_size = n_ctx_seq`（unified 时 = n_ctx，
   `src/llama-context.cpp:288-291`）。
