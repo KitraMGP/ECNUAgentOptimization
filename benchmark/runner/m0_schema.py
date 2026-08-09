@@ -581,21 +581,37 @@ def validate_decision_session(sess: Any, path: str = "decision_validation.sessio
         _push(errs, "invariant_violation", f"{path}.output_hashes",
               "len==valid+invalid", (len(oh), valid + invalid))
     # v56：representative_output / representative_output_sha256（可审计代表输出）
+    # v57（审查 Medium）：向后兼容 v55——两字段同时缺失按旧格式接受（不强制
+    # valid>0 非空语义）；任一存在则两者必须同时存在（键存在性检查，非值空判定）
+    # 且 hash 可重算；字段存在时 valid>0 必须代表输出非空（valid=0 可同空）。
+    has_rep = "representative_output" in sess
+    has_sha = "representative_output_sha256" in sess
     rep = sess.get("representative_output")
-    if not isinstance(rep, str):
+    if has_rep and not isinstance(rep, str):
         _push(errs, "type_mismatch", f"{path}.representative_output", "str", rep)
         rep = ""
     rep_sha = sess.get("representative_output_sha256")
-    if not isinstance(rep_sha, str) or (rep_sha and not re.fullmatch(r"[0-9a-f]{64}", rep_sha)):
+    if has_sha and (not isinstance(rep_sha, str)
+                    or (rep_sha and not re.fullmatch(r"[0-9a-f]{64}", rep_sha))):
         _push(errs, "type_mismatch", f"{path}.representative_output_sha256",
               "64-hex str（可空）", rep_sha)
-    if bool(rep) != bool(rep_sha):
+    if has_rep != has_sha:
+        # v57：任一字段存在则两者必须同时存在（旧格式两字段均缺 → 接受）
+        _push(errs, "invariant_violation", f"{path}.representative_output",
+              "representative_output 与 representative_output_sha256 必须同时存在或同时缺失",
+              (has_rep, has_sha))
+    elif bool(rep) != bool(rep_sha):
+        # v57：保留 v56 值语义——同空或同非空（rep 非空须配非空 sha、反之亦然）
         _push(errs, "invariant_violation", f"{path}.representative_output",
               "representative_output 与 sha256 同空或同非空", (bool(rep), bool(rep_sha)))
-    if rep and content_sha256(rep) != rep_sha:
+    elif rep and content_sha256(rep) != rep_sha:
         _push(errs, "invariant_violation", f"{path}.representative_output_sha256",
               "sha256(representative_output) 必须等于声明的 sha256（可重算）",
               (content_sha256(rep), rep_sha))
+    # v57：v56+ 格式（字段存在）时 valid>0 必须代表输出非空；valid=0 可同空
+    if has_rep and valid > 0 and not rep.strip():
+        _push(errs, "invariant_violation", f"{path}.representative_output",
+              "valid>0 时 representative_output 必须非空（v56+ 格式）", (valid, rep))
     # error_summary 三元组唯一性（v40）+ sum(count)==error_count
     seen: set = set()
     total_count = 0

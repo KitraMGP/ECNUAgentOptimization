@@ -98,8 +98,10 @@ def _meta_ok(over=None, base=None):
 
 
 def _full_dv():
-    s1 = sch.build_decision_session(10, 10, 0, 0)
-    s2 = sch.build_decision_session(10, 10, 0, 0)
+    s1 = sch.build_decision_session(10, 10, 0, 0,
+                                    representative_output="ACTION: branch(b1)")
+    s2 = sch.build_decision_session(10, 10, 0, 0,
+                                    representative_output="ACTION: branch(b2)")
     return sch.build_decision_validation([s1, s2], partial=False)
 
 
@@ -241,11 +243,17 @@ class TestMetaValidator:
 
 class TestDecisionValidation:
     def _session(self, requests=10, valid=10, invalid=0, error=0, length=0,
-                 no_action=0, fr=None, hashes=None, err_summary=None):
+                 no_action=0, fr=None, hashes=None, err_summary=None,
+                 representative_output=None):
+        # v57：v56+ 格式下 valid>0 必须带非空代表输出（validator 强制）；
+        # 旧用例默认填合法 ACTION 文本；valid=0 时保持空（合法形态）
         fr = fr if fr is not None else {"stop": valid + invalid}
         hashes = hashes if hashes is not None else ["h"] * (valid + invalid)
+        rep = (representative_output if representative_output is not None
+               else ("ACTION: branch(b1)" if valid > 0 else ""))
         return sch.build_decision_session(
-            requests, valid, invalid, error, length, no_action, fr, hashes, err_summary)
+            requests, valid, invalid, error, length, no_action, fr, hashes,
+            err_summary, rep)
 
     def test_session_invariants_ok(self):
         s = self._session(10, 8, 1, 1, length=1, fr={"stop": 8, "length": 1},

@@ -133,6 +133,66 @@ class TestSmoke:
         assert "errors" in rep and "cleanup" in rep
         # gpu_rss_samples 明确采样来源（与 p10 静态探针区分）
         assert "source" in rep["gpu_rss_samples"]
+        # v57（Medium 6）：peak_rss 跨 v55/v56 口径不可比声明 + probe 显式 stage
+        assert "comparability" in rep["gpu_rss_samples"]
+        assert "NOT" in rep["gpu_rss_samples"]["comparability"]
+        assert rep["probe_p10"]["stage"] == "probe_p10"
+        assert rep["probe_p10"]["pid"] is not None or rep["probe_p10"]["pid"] is None
+
+    # ---- v57 审查（Medium 2）：server_logs_summary 用真实 _server_meta ----
+
+    def test_server_logs_summary_uses_real_meta(self, tmp_path, fake_adapter_cls):
+        """summary 只从 runner._server_meta 真实映射取 tag/pid/started_at，
+        禁止 sorted index / 端口偏移推断。"""
+        import time as _time
+        r = m0r.M0FanoutRunner(server_bin="fake-bin", model="mock.gguf",
+                               tmp_dir=str(tmp_path / "tmp"))
+        t0 = _time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        # 手动构造 meta：顺序故意乱序 + 一个启动失败的 tag 缺 meta
+        r._server_meta = {
+            "dv1": {"port": 8083, "pid": 5555, "started_at": t0,
+                    "log_path": str(tmp_path / "dv1.log")},
+            "calib": {"port": 8080, "pid": 1111, "started_at": t0,
+                      "log_path": str(tmp_path / "calib.log")},
+        }
+        (tmp_path / "calib.log").write_text(
+            "llama_memory_recurrent::init: RS buffer size = 201.00 MiB\n"
+            "E8-C1: capability rejected: hybrid model\n", encoding="utf-8")
+        (tmp_path / "dv1.log").write_text(
+            "llama_memory_recurrent::init: RS buffer size = 502.50 MiB\n",
+            encoding="utf-8")
+        summary = cr._server_logs_summary(r, "smoke-test")
+        # 遍历顺序 = _server_meta 插入顺序（dict 有序），pid/started_at 真实
+        assert [e["server_tag"] for e in summary] == ["dv1", "calib"]
+        assert {e["pid"] for e in summary} == {5555, 1111}
+        for e in summary:
+            assert e["started_at"] == t0
+        by_tag = {e["server_tag"]: e for e in summary}
+        assert by_tag["calib"]["key_lines"]["rs_buffer"] == [
+            "llama_memory_recurrent::init: RS buffer size = 201.00 MiB"]
+        assert by_tag["calib"]["key_lines"]["capability_rejected"] == [
+            "E8-C1: capability rejected: hybrid model"]
+        assert by_tag["dv1"]["key_lines"]["rs_buffer"] == [
+            "llama_memory_recurrent::init: RS buffer size = 502.50 MiB"]
+
+    def test_server_logs_summary_refreshes_after_stop(self, tmp_path, fake_adapter_cls):
+        """stop 后重新读盘日志（避免 health 时启动期快照不完整）：log_path 内容
+        更新后 summary 反映最新日志，不沿用启动期快照。"""
+        import time as _time
+        r = m0r.M0FanoutRunner(server_bin="fake-bin", model="mock.gguf",
+                               tmp_dir=str(tmp_path / "tmp"))
+        log_p = tmp_path / "s.log"
+        t0 = _time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        r._server_meta = {"p10": {"port": 8090, "pid": 999, "started_at": t0,
+                                  "log_path": str(log_p)}}
+        # 启动期快照：只有 health 前的一行（不完整）
+        r._server_logs["p10"] = "server listening\n"
+        log_p.write_text(
+            "server listening\nRS buffer size = 502.50 MiB\nKV buffer size = 128 MiB\n",
+            encoding="utf-8")
+        summary = cr._server_logs_summary(r, "r")
+        assert summary[0]["key_lines"]["rs_buffer"] == ["RS buffer size = 502.50 MiB"]
+        assert summary[0]["key_lines"]["kv_alloc"] == ["KV buffer size = 128 MiB"]
 
     def test_run_short_calibration_no_probe(self, tmp_path, fake_adapter_cls):
         rep = run_short_calibration(**cal_args(tmp_path, do_probe=False))
@@ -155,6 +215,148 @@ class TestSmoke:
         assert doc["run_id"] == "cli-run"
         assert doc["run_mode"] == "short-calibration (no formal matrix)"
         assert "decision_validation" in doc and "server_logs_summary" in doc
+
+    # ---- v57 审查（Medium 3）：tmp 仅成功写盘后且非 --keep-tmp 才删除 ----
+
+    def test_main_success_cleans_tmp(self, tmp_path, fake_adapter_cls):
+        """报告成功写盘且非 --keep-tmp → tmp-dir 被删除。"""
+        bin_p = tmp_path / "llama-server"
+        model_p = tmp_path / "mock.gguf"
+        bin_p.write_text("#!/bin/sh\n")
+        model_p.write_text("x")
+        tmp_dir = tmp_path / "tmp"
+        rc = main(["--server-bin", str(bin_p), "--model", str(model_p),
+                   "--out", str(tmp_path / "rep.json"),
+                   "--tmp-dir", str(tmp_dir), "--run-id", "cli-run"])
+        assert rc == 0
+        assert not os.path.isdir(tmp_dir)
+
+    def test_main_keep_tmp_preserves(self, tmp_path, fake_adapter_cls):
+        """--keep-tmp → tmp-dir 保留。"""
+        bin_p = tmp_path / "llama-server"
+        model_p = tmp_path / "mock.gguf"
+        bin_p.write_text("#!/bin/sh\n")
+        model_p.write_text("x")
+        tmp_dir = tmp_path / "tmp"
+        rc = main(["--server-bin", str(bin_p), "--model", str(model_p),
+                   "--out", str(tmp_path / "rep.json"),
+                   "--tmp-dir", str(tmp_dir), "--run-id", "cli-run",
+                   "--keep-tmp"])
+        assert rc == 0
+        assert os.path.isdir(tmp_dir)
+
+    def test_main_report_write_failure_keeps_tmp(self, tmp_path, fake_adapter_cls):
+        """报告写失败 → tmp-dir 保留排障（不删除）。"""
+        bin_p = tmp_path / "llama-server"
+        model_p = tmp_path / "mock.gguf"
+        bin_p.write_text("#!/bin/sh\n")
+        model_p.write_text("x")
+        tmp_dir = tmp_path / "tmp"
+        # 输出路径为已存在目录（open(dir,"w") → IsADirectoryError）→ 写报告 OSError
+        out_dir = tmp_path / "as_dir"
+        out_dir.mkdir()
+        rc = main(["--server-bin", str(bin_p), "--model", str(model_p),
+                   "--out", str(out_dir),
+                   "--tmp-dir", str(tmp_dir), "--run-id", "cli-run"])
+        assert rc == 1
+        assert os.path.isdir(tmp_dir)  # 排障保留
+
+    # ---- v57 审查（Medium 4）：cleanup.leftover_pids 只查本 runner PID 集合 ----
+
+    def test_cleanup_checks_only_sampled_pids(self, tmp_path, fake_adapter_cls,
+                                              monkeypatch):
+        """cleanup 只检查 peak.pids_seen（本 runner 采样 PID），不用全系统 pgrep
+        ——mock 环境无采样 PID 时 leftover 为空，即使系统有其他 llama-server。"""
+        rep = run_short_calibration(**cal_args(tmp_path))
+        assert rep["cleanup"]["leftover_pids"] == []
+        assert rep["cleanup"]["checked_pids"] == []
+        assert "no system-wide pgrep" in rep["cleanup"]["method"]
+
+    def test_cleanup_alive_and_dead_pids(self, monkeypatch):
+        """pids_seen 中存活 PID 列出、已退出 PID 不列。"""
+        import os as _os
+
+        # 用当前进程（存活）模拟本 runner 采样 PID；另一个必然不存在的 PID
+        alive = _os.getpid()
+        dead = 99999999  # 大概率不存在（ProcessLookupError）
+        monkeypatch.setattr(cr._PeakSampler, "pids_seen", [alive, dead],
+                            raising=False)
+        peak = cr._PeakSampler()
+        peak.pids_seen = [alive, dead]
+        assert sorted(int(x) for x in cr._pid_alive_filter(peak.pids_seen)) == [alive]
+
+    # ---- v57 审查（Medium 5）：calibration 异常保留已完成部分与结构化 error ----
+
+    def test_calibration_failure_preserves_partial(self, tmp_path, fake_adapter_cls,
+                                                   monkeypatch):
+        """calibration 中途失败：报告保留 parity_progress / calibrated_lengths /
+        preflight_rejections 已完成部分 + 结构化 error（非纯字符串）。"""
+        captured = {}
+
+        def _calib_fail_after_partial(self):
+            # 模拟已完成的校准部分
+            self.parity_progress = {"completed": ["short-P", "short-B"], "errors": []}
+            self.calibrated_lengths = {
+                ("short", 2): {"prefix": 120, "branch": 40},
+                ("short", 4): {"prefix": 120, "branch": 30},
+            }
+            self.preflight_rejections = [
+                {"unit_id": "long/N8/q8_0/off", "reason": "budget_exceeded"}]
+            raise RuntimeError("mock calibration boom")
+
+        monkeypatch.setattr(m0r.M0FanoutRunner, "run_calibration",
+                            _calib_fail_after_partial)
+        rep = run_short_calibration(**cal_args(tmp_path))
+        assert rep["parity_progress"]["completed"] == ["short-P", "short-B"]
+        assert rep["calibrated_lengths"]["short/fanout2"] == {"prefix": 120,
+                                                              "branch": 40}
+        assert len(rep["preflight_rejections"]) == 1
+        assert rep["preflight_rejections"][0]["unit_id"] == "long/N8/q8_0/off"
+        # 结构化 error（非字符串）
+        assert rep["errors"] == [{
+            "code": "validation_incomplete", "stage": "calibration", "count": 1,
+            "detail": "RuntimeError: mock calibration boom"}]
+
+    def test_dv_failure_preserves_partial_sessions(self, tmp_path, fake_adapter_cls,
+                                                   monkeypatch):
+        """decision_validation 中途失败：保留已收集 sessions（partial）与结构化 error。"""
+        def _dv_fail_after_partial(self):
+            self.decision_sessions = [sch.build_decision_session(
+                requests=10, valid=8, invalid=2, error_count=0,
+                representative_output="ACTION: branch(b1)")]
+            raise RuntimeError("mock dv boom")
+
+        monkeypatch.setattr(m0r.M0FanoutRunner, "run_decision_validation",
+                            _dv_fail_after_partial)
+        rep = run_short_calibration(**cal_args(tmp_path))
+        assert rep["decision_validation"]["complete"] is False
+        assert len(rep["decision_validation"]["sessions"]) == 1
+        assert rep["errors"][0]["stage"] == "decision_validation"
+        assert rep["errors"][0]["count"] == 1
+
+    def test_pid_alive_semantics(self):
+        import os as _os
+        assert cr._pid_alive(_os.getpid()) is True
+        assert cr._pid_alive(99999999) is False
+        assert cr._pid_alive(0) is False
+        assert cr._pid_alive(-5) is False
+
+    def test_main_runner_failure_keeps_tmp(self, tmp_path, fake_adapter_cls, monkeypatch):
+        """runner 内部异常 → tmp-dir 保留（不删除）。"""
+        bin_p = tmp_path / "llama-server"
+        model_p = tmp_path / "mock.gguf"
+        bin_p.write_text("#!/bin/sh\n")
+        model_p.write_text("x")
+        tmp_dir = tmp_path / "tmp"
+
+        def _boom(*a, **k):
+            raise RuntimeError("runner boom")
+        monkeypatch.setattr(cr, "run_short_calibration", _boom)
+        rc = main(["--server-bin", str(bin_p), "--model", str(model_p),
+                   "--out", str(tmp_path / "rep.json"),
+                   "--tmp-dir", str(tmp_dir), "--run-id", "cli-run"])
+        assert rc == 1
+        assert os.path.isdir(tmp_dir)  # 排障保留
 
 
 # ---- representative_output + sha256（v56 合同） ----
@@ -203,3 +405,68 @@ class TestRepresentativeOutput:
         sess["representative_output"] = ""
         errs = sch.validate_decision_session(sess)
         assert any(e[0] == "invariant_violation" for e in errs)
+
+    # ---- v57 审查（Medium 1）：v55 旧格式向后兼容 + valid>0 非空语义 ----
+
+    def test_v55_legacy_session_without_rep_fields_accepted(self):
+        """v55 旧 run1 数据：两个 representative 字段同时缺失 → 按旧格式接受，
+        即使 valid>0 也不强制代表输出（旧格式无此字段）。"""
+        sess = {
+            "control": "off", "requests": 10, "valid": 9, "invalid": 1,
+            "error_count": 0, "invalid_length": 1, "invalid_no_action": 0,
+            "finish_reasons": {"stop": 9, "length": 1},
+            "output_hashes": ["a"] * 10, "error_summary": [],
+        }
+        assert "representative_output" not in sess
+        assert "representative_output_sha256" not in sess
+        assert sch.validate_decision_session(sess) == []
+
+    def test_v55_legacy_inside_sessions_accepted(self):
+        """旧 run1 decision_validation.sessions 整体 validator 接受（含缺字段）。"""
+        sess = {
+            "control": "off", "requests": 10, "valid": 8, "invalid": 2,
+            "error_count": 0, "invalid_length": 2, "invalid_no_action": 0,
+            "finish_reasons": {"stop": 8, "length": 2},
+            "output_hashes": ["a"] * 10, "error_summary": [],
+        }
+        dv = sch.build_decision_validation([sess], partial=False)
+        assert sch.validate_decision_validation(dv, phase="preflight") == []
+
+    def test_rep_only_field_present_rejected(self):
+        """任一字段存在则两者必须同时存在：只给 representative_output → 拒绝。"""
+        sess = sch.build_decision_session(
+            requests=1, valid=1, invalid=0, error_count=0,
+            representative_output="ACTION: branch(b1)")
+        del sess["representative_output_sha256"]
+        errs = sch.validate_decision_session(sess)
+        assert any(e[0] == "invariant_violation" and "同时存在或同时缺失" in e[2]
+                   for e in errs)
+
+    def test_sha_only_field_present_rejected(self):
+        """只给 representative_output_sha256 → 拒绝。"""
+        sess = sch.build_decision_session(
+            requests=1, valid=1, invalid=0, error_count=0,
+            representative_output="ACTION: branch(b1)")
+        del sess["representative_output"]
+        errs = sch.validate_decision_session(sess)
+        assert any(e[0] == "invariant_violation" for e in errs)
+
+    def test_valid_gt0_with_empty_rep_rejected(self):
+        """v56+ 格式：valid>0 且 representative_output 空白 → 拒绝（valid>0 必须
+        代表输出非空）。"""
+        sess = sch.build_decision_session(
+            requests=1, valid=1, invalid=0, error_count=0,
+            representative_output="ACTION: branch(b1)")
+        sess["representative_output"] = ""
+        sess["representative_output_sha256"] = ""  # 同空：仅触发 valid>0 语义
+        errs = sch.validate_decision_session(sess)
+        assert any(e[0] == "invariant_violation" and "valid>0" in e[2]
+                   for e in errs)
+
+    def test_valid_zero_with_empty_rep_accepted(self):
+        """valid=0 可同空（空 session 合法形态）。"""
+        sess = sch.build_decision_session(
+            requests=0, valid=0, invalid=0, error_count=0)
+        sess["representative_output"] = ""
+        sess["representative_output_sha256"] = ""
+        assert sch.validate_decision_session(sess) == []

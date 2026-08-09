@@ -46,6 +46,7 @@ sys.path.insert(0, str(REPO_ROOT / "benchmark"))
 
 from framework import sampler  # noqa: E402
 from runner import m0_fanout_runner as m0r  # noqa: E402
+from runner import m0_schema as sch  # noqa: E402
 from runner.m0_fanout_runner import M0FanoutRunner  # noqa: E402
 
 
@@ -131,23 +132,25 @@ class _PeakSampler:
         # join 由调用方执行（避免持锁）
 
 
-def _server_logs_summary(runner: M0FanoutRunner, run_id: str,
-                         port_pids: Optional[Dict[int, int]] = None) -> List[Dict[str, Any]]:
+def _server_logs_summary(runner: M0FanoutRunner, run_id: str) -> List[Dict[str, Any]]:
     """关键 server 日志结构化摘录（RS/KV/capability 行 + server tag/pid/阶段）。
 
     只归档 key lines（G-M0-4 RS buffer、G-M0-5 capability rejected、KV 分配行），
-    不复制完整 -lv5 日志（正式矩阵日志策略同此）。pid 来自采样线程的端口→pid
-    映射（server 停止后不可再探测）。
+    不复制完整 -lv5 日志（正式矩阵日志策略同此）。
+    v57（审查 Medium 2/6）：只用 runner._server_meta 真实映射（tag → {port, pid,
+    started_at, log_path}），禁止 sorted index / 端口偏移推断 tag→PID；started_at
+    为真实启动时刻；日志文本在停止后重新读盘刷新（避免 health 时启动期快照
+    不完整）；mock adapter 无真实子进程时 pid 为 None（如实记录）。
     """
     out: List[Dict[str, Any]] = []
-    port_pids = port_pids or {}
-    for idx, (tag, log) in enumerate(sorted(runner._server_logs.items())):
+    for tag, meta in runner._server_meta.items():
+        log = _read_log_refresh(meta.get("log_path") or "", runner._server_logs.get(tag, ""))
         entry: Dict[str, Any] = {
             "server_tag": tag,
             "run_id": run_id,
-            "pid": port_pids.get(runner.port_base + idx),
+            "pid": meta.get("pid"),
             "phase": _phase_for_tag(tag),
-            "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "started_at": meta.get("started_at"),
             "key_lines": {
                 "rs_buffer": _grep_from_text(log, "RS buffer size"),
                 "capability_rejected": _grep_from_text(log, "capability rejected"),
@@ -156,6 +159,17 @@ def _server_logs_summary(runner: M0FanoutRunner, run_id: str,
         }
         out.append(entry)
     return out
+
+
+def _read_log_refresh(log_path: str, fallback: str) -> str:
+    """停止后刷新：优先重新读盘（完整日志），读失败回退启动期快照。"""
+    if log_path:
+        try:
+            with open(log_path, encoding="utf-8", errors="replace") as f:
+                return f.read()
+        except OSError:
+            pass
+    return fallback
 
 
 def _grep_from_text(text: str, pattern: str) -> List[str]:
@@ -204,7 +218,14 @@ def run_short_calibration(
         "gpu_rss_samples": {"peak_gpu_mb": None, "peak_rss_mb": None,
                             "source": ("periodic sampler across calibration/dv servers "
                                        "(multiple PIDs); p10 probe is a separate static "
-                                       "sample (different PID/phase)")},
+                                       "sample (different PID/phase)"),
+                            "comparability": ("v57: peak_rss across v55/v56 is NOT "
+                                              "comparable - v55 reports used single "
+                                              "static sampling (fixed PID/instant), "
+                                              "v56+ uses periodic peak across "
+                                              "calibration/dv multiple PID lifecycles; "
+                                              "align sampling before cross-version "
+                                              "comparison")},
         "metrics_kv": None,
         "server_logs_summary": [],
         "errors": [],
@@ -245,7 +266,16 @@ def run_short_calibration(
             report["rs_observations"]["calib_capability"] = _grep_log(
                 calib_log, "capability rejected")
         except Exception as e:  # noqa: BLE001
-            report["errors"].append(f"calibration: {type(e).__name__}: {e}")
+            # v57（审查 Medium 5）：异常时保留已完成部分（parity_progress /
+            # calibrated_lengths / preflight_rejections 如实记录，不丢已收集证据）
+            # 与结构化 error（{code, stage, count}，与决策 error_summary 同构）。
+            report["parity_progress"] = r.parity_progress
+            report["calibrated_lengths"] = {
+                f"{k[0]}/fanout{k[1]}": v for k, v in r.calibrated_lengths.items()}
+            report["preflight_rejections"] = r.preflight_rejections
+            report["errors"].append({
+                "code": "validation_incomplete", "stage": "calibration",
+                "count": 1, "detail": f"{type(e).__name__}: {e}"})
 
         # ---- 步骤 2：decision-validation（off/on 各一 session，每 session ≥10） ----
         try:
@@ -260,7 +290,16 @@ def run_short_calibration(
                 report["rs_observations"]["dv"][f"{ctl}_capability"] = _grep_log(
                     dv_log, "capability rejected")
         except Exception as e:  # noqa: BLE001
-            report["errors"].append(f"decision_validation: {type(e).__name__}: {e}")
+            # v57：dv 阶段异常同样保留已完成 sessions（run_decision_validation
+            # 异常前可能已收集部分 session）
+            if r.decision_sessions:
+                report["decision_validation"] = {
+                    "complete": False,
+                    "sessions": sch.build_decision_validation(
+                        r.decision_sessions, partial=True)["sessions"]}
+            report["errors"].append({
+                "code": "validation_incomplete", "stage": "decision_validation",
+                "count": 1, "detail": f"{type(e).__name__}: {e}"})
 
         # ---- 步骤 3：parallel10 q8_0 + --kv-prefix-share 探针（可选） ----
         if do_probe:
@@ -279,6 +318,7 @@ def run_short_calibration(
                 p10_log = os.path.join(tmp_dir, "server_p10.log")
                 report["probe_p10"] = {
                     "pid": pid,
+                    "stage": "probe_p10",  # v57：显式阶段标识（与 server_logs_summary 的 tag 对应）
                     "phase": "post-validation static probe (p10, kv-prefix-share on)",
                     "gpu_mb": g, "rss_mb": rs,
                     "rs_buffer_lines": _grep_log(p10_log, "RS buffer size"),
@@ -289,7 +329,9 @@ def run_short_calibration(
                 report["rs_observations"]["p10_capability"] = (
                     report["probe_p10"]["capability_rejected_lines"])
             except Exception as e:  # noqa: BLE001
-                report["errors"].append(f"probe_p10: {type(e).__name__}: {e}")
+                report["errors"].append({
+                    "code": "validation_incomplete", "stage": "probe_p10",
+                    "count": 1, "detail": f"{type(e).__name__}: {e}"})
             finally:
                 try:
                     r._stop_server()
@@ -298,18 +340,46 @@ def run_short_calibration(
     finally:
         _stop_all()
 
-    report["server_logs_summary"] = _server_logs_summary(r, run_id, port_pids=peak.port_pids)
+    report["server_logs_summary"] = _server_logs_summary(r, run_id)
     report["gpu_rss_samples"]["peak_gpu_mb"] = peak.peak_gpu
     report["gpu_rss_samples"]["peak_rss_mb"] = peak.peak_rss
     report["gpu_rss_samples"]["pids_seen"] = peak.pids_seen
 
+    # v57（审查 Medium 4）：只检查本 runner 启动/采样过的 PID 集合（peak.pids_seen
+    # 由 _PeakSampler 按本 runner 端口探测收集）——不再用全系统 pgrep 扫残留，
+    # 共享同一台机器的其他 llama-server（其它任务）不算本 runner 残留。
     try:
-        out = subprocess.run(["pgrep", "-x", "llama-server"],
-                             capture_output=True, text=True)
-        report["cleanup"] = {"leftover_pids": out.stdout.split()}
+        leftover = [str(p) for p in _pid_alive_filter(peak.pids_seen)]
+        report["cleanup"] = {
+            "leftover_pids": leftover,
+            "checked_pids": [str(p) for p in peak.pids_seen],
+            "method": ("only PIDs sampled by this runner (peak.pids_seen); "
+                       "no system-wide pgrep; other llama-server not counted"),
+        }
     except Exception:  # noqa: BLE001
-        report["cleanup"] = {"leftover_pids": None}
+        report["cleanup"] = {"leftover_pids": None,
+                             "checked_pids": [str(p) for p in peak.pids_seen]}
     return report
+
+
+def _pid_alive_filter(pids) -> List[int]:
+    """过滤出仍存活的 PID（v57：cleanup 只检查本 runner 采样 PID 集合）。"""
+    return [p for p in pids if _pid_alive(p)]
+
+
+def _pid_alive(pid: int) -> bool:
+    """进程是否存活（os.kill 0 探测；权限错误视为存活——进程存在）。"""
+    if not pid or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -331,22 +401,25 @@ def main(argv: Optional[List[str]] = None) -> int:
             ngl=args.ngl, tmp_dir=tmp_dir, run_id=run_id,
             decision_n_predict=args.decision_n_predict, do_probe=not args.no_probe)
     except Exception as e:  # noqa: BLE001
+        # v57（审查 Medium 3）：runner 未捕获异常 → 保留 tmp 排障（不删除）
         print(f"未捕获异常：{type(e).__name__}: {e}", file=sys.stderr)
         return 1
-    finally:
-        if not args.keep_tmp and os.path.isdir(tmp_dir):
-            try:
-                shutil_rmtree(tmp_dir)
-            except Exception:  # noqa: BLE001
-                pass
 
     try:
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(report, f, ensure_ascii=False, indent=2)
         print(f"WROTE {out_path}")
     except OSError as e:
+        # v57：报告写失败 → 保留 tmp 排障（不删除）
         print(f"写报告失败：{e}", file=sys.stderr)
         return 1
+
+    # v57（审查 Medium 3）：仅报告成功写盘后且非 --keep-tmp 才删除 tmp
+    if not args.keep_tmp and os.path.isdir(tmp_dir):
+        try:
+            shutil_rmtree(tmp_dir)
+        except Exception:  # noqa: BLE001
+            pass
 
     keys = ("parity_ok", "parity_progress", "calibrated_lengths", "preflight_rejections",
             "decision_validation", "probe_p10", "gpu_rss_samples", "metrics_kv",

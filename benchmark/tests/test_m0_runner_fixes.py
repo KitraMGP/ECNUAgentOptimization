@@ -804,6 +804,78 @@ class TestWarmupRequestErrorDead:
 
 # ---- v48 复审（任务 8）：sampler 端口兜底只匹配显式 --port ----
 
+    # ---- v57 审查（Medium 7）：warmup 基础设施异常纳入 ServerError ----
+
+    def test_warmup_server_error_dead_server_crash(self, tmp_path,
+                                                   fake_adapter_cls,
+                                                   monkeypatch):
+        """warmup 抛 ServerError（基础设施归因）+ server 已退出 → 不忽略：
+        group ERROR + FORMAL_INCOMPLETE（与 OSError/OpenAIError 同路径）。"""
+        FakeAdapter.poll_dead = True
+
+        def _boom(*a, **k):
+            raise m0r.ServerError("health timeout (exit=None)")
+
+        r = make_runner(tmp_path, fake_adapter_cls)
+        monkeypatch.setattr(r, "_run_unit", _boom)
+        try:
+            rc = r.run()
+            assert rc == 0, rc
+            with open(r.out_path, encoding="utf-8") as f:
+                doc = json.load(f)
+            assert doc["meta"]["phase"] == "formal"
+            assert doc["meta"]["matrix_complete"] is False
+            groups = (doc["modes"]["off"]["server_groups"]
+                      + doc["modes"]["on"]["server_groups"])
+            assert all(g["status"] == "ERROR" for g in groups)
+            assert all(g["error_type"] == "server_crash" for g in groups)
+        finally:
+            FakeAdapter.poll_dead = None
+
+    def test_warmup_server_error_healthy_server_ignored(self, tmp_path,
+                                                        fake_adapter_cls,
+                                                        monkeypatch):
+        """warmup 抛 ServerError 但 server 仍健康 → 按设计忽略（仅预热），
+        不误判崩溃；后续正常完成。"""
+        calls = {"n": 0}
+
+        def _boom(*a, **k):
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise m0r.ServerError("endpoint unavailable")
+            return sch.build_rep(a[0], int(k.get("rep_index") or 0), a[1], a[2],
+                                 a[3], a[4], 100, 100, a[5], "OK", False,
+                                 {"kv": {"last": {"used_cells": 0,
+                                                  "active_sequences": 0}},
+                                  "branches": [{"branch": "b1",
+                                                "canary_leak": False}]})
+
+        r = make_runner(tmp_path, fake_adapter_cls)
+        monkeypatch.setattr(r, "_run_unit", _boom)
+        rc = r.run()
+        assert rc == 0, rc
+        with open(r.out_path, encoding="utf-8") as f:
+            doc = json.load(f)
+        assert doc["meta"]["phase"] == "formal"
+        assert doc["meta"]["matrix_complete"] is True  # 健康 → 正常完成
+
+    def test_warmup_internal_bug_still_70(self, tmp_path, fake_adapter_cls,
+                                          monkeypatch):
+        """warmup 内部 bug（KeyError，非基础设施）→ 不被 _INFRA_EXCEPTIONS 吞，
+        run_safe 归 INTERNAL_RUNNER_ERROR + EXIT_SOFTWARE(70)。"""
+        def _boom(*a, **k):
+            raise KeyError("internal bug")
+
+        r = make_runner(tmp_path, fake_adapter_cls)
+        monkeypatch.setattr(r, "_run_unit", _boom)
+        rc = r.run_safe()
+        assert rc == 70, rc
+        # 已抛出的内部 bug 不应落正式结果（run_safe 仅 stderr 错误码）
+        assert not os.path.isfile(r.out_path)
+
+
+# ---- v48 复审（任务 8）：sampler 端口兜底只匹配显式 --port ----
+
 class TestSamplerPortFallback:
     def _procs(self, *specs):
         out = []

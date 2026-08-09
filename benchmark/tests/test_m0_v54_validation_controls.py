@@ -104,8 +104,10 @@ def test_validate_decision_session_accepts_control_key():
         "invalid_length": 0, "invalid_no_action": 0,
         "finish_reasons": {"stop": 10},
         "output_hashes": ["a"] * 10, "error_summary": [],
-        # v56：representative_output 字段合同（同空允许）
-        "representative_output": "", "representative_output_sha256": "",
+        # v57：v56+ 格式 valid>0 必须非空代表输出（v56 的"同空允许"仅 valid=0
+        # 场景成立；valid>0 时测试数据必须带非空 ACTION 文本）
+        "representative_output": "ACTION: branch(b1)",
+        "representative_output_sha256": "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
     }
     for ctl in ("off", "on"):
         s = dict(base, control=ctl)

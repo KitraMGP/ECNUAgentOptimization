@@ -42,7 +42,14 @@ from runner.e15_branch_concurrent import _http_get_json, http_request
 #   不再冗余列出）② openai SDK 异常（OpenAIError 覆盖 APIStatusError/APIConnectionError/
 #   APITimeoutError）。其余（AssertionError/KeyError/TypeError 等内部 bug）不捕获 →
 # run_safe 归 INTERNAL_RUNNER_ERROR + EXIT_SOFTWARE(70)。
-_INFRA_EXCEPTIONS = (OSError, openai.OpenAIError)
+# v57（审查 Medium 7）：③ ServerError（server 启动/health/端点失败，基础设施归因）
+#   ——warmup 路径亦视为基础设施异常（健康则忽略继续、死则转崩溃），
+#   AssertionError/KeyError/TypeError 等内部 bug 仍不被捕获 → 70。
+class ServerError(Exception):
+    """server 启动/health/端点失败（基础设施归因）。"""
+
+
+_INFRA_EXCEPTIONS = (OSError, openai.OpenAIError, ServerError)
 
 SEED = 42
 TEMPERATURE = 0.0
@@ -59,10 +66,6 @@ G4_TOLERANCE = 0.05             # ≤5%
 # v48（任务 4）：KVProbe periodic 采样间隔（s）——覆盖分支并发与工具轮，
 # peak_used_cells/peak_active_sequences 来自真实周期样本；测试可用更小值
 PERIODIC_INTERVAL = 0.05
-
-
-class ServerError(Exception):
-    """server 启动/health/端点失败（基础设施归因）。"""
 
 
 class ServerAdapter:
@@ -177,6 +180,10 @@ class M0FanoutRunner:
         # Critical 9/10：tag → server 启动日志（G-M0-4 RS buffer 独立观测 /
         # G-M0-5 hybrid 拒绝行证据；真实 llama.cpp 日志行见对应注释）
         self._server_logs: Dict[str, str] = {}
+        # v57（审查 Medium 2）：tag → 真实启动元数据 {port, pid, started_at,
+        # log_path}——_start_server 成功时记录；server_logs_summary / formal
+        # 日志摘要只用该映射（禁止 sorted index 推断 tag→port/pid）
+        self._server_meta: Dict[str, Dict[str, Any]] = {}
         # Critical 6：桶校准实测长度（(bucket, fanout) → {prefix, branch}），
         # 来自真实 apply-template+tokenize，禁止用 BUCKET_TARGETS 近似值落结果
         self.calibrated_lengths: Dict[Tuple[str, int], Dict[str, int]] = {}
@@ -240,6 +247,17 @@ class M0FanoutRunner:
                 self._adapter = adapter
                 # Critical 9/10：记录该 group 日志（G-M0-4 RS 观测 / G-M0-5 日志证据）
                 self._server_logs[tag] = adapter.read_log()
+                # v57（审查 Medium 2）：真实元数据映射——pid 取真实子进程 PID
+                # （mock adapter 无 proc 时为 None），started_at 为启动成功时刻
+                pid = None
+                if getattr(adapter, "proc", None) is not None:
+                    pid = adapter.proc.pid
+                self._server_meta[tag] = {
+                    "port": port,
+                    "pid": pid,
+                    "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "log_path": log_path,
+                }
                 return adapter
             code = adapter.poll()
             adapter.stop()
