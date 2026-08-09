@@ -1277,10 +1277,13 @@ class M0FanoutRunner:
 
         真实 llama.cpp 行（llama-memory-recurrent.cpp:115，LLAMA_LOG_INFO）：
         "llama_memory_recurrent::init: <buf> RS buffer size =  50.25 MiB"
-        取全部匹配行求和（可能多 buffer）；无匹配 → None（观测缺失）。
+        v63：真实 llama.cpp 可能多次打印同一总行（每 buffer 构建阶段重复输出
+        201.00 MiB 等）——取**首个匹配值**而非求和（求和会把重复打印的总行
+        误加成 2 倍导致 G-M0-4 超差，2026-08-09 完整 4B 矩阵实测暴露）；
+        无匹配 → None（观测缺失）。
         """
-        vals = [float(m) for m in re.findall(r"RS buffer size =\s*([\d.]+) MiB", log)]
-        return round(sum(vals), 3) if vals else None
+        m = re.search(r"RS buffer size =\s*([\d.]+) MiB", log)
+        return round(float(m.group(1)), 3) if m else None
 
     def _compute_gates(self, modes: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         gates: Dict[str, Dict[str, Any]] = {}
@@ -1400,7 +1403,7 @@ class M0FanoutRunner:
         # 匹配其稳定前缀；FakeAdapter 不再专造行（返回真实格式）。
         g5 = "PASS"
         on_log = self._on_session_log()
-        if "E8-C1: capability rejected: hybrid" not in on_log:
+        if "E8-C1: capability rejected:" not in on_log:  # v63：真实 4B 行为 "memory implementation does not support cross-slot prefix metadata sharing"（同前缀）
             g5 = "FAIL"
         for control in ("off", "on"):
             for grp in modes.get(control, {}).get("server_groups", []):

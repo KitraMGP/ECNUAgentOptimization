@@ -487,6 +487,21 @@ class TestCritical9G5RealLog:
         g2 = r2._compute_gates(modes)
         assert g2["G-M0-5"]["status"] == "FAIL"
 
+    def test_g5_pass_memory_implementation_line(self, tmp_path, fake_adapter_cls):
+        """v63：真实 4B 走 memory implementation 分支（llama_memory_hybrid 未
+        override supports_cross_slot_prefix_sharing → 该分支先于 hybrid 分支
+        命中），runner 匹配稳定前缀 "E8-C1: capability rejected:" → PASS。"""
+        r = make_runner(tmp_path, fake_adapter_cls)
+        os.makedirs(r.tmp_dir, exist_ok=True)
+        with open(os.path.join(r.tmp_dir, "server_g6.log"), "w",
+                  encoding="utf-8") as f:
+            f.write("E8-C1: capability rejected: memory implementation does not "
+                    "support cross-slot prefix metadata sharing (only standard "
+                    "unified attention KV is audited)\n")
+        modes = {"off": {"server_groups": []}, "on": {"server_groups": []}}
+        g = r._compute_gates(modes)
+        assert g["G-M0-5"]["status"] == "PASS"
+
 
 # ---- Critical 10：G-M0-4 独立观测 ----
 
@@ -496,6 +511,23 @@ class TestCritical10G4Observational:
                "llama_memory_recurrent::init: cpu  RS buffer size =  0.00 MiB\n")
         assert m0r.M0FanoutRunner._parse_rs_buffer_mib(log) == pytest.approx(50.25)
         assert m0r.M0FanoutRunner._parse_rs_buffer_mib("no rs line") is None
+
+    def test_parse_rs_buffer_duplicate_lines_first_match(self):
+        """v63：真实 llama.cpp 多次打印同一总行（每 buffer 构建阶段）——取首个
+        匹配值而非求和（求和会把 201.00 双行误加成 402 → G-M0-4 超差，完整
+        4B 矩阵实测暴露）。"""
+        log = (
+            "0.00.590.014 I llama_memory_recurrent: CUDA0 RS buffer size =   201.00 MiB\n"
+            "0.01.485.578 I llama_memory_recurrent: CUDA0 RS buffer size =   201.00 MiB\n"
+        )
+        assert m0r.M0FanoutRunner._parse_rs_buffer_mib(log) == pytest.approx(201.0)
+        # 多 buffer 场景仍取首个匹配（RS 总行，非求和语义）
+        log2 = (
+            "llama_memory_recurrent::init: R buffer size = 2.25 MiB\n"
+            "llama_memory_recurrent::init: S buffer size = 48.00 MiB\n"
+            "llama_memory_recurrent::init: RS buffer size = 50.25 MiB\n"
+        )
+        assert m0r.M0FanoutRunner._parse_rs_buffer_mib(log2) == pytest.approx(50.25)
 
     def _modes_with_groups(self):
         # v48（任务 1）：必须用真实 sch.build_group/build_modes 产物——
