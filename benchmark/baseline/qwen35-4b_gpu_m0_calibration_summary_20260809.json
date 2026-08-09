@@ -1,0 +1,59 @@
+{
+  "run_mode": "short-calibration x3 (no formal matrix)",
+  "claim": "三次独立 4B GPU 短校准核心字段一致（parity 6 桶 / calibrated_lengths / preflight_rejections / decision validation / RS 数值 / GPU）",
+  "runs": [
+    {
+      "run_id": "m0-cal-run1",
+      "file": "benchmark/baseline/qwen35-4b_gpu_m0_calibration_20260809.json",
+      "format": "v55（无 run_id/representative_output 字段；dv 计数/parity/长度/拒绝与 run2/3 一致）",
+      "date": "2026-08-09T12:21:41+0800",
+      "binary_version": "b8570-4a699aaad",
+      "peak_gpu_mb": 3358.0,
+      "probe_p10_gpu_mb": 3354.0,
+      "probe_p10_rs_mb": 992.1,
+      "leftover_pids": []
+    },
+    {
+      "run_id": "m0-cal-run2",
+      "file": "benchmark/baseline/qwen35-4b_gpu_m0_calibration_run2_20260809.json",
+      "format": "v56（run_id + representative_output/sha256 + server_logs_summary + pids_seen）",
+      "date": "2026-08-09T12:39:55+0800",
+      "binary_version": "b8570-4a699aaad",
+      "rep_sha256": "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+      "peak_gpu_mb": 3358.0,
+      "probe_p10_gpu_mb": 3354.0,
+      "probe_p10_rs_mb": 992.1,
+      "pids_seen": [
+        2080514,
+        2080565,
+        2080612,
+        2080653
+      ],
+      "leftover_pids": []
+    },
+    {
+      "run_id": "m0-cal-run3",
+      "file": "benchmark/baseline/qwen35-4b_gpu_m0_calibration_run3_20260809.json",
+      "format": "v56",
+      "date": "2026-08-09T12:40:09+0800",
+      "binary_version": "b8570-4a699aaad",
+      "rep_sha256": "03c79f2833c2f6fd56d38d750104c23bafee2b024e6c59f0c580d03b5414606b",
+      "peak_gpu_mb": 3358.0,
+      "probe_p10_gpu_mb": 3354.0,
+      "probe_p10_rs_mb": 992.1,
+      "pids_seen": [
+        2080713,
+        2080757,
+        2080809,
+        2080857
+      ],
+      "leftover_pids": []
+    }
+  ],
+  "consistency": {
+    "core_fields_equal": true,
+    "rs_buffer_calib_mib": "201.00 (3 次一致)",
+    "rs_buffer_p10_mib": "502.50 (3 次一致)",
+    "rep_sha256_equal_run2_run3": true
+  }
+}

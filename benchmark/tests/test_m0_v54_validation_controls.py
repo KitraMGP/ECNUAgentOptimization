@@ -104,6 +104,8 @@ def test_validate_decision_session_accepts_control_key():
         "invalid_length": 0, "invalid_no_action": 0,
         "finish_reasons": {"stop": 10},
         "output_hashes": ["a"] * 10, "error_summary": [],
+        # v56：representative_output 字段合同（同空允许）
+        "representative_output": "", "representative_output_sha256": "",
     }
     for ctl in ("off", "on"):
         s = dict(base, control=ctl)

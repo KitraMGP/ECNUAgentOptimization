@@ -191,8 +191,15 @@ def build_decision_session(
     finish_reasons: Optional[Dict[str, int]] = None,
     output_hashes: Optional[List[str]] = None,
     error_summary: Optional[List[Dict[str, Any]]] = None,
+    representative_output: str = "",
 ) -> Dict[str, Any]:
-    """决策验证 session（§5.1 v20 两来源不变量，由 validator 强制）。"""
+    """决策验证 session（§5.1 v20 两来源不变量，由 validator 强制）。
+
+    v56：per-session 可审计代表输出（validator 认可字段）——
+    representative_output 为第一条 valid 请求的原始输出文本（必须通过
+    parse_action），representative_output_sha256 为对其 UTF-8 编码的
+    sha256（可重算；validator 校验 64-hex 格式，可重算性由测试验证）。
+    """
     requests, valid, invalid = int(requests), int(valid), int(invalid)
     error_count = int(error_count)
     # 默认值自洽（§5.1 不变量）：finish_reasons 覆盖 OK/INVALID_DECISION 请求、
@@ -201,6 +208,7 @@ def build_decision_session(
         finish_reasons = {"stop": max(0, valid + invalid)}
     if output_hashes is None:
         output_hashes = [f"<sha256:{i}>" for i in range(valid + invalid)]
+    rep_sha = content_sha256(representative_output) if representative_output else ""
     return {
         "requests": requests,
         "valid": valid,
@@ -211,6 +219,8 @@ def build_decision_session(
         "finish_reasons": dict(finish_reasons),
         "output_hashes": list(output_hashes),
         "error_summary": list(error_summary or []),
+        "representative_output": representative_output,
+        "representative_output_sha256": rep_sha,
     }
 
 
@@ -570,6 +580,22 @@ def validate_decision_session(sess: Any, path: str = "decision_validation.sessio
     if len(oh) != valid + invalid:
         _push(errs, "invariant_violation", f"{path}.output_hashes",
               "len==valid+invalid", (len(oh), valid + invalid))
+    # v56：representative_output / representative_output_sha256（可审计代表输出）
+    rep = sess.get("representative_output")
+    if not isinstance(rep, str):
+        _push(errs, "type_mismatch", f"{path}.representative_output", "str", rep)
+        rep = ""
+    rep_sha = sess.get("representative_output_sha256")
+    if not isinstance(rep_sha, str) or (rep_sha and not re.fullmatch(r"[0-9a-f]{64}", rep_sha)):
+        _push(errs, "type_mismatch", f"{path}.representative_output_sha256",
+              "64-hex str（可空）", rep_sha)
+    if bool(rep) != bool(rep_sha):
+        _push(errs, "invariant_violation", f"{path}.representative_output",
+              "representative_output 与 sha256 同空或同非空", (bool(rep), bool(rep_sha)))
+    if rep and content_sha256(rep) != rep_sha:
+        _push(errs, "invariant_violation", f"{path}.representative_output_sha256",
+              "sha256(representative_output) 必须等于声明的 sha256（可重算）",
+              (content_sha256(rep), rep_sha))
     # error_summary 三元组唯一性（v40）+ sum(count)==error_count
     seen: set = set()
     total_count = 0

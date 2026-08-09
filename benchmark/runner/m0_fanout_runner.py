@@ -477,6 +477,10 @@ class M0FanoutRunner:
         for e in errors:
             key = (e["error"], None, None)
             err_summary[key] = err_summary.get(key, 0) + 1
+        # v56：可审计代表输出——第一条 valid 请求的原始输出文本（必须通过
+        # parse_action 才计入 valid；哈希由 build_decision_session 计算）
+        rep_text = next((r["text"] for r in recs
+                         if r["ok"] and r["error"] is None), "")
         sess = sch.build_decision_session(
             requests=len(recs), valid=valid, invalid=len(invalids),
             error_count=len(errors), invalid_length=invalid_length,
@@ -485,6 +489,7 @@ class M0FanoutRunner:
                            if r["error"] is None],
             error_summary=[{"code": k[0], "count": v}
                            for k, v in err_summary.items()],
+            representative_output=rep_text,
         )
         sess["control"] = control  # v54：记录验证 session 的 control 开关
         return sess
