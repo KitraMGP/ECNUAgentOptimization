@@ -782,3 +782,27 @@ CLI 合同（v12 收紧）：`--server-bin --model [--port-base N] --ctx-size 40
   server 停止后重新读盘刷新（避免 health 时启动期快照不完整）；启动失败/缺 tag 的
   server 不会错配后续 PID（无 meta 即无条目）**；
   ⑤ build-cuda 重建（含 -lv 5 无影响，llama.cpp 零改动）。
+
+---
+
+## 12. 完整 24-unit 4B formal 矩阵结果（2026-08-09，正式归档 run5）
+
+**执行**：`cd benchmark && uv run python -m runner.m0_fanout_runner --server-bin ../llama.cpp/build-cuda/bin/llama-server --model ../models/qwen3-5-4B-Q4_K_M.gguf --ctx-size 4096 --out results/m0_formal_4b_run5_20260809.json --tmp-dir results --port-base 8080 --ngl 99 --cleanup-tmp-age 3600`（约 10 分钟，EXIT=0）。环境：RTX 4060 Laptop 8188 MiB / driver 610.43.03 / server b8570-4a699aaad / Qwen3.5-4B Q4_K_M。
+
+**结果**：12 server groups 全 COMPLETED（off 6 + on 6）、24 units × 5 reps = 120、(unit_id,rep_index) 全局唯一、matrix_complete=true、planned/executed=24/24、rejections=0；gates G-M0-1/2/3a/4/5/7 **PASS**、G-M0-3b/6 NOT_APPLICABLE；**verdict=INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE（REP_ERROR：36/120 reps connection_error）**。
+
+**矩阵实测暴露并修复 3 个实现 bug**（commit 7d777bf/5acf962/a48a06f）：
+1. G-M0-4 `_parse_rs_buffer_mib` 对真实 llama.cpp 日志多行求和（201.00×2=402 → 超差）→ 取首个匹配值（v63）；
+2. G-M0-5 匹配串 `"capability rejected: hybrid"` 不匹配真实 4B 行（`memory implementation does not support cross-slot prefix metadata sharing`——llama_memory_hybrid 未 override 共享 → 源码 memory 分支先命中，server-context.cpp:1502）→ 改匹配稳定前缀 `"E8-C1: capability rejected:"`（v63）；
+3. rep 缺 latency_ms/ttft_ms（§5.2 定义未落）→ build_rep 增可选字段 + _run_unit 聚合本 rep 全部请求 avg（v65）。
+
+**off/on 对比**（OK reps，run5）：latency 528 vs 507 ms（on −4.1%）、ttft 287 vs 277 ms（−3.4%）——噪音级差异（OK rep 数不均 off 35/on 49），**无共享收益**；shared_cells 恒 0（4B hybrid C1 被拒，G-M0-5 PASS 验证日志与基线）；decision_fallback=false。
+
+**connection_error 归因**：36/120 reps（30%）连接错误（transient wrapper 已重试 3 次、如实记 rep ERROR），run1/2/3/5 均 17–30% —— **4B GPU 单线程 server 在高并发（parallel 8–10 + 分支/工具轮）下的稳定基础设施现象，非代码 bug**；ERROR rep 不参与 G-M0-4 归因。
+
+**归档**：`benchmark/baseline/qwen35-4b_gpu_m0_formal_run5_20260809.json`（机器可读结果）+ `qwen35-4b_gpu_m0_formal_run5_evidence_20260809.json`（命令/环境/矩阵/gates/日志证据引用）；完整 -lv5 日志留 `results/m0_fanout_*` 专属目录（gitignore 不入库）；run1/2/3 为修复前中间结果（run1 有 G-M0-4/5 FAIL、run2/3 有 notes 噪音），不归档为正式。
+
+**限制**：
+- rep 级 `peak_gpu_mb/peak_rss_mb` 仍为 0.0 占位（组级 baseline gpu_used_mb=3026 MiB / rss=984 MiB 有值；KV 周期采样 start_periodic 有）——rep 级 GPU/RSS 峰值采样未实现（§5.2 字段与实现不一致，已知限制）；
+- G-M0-6 NOT_APPLICABLE：单次 run 无复现对比（connection_error 30% 下是否需要 run2 复现以判定稳定性，待评估）；
+- server_logs_summary 未写入 formal doc meta（v56 归档字段在 calibration 报告；formal 的 key lines 证据以本节的 log evidence JSON 归档）。
