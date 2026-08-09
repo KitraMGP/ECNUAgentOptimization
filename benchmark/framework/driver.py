@@ -118,6 +118,9 @@ class Driver:
             cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
             row = {
                 "text": resp.choices[0].message.content or "",
+                # M0（Critical 2）：顶层 finish_reason = choices[0].finish_reason
+                # （openai SDK 标准属性；runner 只从顶层判定，不依赖非标准 timings）
+                "finish_reason": getattr(resp.choices[0], "finish_reason", None),
                 "prompt_tokens": u.prompt_tokens,
                 "completion_tokens": u.completion_tokens,
                 "total_tokens": u.total_tokens,

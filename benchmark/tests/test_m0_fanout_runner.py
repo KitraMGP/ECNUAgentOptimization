@@ -24,7 +24,8 @@ class FakeAdapter:
     """mock server adapter：真实绑定 MockOpenAIServer（非 no-op），可模拟启动失败/崩溃。"""
 
     fail_after = None    # 非 None：全局第 N 次 start 起 wait_health 失败（启动失败模拟）
-    crash_at_after = None  # 非 None：从第 N 个 adapter 起带 crash_at=31（rep4 内崩溃）
+    crash_at_after = None  # 非 None：从第 N 个 adapter 起带 crash_at（进程崩溃模拟）
+    crash_at_value = 31   # Critical 7：崩溃点（POST 计数）；测试可调小以覆盖 warmup 崩溃
     _instances = 0
     _starts = 0
 
@@ -36,8 +37,7 @@ class FakeAdapter:
         self._instance_no = FakeAdapter._instances
         if (FakeAdapter.crash_at_after is not None
                 and self._instance_no >= FakeAdapter.crash_at_after):
-            crash_at = 31  # f2 unit 每 5 POST；warmup short 10 + rep0-3 各 5（20）
-            # → rep4 在 POST 31-35 内崩溃（第 5 rep 已开始）
+            crash_at = FakeAdapter.crash_at_value
         self.crash_at = crash_at
         self._server: MockOpenAIServer | None = None
         self.stopped = False
@@ -71,13 +71,18 @@ class FakeAdapter:
             self._server = None
 
     def read_log(self):
-        return "capability rejected: hybrid\n" if "on" in str(self.cmd) else ""
+        # Critical 9：返回真实 llama.cpp 日志格式（server-context.cpp:1505，
+        # --kv-prefix-share + hybrid 模型时的 SRV_WRN 行），不再专造
+        # 与真实 server 不一致的 "capability rejected: hybrid" 短行。
+        return ("E8-C1: capability rejected: hybrid (recurrent+attention) model\n"
+                if "on" in str(self.cmd) else "")
 
 
 @pytest.fixture
 def fake_adapter_cls(monkeypatch):
     FakeAdapter.fail_after = None
     FakeAdapter.crash_at_after = None
+    FakeAdapter.crash_at_value = 31
     FakeAdapter._instances = 0
     FakeAdapter._starts = 0
     monkeypatch.setattr(m0r, "ServerAdapter", FakeAdapter)

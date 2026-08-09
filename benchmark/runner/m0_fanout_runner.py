@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -153,6 +154,12 @@ class M0FanoutRunner:
         self.rule = "PREFLIGHT_INFRA"
         self.binary_version = ""
         self.formal_started = False
+        # Critical 9/10：tag → server 启动日志（G-M0-4 RS buffer 独立观测 /
+        # G-M0-5 hybrid 拒绝行证据；真实 llama.cpp 日志行见对应注释）
+        self._server_logs: Dict[str, str] = {}
+        # Critical 6：桶校准实测长度（(bucket, fanout) → {prefix, branch}），
+        # 来自真实 apply-template+tokenize，禁止用 BUCKET_TARGETS 近似值落结果
+        self.calibrated_lengths: Dict[Tuple[str, int], Dict[str, int]] = {}
 
     # ---- server 生命周期 ----
 
@@ -180,9 +187,22 @@ class M0FanoutRunner:
         adapter = self.adapter_cls(cmd, log_path, port)
         last_err = "启动失败"
         for attempt in range(3):
-            adapter.start()
+            try:
+                adapter.start()
+            except OSError as e:
+                # Critical 4：启动路径（打开日志文件 / Popen server-bin）OSError
+                # → 基础设施归因 ServerError，绝不 traceback 传播（含
+                # FileNotFoundError：server-bin 不存在；PermissionError：tmp 不可写）
+                try:
+                    adapter.stop()
+                except Exception:
+                    pass
+                last_err = f"启动失败: {e}"
+                break
             if adapter.wait_health(timeout=90.0):
                 self._adapter = adapter
+                # Critical 9/10：记录该 group 日志（G-M0-4 RS 观测 / G-M0-5 日志证据）
+                self._server_logs[tag] = adapter.read_log()
                 return adapter
             code = adapter.poll()
             adapter.stop()
@@ -209,7 +229,10 @@ class M0FanoutRunner:
 
     def _connect(self, port: int) -> Tuple[Driver, KVProbe]:
         base_url = f"http://127.0.0.1:{port}"
-        drv = Driver(base_url=base_url, model="bench", max_retry=1, sdk_max_retries=0)
+        # Critical 3：显式传实际 host/port —— Driver 内部 sampler 按端口定位 PID，
+        # 不传会用默认 8080，非默认端口时 PID 定位错配（ss 找不到 → 兜底错进程）。
+        drv = Driver(base_url=base_url, model="bench", max_retry=1,
+                     sdk_max_retries=0, host="127.0.0.1", port=port)
         kv = KVProbe(base_url=base_url)
         # server version（/props build_info 或启动日志，尽力而为）
         try:
@@ -301,6 +324,12 @@ class M0FanoutRunner:
                                            fp.build_branch_task(bucket, "b1"), canary)
                 b_tok = self._driver.count_tokens(
                     self._driver.apply_template(bmsgs), add_special=False)
+                # Critical 6：按 (bucket, fanout) 保存校准实测长度（真实
+                # apply-template+tokenize），formal rep 的 prefix_len/branch_len
+                # 与预算复核同源；同 (bucket,fanout) 的 4 个 unit（off/on ×
+                # 2 profile）共享同一实测值（设计 v42「同桶 4 unit 一致」）。
+                self.calibrated_lengths[(bucket, fanout)] = {
+                    "prefix": int(p_tok), "branch": int(b_tok)}
                 b_branch = b_tok - p_tok  # 分支后缀增量
                 total = fp.budget(p_tok, b_branch, fanout)
                 if total > fp.BUDGET_THRESHOLD:
@@ -325,9 +354,9 @@ class M0FanoutRunner:
                 row = drv.chat(msgs, temperature=TEMPERATURE, seed=SEED,
                                max_tokens=self.decision_n_predict)
                 text = row["text"]
-                fr = (row.get("timings") or {}).get("finish_reason", "stop")
-                if isinstance(fr, dict):
-                    fr = fr.get("reason", "stop")
+                # Critical 2：只从顶层 finish_reason 判定（mock 可配置 length），
+                # 不依赖非标准 timings 字段
+                fr = row.get("finish_reason") or "stop"
                 invalid = fp.decision_invalid(text, str(fr), 8)
                 recs.append({"ok": not invalid, "error": None, "text": text,
                              "finish_reason": str(fr)})
@@ -426,9 +455,14 @@ class M0FanoutRunner:
                             self._run_unit(unit_id, fanout, bucket, ctk, ctv,
                                            gid, rep_index=None)
                         except ServerCrash:
-                            raise
+                            # Critical 7：warmup 崩溃不得被吞——立即进入 group
+                            # ERROR / FORMAL_INCOMPLETE（进程已退出，后续请求必败）
+                            crashed = True
+                            break
                         except Exception:
-                            pass  # warmup 失败不阻断（仅预热）
+                            pass  # warmup 请求级失败不阻断（仅预热）
+                    if crashed:
+                        break
                     # formal 5 reps
                     for ri in range(sch.FORMAL_REPS):
                         try:
@@ -486,6 +520,10 @@ class M0FanoutRunner:
         except Exception:
             gpu = 0.0
         kv_snap = self._kv.snapshot("baseline") or {}
+        # Critical 1：snapshot 返回 {ts, tag, run_id, data} 包装——capacity_bytes
+        # 与全部 /metrics/kv 字段在 data 内；从 data 读取并保存权威 data（而非
+        # 包装对象），修复 kv_buffer_mb 恒 0 与 metrics_kv_snapshot 结构错配。
+        kv_data = kv_snap.get("data") if isinstance(kv_snap.get("data"), dict) else {}
         parsed = sch.parse_group_id(gid)
         assert parsed is not None
         parallel = int(parsed["fanout"]) + 2
@@ -494,8 +532,8 @@ class M0FanoutRunner:
             server_version=self.binary_version or "unknown",
             gpu_used_mb=float(gpu or 0.0), rss_mb=float(rss or 0.0),
             rs_buffer_mb=rs_mb,
-            kv_buffer_mb=float(kv_snap.get("capacity_bytes", 0) or 0) / (1024 * 1024),
-            metrics_kv_snapshot=kv_snap,
+            kv_buffer_mb=float(kv_data.get("capacity_bytes", 0) or 0) / (1024 * 1024),
+            metrics_kv_snapshot=kv_data,
         )
 
     _last_prefix_len = 150
@@ -508,94 +546,125 @@ class M0FanoutRunner:
         rep_index=None 表示 warmup（不落 replicates、不参与指标）。
         """
         assert self._driver is not None and self._kv is not None
-        context = fp.build_context(bucket)
-        # 长度桶实际目标（prefix/branch token 预算）
-        self._last_prefix_len, self._last_branch_len = fp.BUCKET_TARGETS[bucket]
-        msgs = fp.decision_messages(context, fanout)
-        # 1) 决策请求
+        # Critical 6：prefix/branch 长度必须用 (bucket, fanout) 校准实测值
+        # （apply-template+tokenize），禁止 BUCKET_TARGETS 近似值落结果。
+        cal = self.calibrated_lengths.get((bucket, fanout))
+        if cal is None:
+            raise ServerError(f"校准长度缺失: {bucket}/fanout={fanout}（校准阶段必须先行）")
+        self._last_prefix_len = int(cal["prefix"])
+        self._last_branch_len = int(cal["branch"])
+        # Critical 1：每个 formal rep 独立 begin_run/end_run 边界（KV 快照按
+        # run_id 归组）；warmup 不进入 run 作用域。
+        rep_run_id = f"{unit_id}#r{rep_index}" if rep_index is not None else None
+        if rep_index is not None:
+            self._kv.begin_run(rep_run_id)
+            self._kv.snapshot("pre")
         try:
-            row = self._driver.chat(msgs, temperature=TEMPERATURE, seed=SEED,
-                                    max_tokens=self.decision_n_predict)
-            text = row["text"]
-            fr = (row.get("timings") or {}).get("finish_reason", "stop")
-            if isinstance(fr, dict):
-                fr = fr.get("reason", "stop")
-            invalid = fp.decision_invalid(text, str(fr), fanout)
-            if invalid:
-                action = f"ACTION: branch({fp.fallback_branch(fanout, rep_index or 0)})"
-                fallback = True
-            else:
-                action = f"ACTION: branch(b{fp.parse_action(text)})"
-                fallback = False
-        except ServerCrash:
-            raise
-        except Exception as e:
-            # rep ERROR（server 仍健康时继续；崩溃由上层检测）
-            if rep_index is None:
+            context = fp.build_context(bucket)
+            msgs = fp.decision_messages(context, fanout)
+            # 1) 决策请求
+            try:
+                row = self._driver.chat(msgs, temperature=TEMPERATURE, seed=SEED,
+                                        max_tokens=self.decision_n_predict)
+                text = row["text"]
+                # Critical 2：只从顶层 finish_reason 判定（choice.finish_reason）
+                fr = row.get("finish_reason") or "stop"
+                invalid = fp.decision_invalid(text, str(fr), fanout)
+                if invalid:
+                    action = f"ACTION: branch({fp.fallback_branch(fanout, rep_index or 0)})"
+                    fallback = True
+                else:
+                    action = f"ACTION: branch(b{fp.parse_action(text)})"
+                    fallback = False
+            except ServerCrash:
                 raise
-            if self._adapter is not None and self._adapter.poll() is not None:
-                raise ServerCrash(str(e)) from e
-            self.any_rep_error = True
-            metrics = {"error_type": classify_error(e), "status": "ERROR"}
-            rep = sch.build_rep(unit_id, rep_index, fanout, bucket, ctk, ctv,
-                                self._last_prefix_len, self._last_branch_len, gid,
-                                "ERROR", False, metrics,
-                                error_type=classify_error(e), error_stage="formal",
-                                error_bucket=bucket)
-            return rep
-        if fallback:
-            self.any_fallback = True
-        # 2) 分支并发（barrier + ThreadPoolExecutor）
-        branches: List[Dict[str, Any]] = []
-        bar = threading.Barrier(fanout)
+            except Exception as e:
+                # rep ERROR（server 仍健康时继续；崩溃由上层检测）
+                if rep_index is None:
+                    raise
+                if self._adapter is not None and self._adapter.poll() is not None:
+                    raise ServerCrash(str(e)) from e
+                self.any_rep_error = True
+                metrics = {"error_type": classify_error(e), "status": "ERROR"}
+                rep = sch.build_rep(unit_id, rep_index, fanout, bucket, ctk, ctv,
+                                    self._last_prefix_len, self._last_branch_len, gid,
+                                    "ERROR", False, metrics,
+                                    error_type=classify_error(e), error_stage="formal",
+                                    error_bucket=bucket)
+                return rep
+            if fallback:
+                self.any_fallback = True
+            # 2) 分支并发（barrier + ThreadPoolExecutor）
+            branches: List[Dict[str, Any]] = []
+            bar = threading.Barrier(fanout)
 
-        def _branch(bx: int) -> Dict[str, Any]:
-            bname = f"b{bx}"
-            canary = fp.canary_for(fanout, bname)
-            bmsgs = fp.branch_messages(msgs, action, bname,
-                                       fp.build_branch_task(bucket, bname), canary)
-            bar.wait()
-            brow = self._driver.chat(bmsgs, temperature=TEMPERATURE, seed=SEED,
-                                     max_tokens=self.branch_n_predict)
-            return {"branch": bname, "row": brow, "canary": canary}
+            def _branch(bx: int) -> Dict[str, Any]:
+                bname = f"b{bx}"
+                canary = fp.canary_for(fanout, bname)
+                bmsgs = fp.branch_messages(msgs, action, bname,
+                                           fp.build_branch_task(bucket, bname), canary)
+                bar.wait()
+                brow = self._driver.chat(bmsgs, temperature=TEMPERATURE, seed=SEED,
+                                         max_tokens=self.branch_n_predict)
+                return {"branch": bname, "row": brow, "canary": canary}
 
-        with ThreadPoolExecutor(max_workers=fanout) as ex:
-            futures = [ex.submit(_branch, bx) for bx in range(1, fanout + 1)]
-            for f in futures:
-                try:
-                    branches.append(f.result())
-                except Exception as e:
-                    # 进程崩溃检测：并发请求失败且 server 已退出 → ServerCrash
-                    # （该 rep 归因 server_crash，而非请求级 connection_error）
-                    if self._adapter is not None and self._adapter.poll() is not None:
-                        raise ServerCrash(str(e)) from e
-                    branches.append({"branch": "?", "row": None, "canary": "",
-                                     "error": classify_error(e)})
-        # 3) 工具轮（M 轮固定注入）；崩溃检测（进程退出 → ServerCrash）
-        try:
-            for tround in range(1, self.tool_rounds + 1):
-                for b in branches:
-                    if b.get("row") is not None and b.get("error") is None:
-                        self._driver.chat(
-                            msgs + [{"role": "assistant", "content": action}] +
-                            [fp.tool_round_message(b["branch"], tround)],
-                            temperature=TEMPERATURE, seed=SEED,
-                            max_tokens=self.branch_n_predict)
-        except Exception as e:
-            if self._adapter is not None and self._adapter.poll() is not None:
-                raise ServerCrash(str(e)) from e
-            raise
-        # 4) 回收（erase 全部 slot）；崩溃检测同上
-        try:
-            self._kv.clean_all_slots()
-        except Exception as e:
-            if self._adapter is not None and self._adapter.poll() is not None:
-                raise ServerCrash(str(e)) from e
-            raise
+            with ThreadPoolExecutor(max_workers=fanout) as ex:
+                futures = [ex.submit(_branch, bx) for bx in range(1, fanout + 1)]
+                for f in futures:
+                    try:
+                        branches.append(f.result())
+                    except Exception as e:
+                        # 进程崩溃检测：并发请求失败且 server 已退出 → ServerCrash
+                        # （该 rep 归因 server_crash，而非请求级 connection_error）
+                        if self._adapter is not None and self._adapter.poll() is not None:
+                            raise ServerCrash(str(e)) from e
+                        branches.append({"branch": "?", "row": None, "canary": "",
+                                         "error": classify_error(e)})
+            # 3) 工具轮（M 轮固定注入）；崩溃检测（进程退出 → ServerCrash）
+            try:
+                for tround in range(1, self.tool_rounds + 1):
+                    for b in branches:
+                        if b.get("row") is not None and b.get("error") is None:
+                            self._driver.chat(
+                                msgs + [{"role": "assistant", "content": action}] +
+                                [fp.tool_round_message(b["branch"], tround)],
+                                temperature=TEMPERATURE, seed=SEED,
+                                max_tokens=self.branch_n_predict)
+            except Exception as e:
+                if self._adapter is not None and self._adapter.poll() is not None:
+                    raise ServerCrash(str(e)) from e
+                raise
+            # 4) 回收（erase 全部 slot）；崩溃检测同上
+            try:
+                self._kv.clean_all_slots()
+                # Critical 1：erase 后采样实际 /metrics/kv——G-M0-3a 从该
+                # 样本验证 used_cells==0 && active_sequences==0（last=erase 后值）
+                if rep_index is not None:
+                    self._kv.snapshot("after_erase")
+            except Exception as e:
+                if self._adapter is not None and self._adapter.poll() is not None:
+                    raise ServerCrash(str(e)) from e
+                raise
+        finally:
+            if rep_index is not None:
+                self._kv.end_run()
         # 5) 指标 + rep 对象
         if rep_index is None:
             return {}
-        kv_agg = self._kv.run_aggregate()
+        # Critical 1：按当前 rep 的 run_id 取聚合（不含其他 rep / 全局样本），
+        # 并包装成 gate/validator 消费的一致结构 {first,last,peak}
+        # （G-M0-3a 读 last.used_cells / last.active_sequences）
+        kv_agg = self._kv.run_aggregate().get(rep_run_id, {})
+        kv_metrics: Dict[str, Any] = {}
+        if kv_agg:
+            kv_metrics = {
+                "first": {"used_cells": kv_agg.get("first_used_cells"),
+                          "active_sequences": kv_agg.get("first_active_sequences")},
+                "last": {"used_cells": kv_agg.get("last_used_cells"),
+                         "active_sequences": kv_agg.get("last_active_sequences")},
+                "peak": {"used_cells": kv_agg.get("peak_used_cells"),
+                         "active_sequences": kv_agg.get("peak_active_sequences")},
+            }
         status = "OK" if not fallback else "INVALID_DECISION"
         has_error = any(b.get("error") for b in branches)
         if has_error:
@@ -610,11 +679,11 @@ class M0FanoutRunner:
             self.any_rep_error = True
         metrics: Dict[str, Any] = {
             "peak_gpu_mb": 0.0, "peak_rss_mb": 0.0,
-            "kv": kv_agg,
+            "kv": kv_metrics,
             "branches": [{"branch": b["branch"],
-                          "finish_reason": (b["row"].get("timings") or {}).get("finish_reason")
-                          if b.get("row") and (b["row"].get("timings") or {}).get("finish_reason")
-                          else "stop",
+                          # Critical 2：分支行顶层 finish_reason
+                          "finish_reason": (b["row"].get("finish_reason") or "stop")
+                          if b.get("row") else "stop",
                           "canary_leak": self._canary_leak(b, branches)}
                          for b in branches],
         }
@@ -674,6 +743,16 @@ class M0FanoutRunner:
             self.rule = "FORMAL_INCOMPLETE"
         # 5) gates + 落盘
         return self._finalize()
+
+    def run_safe(self) -> int:
+        """run() 的兜底入口（Critical 4）：任何未预期异常 → 固定 stderr 错误码 +
+        EXIT_SOFTWARE(70)，绝不 traceback / exit 1（OSError 已在 _start_server
+        转 ServerError；此处只捕获内部 bug 与遗漏路径）。"""
+        try:
+            return self.run()
+        except Exception as e:
+            print(f"INTERNAL_RUNNER_ERROR: {type(e).__name__}: {e}", file=sys.stderr)
+            return sch.EXIT_SOFTWARE
 
     def _fail_preflight(self, reason: str, parity_ok: Optional[bool],
                         rejections: List[Dict[str, Any]], detail: str) -> int:
@@ -781,6 +860,17 @@ class M0FanoutRunner:
         return {u for u, idxs in by_unit.items()
                 if idxs == set(range(sch.FORMAL_REPS))}
 
+    @staticmethod
+    def _parse_rs_buffer_mib(log: str) -> Optional[float]:
+        """从 server 启动日志解析 RS buffer 总大小（MiB）。
+
+        真实 llama.cpp 行（llama-memory-recurrent.cpp:115，LLAMA_LOG_INFO）：
+        "llama_memory_recurrent::init: <buf> RS buffer size =  50.25 MiB"
+        取全部匹配行求和（可能多 buffer）；无匹配 → None（观测缺失）。
+        """
+        vals = [float(m) for m in re.findall(r"RS buffer size =\s*([\d.]+) MiB", log)]
+        return round(sum(vals), 3) if vals else None
+
     def _compute_gates(self, modes: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         gates: Dict[str, Dict[str, Any]] = {}
         # G-M0-1：专用验证合法率 100%
@@ -792,55 +882,105 @@ class M0FanoutRunner:
             if total_req >= 2 * VALIDATION_REQUESTS and total_valid == total_req:
                 g1 = "PASS"
         gates["G-M0-1"] = {"status": g1}
-        # G-M0-2：canary 跨分支泄漏率 0
+        # G-M0-2：canary 跨分支泄漏率 0（Critical 1：观测缺失 → FAIL，不静默 PASS）
         leak = False
+        leak_na = False
         for control in ("off", "on"):
             for grp in modes.get(control, {}).get("server_groups", []):
                 for rep in grp.get("replicates", []):
-                    for b in rep.get("metrics", {}).get("branches", []):
+                    if rep.get("status") == "ERROR":
+                        continue  # 分支无输出，隔离性不可测（由 REP_ERROR 顶层处理）
+                    branches = rep.get("metrics", {}).get("branches")
+                    if not isinstance(branches, list) or not branches:
+                        leak_na = True  # 缺分支观测
+                        continue
+                    for b in branches:
                         if b.get("canary_leak"):
                             leak = True
-        gates["G-M0-2"] = {"status": "PASS" if not leak else "FAIL"}
+        if leak:
+            gates["G-M0-2"] = {"status": "FAIL"}
+        elif leak_na:
+            gates["G-M0-2"] = {"status": "FAIL"}
+        else:
+            gates["G-M0-2"] = {"status": "PASS"}
         # G-M0-3a：每 rep 末 erase 后 used_cells==0 && active_sequences==0
+        # （Critical 1：after_erase 样本缺失/字段非 int → FAIL，绝不 None 即 PASS）
         rec_ok = True
         for control in ("off", "on"):
             for grp in modes.get(control, {}).get("server_groups", []):
                 for rep in grp.get("replicates", []):
                     kv = rep.get("metrics", {}).get("kv", {})
-                    last = kv.get("last", {})
-                    if last.get("used_cells") not in (0, None) or \
-                       last.get("active_sequences") not in (0, None):
+                    last = kv.get("last", {}) if isinstance(kv, dict) else {}
+                    if (not isinstance(last, dict)
+                            or not isinstance(last.get("used_cells"), int)
+                            or not isinstance(last.get("active_sequences"), int)
+                            or last["used_cells"] != 0
+                            or last["active_sequences"] != 0):
                         rec_ok = False
         gates["G-M0-3a"] = {"status": "PASS" if rec_ok else "FAIL"}
         gates["G-M0-3b"] = {"status": "NOT_APPLICABLE"}  # smoke 观测，非门禁
-        # G-M0-4：group.baseline RS buffer 对账 ≤5%
-        g4 = "PASS"
-        for control in ("off", "on"):
-            for grp in modes.get(control, {}).get("server_groups", []):
-                bs = grp.get("baseline")
-                if not isinstance(bs, dict):
-                    g4 = "FAIL"
-                    continue
-                parsed = sch.parse_group_id(grp["server_group_id"])
-                if parsed is None:
-                    g4 = "FAIL"
-                    continue
-                parallel = int(parsed["fanout"]) + 2
-                expected_mb = RS_BYTES_PER_ROW * parallel / (1024 * 1024)
-                actual = bs.get("rs_buffer_mb", 0.0)
-                if expected_mb and abs(actual - expected_mb) / expected_mb > G4_TOLERANCE:
-                    g4 = "FAIL"
-        gates["G-M0-4"] = {"status": g4}
+        # G-M0-4（Critical 10）：RS buffer 对账。
+        #   - derived 自检：baseline.rs_buffer_mb 与公式 RS_BYTES_PER_ROW*parallel
+        #     一致（防内部公式 bug；非独立观测、不宣称实验验证）；
+        #   - 独立观测：真实 server 启动日志 "RS buffer size = X MiB"
+        #     （llama-memory-recurrent.cpp:115）；无任何观测 → NOT_APPLICABLE（明确）；
+        #     有观测超差（>G4_TOLERANCE）→ FAIL。
+        g4_derived = True
+        g4_obs = True
+        g4_obs_found = False
+        # 重建与 run_formal 相同的 group 序号（tag=f"g{gi}" → 日志 key）
+        seq: List[Tuple[str, str, str, str, int]] = []
+        for control in fp.CONTROLS:
+            for (ctk, ctv) in fp.CACHE_PROFILES:
+                for fanout in fp.FANOUTS:
+                    if fanout not in fp.legal_matrix_plan():
+                        continue
+                    seq.append((f"g{len(seq)}", control, ctk, ctv, fanout))
+        for gi, (tag, control, ctk, ctv, fanout) in enumerate(seq):
+            grp = next((g for g in modes.get(control, {}).get("server_groups", [])
+                        if g.get("ctk") == ctk and g.get("ctv") == ctv
+                        and g.get("fanout") == fanout), None)
+            if grp is None:
+                continue
+            bs = grp.get("baseline")
+            if not isinstance(bs, dict) or not isinstance(bs.get("rs_buffer_mb"), (int, float)):
+                g4_derived = False
+                continue
+            expected_mb = RS_BYTES_PER_ROW * (fanout + 2) / (1024 * 1024)
+            if expected_mb and abs(bs["rs_buffer_mb"] - expected_mb) / expected_mb > 0.001:
+                g4_derived = False
+            # 独立观测（该 group 的 server 启动日志）
+            log = self._server_logs.get(tag, "")
+            obs = self._parse_rs_buffer_mib(log)
+            if obs is None:
+                continue
+            g4_obs_found = True
+            if expected_mb and abs(obs - expected_mb) / expected_mb > G4_TOLERANCE:
+                g4_obs = False
+        if not g4_derived:
+            gates["G-M0-4"] = {"status": "FAIL"}  # 内部公式不一致
+        elif g4_obs_found and not g4_obs:
+            gates["G-M0-4"] = {"status": "FAIL"}  # 真实观测超差
+        elif not g4_obs_found:
+            gates["G-M0-4"] = {"status": "NOT_APPLICABLE"}  # 观测缺失（明确，非 PASS）
+        else:
+            gates["G-M0-4"] = {"status": "PASS"}
         # G-M0-5：对照有效性（off/on 均 shared_cells==0；on 日志含 hybrid 拒绝）
+        # Critical 9：真实 llama.cpp 行（server-context.cpp:1505，SRV_WRN，仅
+        # --kv-prefix-share 且 hybrid 模型时输出）：
+        #   "E8-C1: capability rejected: hybrid (recurrent+attention) model"
+        # 匹配其稳定前缀；FakeAdapter 不再专造行（返回真实格式）。
         g5 = "PASS"
         on_log = self._on_session_log()
-        if not on_log or "capability rejected: hybrid" not in on_log:
+        if "E8-C1: capability rejected: hybrid" not in on_log:
             g5 = "FAIL"
         for control in ("off", "on"):
             for grp in modes.get(control, {}).get("server_groups", []):
                 kv = grp.get("baseline", {}).get("metrics_kv_snapshot", {}) if isinstance(
                     grp.get("baseline"), dict) else {}
-                if kv.get("shared_cells") not in (0, None):
+                # Critical 1：shared_cells 必须存在且 == 0；缺观测 → FAIL
+                shared = kv.get("shared_cells") if isinstance(kv, dict) else None
+                if not isinstance(shared, int) or shared != 0:
                     g5 = "FAIL"
         gates["G-M0-5"] = {"status": g5}
         # G-M0-6：复现（同配置两次独立 run 对比——单次运行无法判定 → NOT_APPLICABLE）
@@ -983,13 +1123,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.ctx_size <= 0:
         print("INVALID_CONFIGURATION: --ctx-size 必须为正整数", file=sys.stderr)
         return sch.EXIT_USAGE
+    # Critical 5：CLI 入口清理 results 目录陈旧 atomic tmp 残留
+    # （atomic_write_json 命名 .m0_fanout_<name>.<kind>.tmp 与 cleanup 匹配）
+    if args.out:
+        sch.cleanup_stale_tmp(os.path.dirname(os.path.abspath(args.out)))
     runner = M0FanoutRunner(
         server_bin=args.server_bin, model=args.model, ctx_size=args.ctx_size,
         port_base=args.port_base, decision_n_predict=args.decision_n_predict,
         branch_n_predict=args.branch_n_predict, tool_rounds=args.tool_rounds,
         out_path=args.out, tmp_dir=args.tmp_dir, ngl=args.ngl,
     )
-    return runner.run()
+    # Critical 4：兜底入口（无 traceback / exit 1）
+    return runner.run_safe()
 
 
 if __name__ == "__main__":

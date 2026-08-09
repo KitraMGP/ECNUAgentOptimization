@@ -782,6 +782,26 @@ def validate_modes_group_rep(modes: Any, matrix_complete: bool,
                     v = rep.get(pk)
                     if not isinstance(v, int) or isinstance(v, bool) or v < 0:
                         _push(errs, "type_mismatch", f"{rpath}.{pk}", "非负整数", v)
+    # Critical 6：校准一致性——同 (fanout, bucket) 的所有 rep 的
+    # prefix_len/branch_len 必须相同（继承同一桶校准实测值，设计 v42
+    # 「同桶 4 unit 一致」；validator 不访问校准映射，但强制跨 rep 不变式）
+    cal_by_fb: Dict[Tuple[int, str], set] = {}
+    for rp in all_reps:
+        fb = (rp.get("fanout"), rp.get("bucket"))
+        if not isinstance(fb[0], int) or not isinstance(fb[1], str):
+            continue
+        s = cal_by_fb.setdefault(fb, set())
+        if isinstance(rp.get("prefix_len"), int):
+            s.add(("prefix", rp["prefix_len"]))
+        if isinstance(rp.get("branch_len"), int):
+            s.add(("branch", rp["branch_len"]))
+    for fb, vals in cal_by_fb.items():
+        for kind in ("prefix", "branch"):
+            kset = {v for k, v in vals if k == kind}
+            if len(kset) > 1:
+                _push(errs, "invariant_violation", "modes",
+                      f"同 (fanout,bucket){fb} 的 {kind}_len 必须一致（桶校准实测值）",
+                      sorted(kset))
     # 集合规则（v47 单一权威；集合比较，不用排序列表——EXPECTED_UNIT_IDS 为
     # bucket 语义顺序，sorted() 字典序不等价）
     expected_set = set(EXPECTED_UNIT_IDS) - set(rejections)

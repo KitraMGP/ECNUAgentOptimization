@@ -29,7 +29,21 @@ def find_server_pid(host: str = "127.0.0.1", port: int = 8080) -> Optional[int]:
                 return int(pid)
     except Exception:
         pass
-    # 兜底：遍历进程，按 cmdline 含 llama-server 匹配
+    # 兜底（Critical 3）：按端口过滤的 net_connections 查找——绝不返回
+    # 与请求端口无关的"第一个 llama-server"（多 server / 残留进程会错配）。
+    # 端口已精确匹配监听，不再要求 cmdline 含 llama-server（mock/真实均适用）。
+    try:
+        for conn in psutil.net_connections(kind="inet"):
+            if conn.status == "LISTEN" and conn.laddr.port == port:
+                if host in ("127.0.0.1", "localhost", "0.0.0.0", "::", "::1") or \
+                        conn.laddr.ip in (host, "0.0.0.0", "::", "::1"):
+                    pid = conn.pid
+                    if pid is not None:
+                        return int(pid)
+    except (psutil.AccessDenied, psutil.NoSuchProcess):
+        pass
+    # 最后兜底：仅当无任何端口观测时，才退化为按 cmdline 匹配
+    # （保持与旧行为兼容；调用方应优先传 port）
     for p in psutil.process_iter(["cmdline"]):
         try:
             cl = p.info["cmdline"] or []

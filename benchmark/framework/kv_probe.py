@@ -178,6 +178,8 @@ class KVProbe:
         """按 run_id 聚合：每个正式 run 的 used_cells first/last/peak 与样本数。
 
         run_id=None 的样本（start/end/periodic 全局快照）不计入 run 聚合。
+        M0（Critical 1）：同时聚合 active_sequences（G-M0-3a 需要 erase 后
+        active_sequences==0 的真实检查；E1 兼容增量）。
         """
         runs: Dict[str, Dict[str, Any]] = {}
         for s in self.samples:
@@ -185,14 +187,24 @@ class KVProbe:
             if not rid:
                 continue
             r = runs.setdefault(rid, {"samples": 0, "first_used_cells": None,
-                                      "last_used_cells": None, "peak_used_cells": None})
+                                      "last_used_cells": None, "peak_used_cells": None,
+                                      "first_active_sequences": None,
+                                      "last_active_sequences": None,
+                                      "peak_active_sequences": None})
             r["samples"] += 1
-            v = s["data"].get("used_cells") if isinstance(s.get("data"), dict) else None
+            data = s.get("data") if isinstance(s.get("data"), dict) else {}
+            v = data.get("used_cells")
             if isinstance(v, (int, float)):
                 if r["first_used_cells"] is None:
                     r["first_used_cells"] = v
                 r["last_used_cells"] = v
                 r["peak_used_cells"] = max(r["peak_used_cells"] or 0, v)
+            a = data.get("active_sequences")
+            if isinstance(a, (int, float)):
+                if r["first_active_sequences"] is None:
+                    r["first_active_sequences"] = a
+                r["last_active_sequences"] = a
+                r["peak_active_sequences"] = max(r["peak_active_sequences"] or 0, a)
         return runs
 
     def _field_vals(self, field: str, run_id: Optional[str] = None) -> List[float]:

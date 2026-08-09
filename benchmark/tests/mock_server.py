@@ -15,6 +15,8 @@ from typing import Tuple
 _COUNTER = {"n": 0}
 # E2.0.5：可变的 KV 状态（completion 后 used_cells 增长，slot erase 后归 0）
 _KV = {"used_cells": 0, "active_sequences": 0, "erase_disabled": False}
+# M0（Critical 2）：可配置 finish_reason（"stop" 默认 / "length" 测试决策截断）
+_FINISH = {"reason": "stop"}
 
 
 def _make_body(n: int) -> dict:
@@ -28,7 +30,7 @@ def _make_body(n: int) -> dict:
         "choices": [{
             "index": 0,
             "message": {"role": "assistant", "content": f"模拟回复 {n}"},
-            "finish_reason": "stop",
+            "finish_reason": _FINISH["reason"],
         }],
         "usage": {
             "prompt_tokens": 100,
@@ -147,11 +149,14 @@ class _Handler(BaseHTTPRequestHandler):
 class MockOpenAIServer:
     """上下文管理器：启动/关闭 mock server，暴露实际端口。"""
 
-    def __init__(self, crash_at: int | None = None) -> None:
+    def __init__(self, crash_at: int | None = None,
+                 finish_reason: str = "stop") -> None:
         self.httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self.crash_at = crash_at
-        self.count = 0
+        self.finish_reason = finish_reason
+        # Critical 8：不设实例 count 属性——崩溃计数唯一挂在 httpd.count
+        # （handler 经 self.server 读取；实例属性从未被更新/使用，删除防误导）
 
     @property
     def port(self) -> int:
@@ -163,6 +168,7 @@ class MockOpenAIServer:
         _KV["used_cells"] = 0
         _KV["active_sequences"] = 0
         _KV["erase_disabled"] = False
+        _FINISH["reason"] = self.finish_reason
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
         # M0 崩溃模拟：crash_at/count 挂到 httpd（handler 经 self.server 读取）
         self.httpd.crash_at = self.crash_at
