@@ -75,6 +75,14 @@ G4_TOLERANCE = 0.05             # ≤5%
 # v48（任务 4）：KVProbe periodic 采样间隔（s）——覆盖分支并发与工具轮，
 # peak_used_cells/peak_active_sequences 来自真实周期样本；测试可用更小值
 PERIODIC_INTERVAL = 0.05
+# v66（任务 1）：transient retry（§3.6/§3.8 v12 设计定稿的正式实现）——
+# 连接错误（APIConnectionError）/请求超时（APITimeoutError）/HTTP status>=500
+# → 最多 3 次逻辑调用（首次 + 重试 2），确定性退避 0.25s/0.5s；4xx、malformed
+# 成功响应（APIResponseValidationError）、内部 bug（AssertionError/KeyError/
+# TypeError/ValueError）不重试；每次异常后立即 poll server——已退出 →
+# ServerCrash（不再重试，ThreadPool branch 的 barrier 不因重试 sleep 死锁）。
+TRANSIENT_MAX_ATTEMPTS = 3
+TRANSIENT_BACKOFF = (0.25, 0.5)
 
 
 class ServerAdapter:
@@ -385,6 +393,77 @@ class M0FanoutRunner:
             pass
         return drv, kv
 
+    # ---- v66：transient retry wrapper（§3.6/§3.8 v12 设计定稿的正式实现） ----
+
+    def _chat(self, messages: List[dict], **kwargs: Any) -> Dict[str, Any]:
+        """单一 chat wrapper：transient 失败最多 3 次逻辑调用（退避 0.25/0.5）。
+
+        - 可重试：APIConnectionError / APITimeoutError / HTTP status>=500
+          （按异常类型 + status_code 精确分类，见 ``_transient_class``）；
+        - 不重试：HTTP 4xx（含 driver 内部 400 context 兜底耗尽后的 400）、
+          malformed 成功响应（APIResponseValidationError）、内部 bug
+          （AssertionError/KeyError/TypeError/ValueError 等）；
+        - **每次异常后立即 poll server**（三路归因 §3.6）：已退出 →
+          ``ServerCrash``（不再重试——ThreadPool branch 的 barrier 不因
+          重试 sleep 死锁）；健康 → 按剩余尝试次数 sleep 退避后重试，
+          耗尽则抛最后一次异常（外层 ``classify_error`` 归因
+          connection_error/timeout/http_5xx）。
+        """
+        assert self._driver is not None
+        for attempt in range(TRANSIENT_MAX_ATTEMPTS):
+            try:
+                return self._driver.chat(messages, **kwargs)
+            except Exception as e:  # noqa: BLE001 —— 分类后决定是否重试
+                if self._adapter is not None and self._adapter.poll() is not None:
+                    # 首次异常进程存活、重试期间退出（三路③）→ 立即 server_crash
+                    raise ServerCrash(
+                        f"transient retry: server 已退出 ({classify_error(e)})") from e
+                if self._transient_class(e) is None:
+                    # 4xx / malformed / 内部 bug → 不外层重试（三路①已排除，直接抛）
+                    raise
+                if attempt < TRANSIENT_MAX_ATTEMPTS - 1:
+                    time.sleep(TRANSIENT_BACKOFF[attempt])
+                    continue
+                # 重试耗尽（第 3 次失败）→ 抛最后一次异常（分类 = 该异常类型）
+                raise
+
+    @staticmethod
+    def _transient_class(e: Exception) -> Optional[str]:
+        """transient 可重试分类；None = 不可重试（4xx/malformed/内部 bug）。
+
+        v66：按异常类型 + status_code 精确分类（替代纯文本启发式）——
+        - APITimeoutError → timeout；APIConnectionError → connection_error
+          （openai 2.x 中 APITimeoutError 是 APIConnectionError 子类，先判 timeout）；
+        - APIStatusError：status>=500 → http_5xx（可重试）；400<=status<500 →
+          http_4xx（不可重试）；
+        - APIResponseValidationError → malformed_response（不可重试）；
+        - 内部 bug（AssertionError/KeyError/TypeError/ValueError）→ None；
+        - 其余（urllib.HTTPError 等旧路径）→ 文本 fallback 分类。
+        """
+        if isinstance(e, (AssertionError, KeyError, TypeError, ValueError)):
+            return None
+        if isinstance(e, openai.APITimeoutError):
+            return "timeout"
+        if isinstance(e, openai.APIConnectionError):
+            return "connection_error"
+        if isinstance(e, openai.APIStatusError):
+            code = getattr(e, "status_code", 0) or 0
+            return "http_5xx" if code >= 500 else None
+        if isinstance(e, openai.APIResponseValidationError):
+            return None  # malformed 成功响应不重试
+        # 其余（urllib.HTTPError 等旧路径）：**仅明确 transient 文本**才重试——
+        # 未知异常（IndexError/RuntimeError 等内部 bug，如 driver.py 空 choices）
+        # 一律不重试（与"内部 bug 不重试"一致：宁可标 ERROR 也不重试内部缺陷）
+        if isinstance(e, urllib.error.HTTPError):
+            code = getattr(e, "code", 0)
+            return "http_5xx" if 500 <= code < 600 else None
+        low = str(e).lower()
+        if "timed out" in low or "timeout" in low:
+            return "timeout"
+        if "refused" in low or "connection reset" in low:
+            return "connection_error"
+        return None
+
     # ---- 校准（§3.5 步骤 1-3：apply-template + tokenize + parity） ----
 
     def _calibrate_template(self, messages: List[Dict[str, str]]) -> Tuple[int, int]:
@@ -396,7 +475,8 @@ class M0FanoutRunner:
         try:
             prompt = self._driver.apply_template(messages)
             n = self._driver.count_tokens(prompt, add_special=False)
-            row = self._driver.chat(messages, temperature=0.0, seed=SEED, max_tokens=1)
+            # v66：parity 校准 chat 走 transient wrapper（§3.6 校准请求同 wrapper）
+            row = self._chat(messages, temperature=0.0, seed=SEED, max_tokens=1)
             chat_prompt = int(row["prompt_tokens"])
             return n, chat_prompt
         except (OSError, openai.OpenAIError) as e:
@@ -527,8 +607,9 @@ class M0FanoutRunner:
         for _ in range(target):
             msgs = fp.decision_messages(fp.build_context("short"), fanout=8)
             try:
-                row = drv.chat(msgs, temperature=TEMPERATURE, seed=SEED,
-                               max_tokens=self.decision_n_predict)
+                # v66：验证请求走 transient wrapper（§3.6 验证请求 retry 三路）
+                row = self._chat(msgs, temperature=TEMPERATURE, seed=SEED,
+                                 max_tokens=self.decision_n_predict)
                 text = row["text"]
                 # Critical 2：只从顶层 finish_reason 判定（mock 可配置 length），
                 # 不依赖非标准 timings 字段
@@ -834,6 +915,12 @@ class M0FanoutRunner:
         # 延迟对比（§5.2 定义但此前未落，完整 4B 矩阵暴露缺口）
         latencies: List[float] = []
         ttfts: List[float] = []
+        # v66（任务 4）：rep 级 GPU/RSS 峰值——decision/branch/tool **成功 row**
+        # 的 rss_mb/gpu_mb 样本（driver row 顶层字段，None 过滤）；ERROR rep
+        # 保留已有成功样本（部分成功也有真实峰值，不再 0.0 占位）。
+        # 线程安全：branch worker（ThreadPool）跨线程 append 依赖 CPython GIL
+        # 列表 append 原子性；读取（_peak_mem）发生在所有 future 完成之后。
+        mem_samples: List[Tuple[Optional[float], Optional[float]]] = []
         # Critical 1：每个 formal rep 独立 begin_run/end_run 边界（KV 快照按
         # run_id 归组）；warmup 不进入 run 作用域。
         rep_run_id = f"{unit_id}#r{rep_index}" if rep_index is not None else None
@@ -849,13 +936,15 @@ class M0FanoutRunner:
         try:
             context = fp.build_context(bucket)
             msgs = fp.decision_messages(context, fanout)
-            # 1) 决策请求
+            # 1) 决策请求（v66：transient wrapper——§3.6 三路归因）
             try:
-                row = self._driver.chat(msgs, temperature=TEMPERATURE, seed=SEED,
-                                        max_tokens=self.decision_n_predict)
+                row = self._chat(msgs, temperature=TEMPERATURE, seed=SEED,
+                                 max_tokens=self.decision_n_predict)
                 latencies.append(row.get("latency_ms") or 0.0)
                 _t = row.get("timings") or {}
                 ttfts.append(_t.get("prompt_ms") or 0.0)
+                # v66（任务 4）：rep 级 GPU/RSS 峰值样本（决策成功 row）
+                mem_samples.append((row.get("rss_mb"), row.get("gpu_mb")))
                 text = row["text"]
                 # Critical 2：只从顶层 finish_reason 判定（choice.finish_reason）
                 fr = row.get("finish_reason") or "stop"
@@ -903,11 +992,13 @@ class M0FanoutRunner:
                     bmsgs = fp.branch_messages(msgs, action, bname,
                                                fp.build_branch_task(bucket, bname), canary)
                     bar.wait()
-                    brow = self._driver.chat(bmsgs, temperature=TEMPERATURE, seed=SEED,
-                                             max_tokens=self.branch_n_predict)
+                    brow = self._chat(bmsgs, temperature=TEMPERATURE, seed=SEED,
+                                      max_tokens=self.branch_n_predict)
                     latencies.append(brow.get("latency_ms") or 0.0)
                     _t2 = brow.get("timings") or {}
                     ttfts.append(_t2.get("prompt_ms") or 0.0)
+                    # v66（任务 4）：分支成功 row 的 GPU/RSS 峰值样本
+                    mem_samples.append((brow.get("rss_mb"), brow.get("gpu_mb")))
                     return {"branch": bname, "row": brow, "canary": canary}
 
                 with ThreadPoolExecutor(max_workers=fanout) as ex:
@@ -927,7 +1018,7 @@ class M0FanoutRunner:
                     for tround in range(1, self.tool_rounds + 1):
                         for b in branches:
                             if b.get("row") is not None and b.get("error") is None:
-                                trow = self._driver.chat(
+                                trow = self._chat(
                                     msgs + [{"role": "assistant", "content": action}] +
                                     [fp.tool_round_message(b["branch"], tround)],
                                     temperature=TEMPERATURE, seed=SEED,
@@ -935,6 +1026,8 @@ class M0FanoutRunner:
                                 latencies.append(trow.get("latency_ms") or 0.0)
                                 _t3 = trow.get("timings") or {}
                                 ttfts.append(_t3.get("prompt_ms") or 0.0)
+                                # v66（任务 4）：工具轮成功 row 的 GPU/RSS 峰值样本
+                                mem_samples.append((trow.get("rss_mb"), trow.get("gpu_mb")))
                 except Exception as e:
                     if self._adapter is not None and self._adapter.poll() is not None:
                         raise ServerCrash(str(e)) from e
@@ -1074,8 +1167,13 @@ class M0FanoutRunner:
                 # （meta.decision_fallback 仅由 rep 级 decision_fallback=true 聚合）
                 # 由 _compute_gates 从 rep 字段重算，此处无需扣减——见 _finalize
             self.any_rep_error = True
+        # v66（任务 4）：rep 级 GPU/RSS 峰值 = 成功 row 样本取 max（None 过滤）；
+        # ERROR rep（decision/tool/分支错误）保留已有成功样本（非 0.0 占位）
+        def _peak_mem(idx: int) -> float:
+            vals = [s[idx] for s in mem_samples if s[idx] is not None]
+            return round(max(vals), 1) if vals else 0.0
         metrics: Dict[str, Any] = {
-            "peak_gpu_mb": 0.0, "peak_rss_mb": 0.0,
+            "peak_gpu_mb": _peak_mem(1), "peak_rss_mb": _peak_mem(0),
             "kv": kv_metrics,
             "branches": [{"branch": b["branch"],
                           # Critical 2：分支行顶层 finish_reason
@@ -1533,10 +1631,28 @@ class ServerCrash(Exception):
 
 
 def classify_error(e: Exception) -> str:
+    # v66：按异常类型 + status_code 精确分类（openai SDK 2.x，优先于文本启发式）；
+    # 文本 fallback 保留（urllib.HTTPError / 旧路径）。
+    if isinstance(e, openai.APITimeoutError):
+        return "timeout"
+    if isinstance(e, openai.APIConnectionError):
+        return "connection_error"
+    if isinstance(e, openai.APIResponseValidationError):
+        return "malformed_response"
+    if isinstance(e, openai.APIStatusError):
+        code = getattr(e, "status_code", 0) or 0
+        if 400 <= code < 500:
+            return "http_4xx"
+        if 500 <= code < 600:
+            return "http_5xx"
+        # 其他 status（3xx/构造不全）→ 落入下方文本 fallback
     text = str(e)
     if isinstance(e, urllib.error.HTTPError):
         code = getattr(e, "code", 0)
-        return "http_4xx" if 400 <= code < 500 else "http_5xx"
+        if 400 <= code < 500:
+            return "http_4xx"
+        if 500 <= code < 600:
+            return "http_5xx"
     low = text.lower()
     # openai SDK 状态异常（如 InternalServerError "Error code: 500"）
     m = __import__("re").search(r"error code[: ](\d+)", low)

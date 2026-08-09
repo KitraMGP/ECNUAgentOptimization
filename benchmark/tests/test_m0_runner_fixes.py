@@ -1133,7 +1133,10 @@ class TestWarmupEraseV49:
             monkeypatch.setattr(KVProbe, "clean_all_slots", _clean)
             uid = sch.unit_id_of("off", "q8_0", "q8_0", 2, "short")
             gid = sch.group_id_of("off", "q8_0", "q8_0", 2)
-            mserver._ERROR_ONCE["on"] = True  # 首个 POST（warmup 决策）500
+            # v66：transient wrapper 会重试 500——一次性注入（_ERROR_ONCE）会被
+            # 第 2 次尝试成功吸收、不再走异常路径；改用连续 3 次 500（retry 耗尽）
+            # 触发 warmup 决策异常（server 健康 → 记 note / 上层 poll 忽略）
+            mserver.set_fail(3)
             try:
                 try:
                     out = r._run_unit(uid, 2, "short", "q8_0", "q8_0", gid, None)
@@ -1141,7 +1144,7 @@ class TestWarmupEraseV49:
                     out = None  # v48：warmup 请求异常向上抛、由 run_formal 的
                                 # warmup except 处理（poll 健康 → 忽略；本测试模拟）
             finally:
-                mserver._ERROR_ONCE["on"] = False
+                mserver.set_fail(0)
             assert out is None  # warmup 异常路径（best-effort erase 仍执行）
             assert calls["n"] >= 1  # best-effort erase 真实执行
             assert mserver._KV["used_cells"] == 0  # 残留归零

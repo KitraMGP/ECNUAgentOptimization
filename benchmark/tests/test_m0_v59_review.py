@@ -100,7 +100,11 @@ def _cal_args(tmp_path, **over):
 
 
 class _FakeDrv:
-    """fake driver：chat 返回合法决策行；可配置第 n 次调用抛 openai 异常。"""
+    """fake driver：chat 返回合法决策行；可配置第 n 次调用起连续抛 openai 异常。
+
+    v66：transient wrapper 会重试 connection error——fail_at 起连续抛
+    TRANSIENT_MAX_ATTEMPTS=3 次（retry 耗尽）才让异常到达调用方
+    （dv 请求级逐条捕获语义保持：error_count=1 对应一次逻辑请求）。"""
 
     def __init__(self, fail_at: int | None = None):
         self.n = 0
@@ -108,7 +112,8 @@ class _FakeDrv:
 
     def chat(self, messages, **kw):
         self.n += 1
-        if self.fail_at is not None and self.n == self.fail_at:
+        if self.fail_at is not None \
+                and self.fail_at <= self.n < self.fail_at + m0r.TRANSIENT_MAX_ATTEMPTS:
             raise openai.APIConnectionError(request=None)
         return {"text": "ACTION: branch(b1)", "finish_reason": "stop"}
 

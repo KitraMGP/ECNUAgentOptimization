@@ -170,24 +170,27 @@ class TestCalibrationCleanupCrashPreflight:
 
 
 class _ToolFailDriver:
-    """决策/分支请求正常；工具轮首个请求抛真实 openai SDK 状态异常
+    """决策/分支请求正常；工具轮请求抛真实 openai SDK 状态异常
     （InternalServerError "Error code: 500"）——server 进程健康（mock 不退出）。
 
     v53（Medium 2）：改用真实 openai.APIStatusError/InternalServerError 路径
     （替代旧 urllib.HTTPError mock）。时序：工具轮位置由单元协议决定
-    （决策 1 + 分支 fanout 次 → 工具轮首个），armed flag 控制触发一次后
-    disarm（不重复抛、不依赖脆弱计数）。
+    （决策 1 + 分支 fanout 次 → 工具轮首个）。
+    v66：transient wrapper 会重试 500——工具轮首条起**连续 3 次** 500
+    （armed=3 计数）使 retry 耗尽才落 rep ERROR；反例（server 已退出）由
+    wrapper 首次异常 poll 立即 ServerCrash（不重试，仍 1 次即触发）。
     """
 
     def __init__(self, inner):
         self.inner = inner
-        self.armed = True
+        self.armed = 3
         self.n = 0
 
     def chat(self, msgs, **kw):
         self.n += 1
-        if self.armed and self.n == 1 + 2 + 1:  # 工具轮首个请求（协议位置）
-            self.armed = False  # 触发后 disarm
+        if self.armed > 0 and 1 + 2 + 1 <= self.n <= 1 + 2 + 3:
+            # 工具轮首条起连续 3 次 500（wrapper retry 耗尽）
+            self.armed -= 1
             req = httpx.Request("POST", "http://tool")
             resp = httpx.Response(500, request=req)
             raise openai.InternalServerError(

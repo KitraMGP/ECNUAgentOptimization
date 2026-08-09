@@ -290,13 +290,18 @@ class TestCalibrationCatchAll:
 
     @staticmethod
     def _patch_chat_first(monkeypatch, exc_factory):
-        """patch Driver.chat：第一次调用（= 校准 short-P 桶）抛指定异常，其余原逻辑。"""
+        """patch Driver.chat：前 3 次调用（= 校准 short-P/B 等桶）抛指定异常，
+        其余原逻辑。
+
+        v66：transient wrapper 会重试 500/connection error——须连续抛
+        TRANSIENT_MAX_ATTEMPTS=3 次（retry 耗尽）异常才到达校准调用方；
+        内部 bug（AssertionError 等）不重试，第 1 次即传播（同样满足）。"""
         original = Driver.chat
         calls = {"n": 0}
 
         def chat(self, messages, **kwargs):
             calls["n"] += 1
-            if calls["n"] == 1:
+            if calls["n"] <= m0r.TRANSIENT_MAX_ATTEMPTS:
                 raise exc_factory()
             return original(self, messages, **kwargs)
 
@@ -364,15 +369,18 @@ class TestWarmupDecisionError:
         """patch Driver.chat：decision validation 完成（armed）后的第一次调用
         = 首个 unit 的第一个 warmup 决策请求，抛指定异常；其余原逻辑。
         v52 review 修复：改用 patch_after_validation armed flag（替代脆弱
-        的计数 27——不依赖校准 3 桶×2 + 验证 2×10 的 chat 次数）。"""
+        的计数 27——不依赖校准 3 桶×2 + 验证 2×10 的 chat 次数）。
+        v66：transient wrapper 会重试 500/connection error——armed 后连续抛
+        TRANSIENT_MAX_ATTEMPTS=3 次（retry 耗尽）才让异常到达 warmup 分支；
+        内部 bug（AssertionError 等）不重试，第 1 次即传播（同样满足）。"""
         original = Driver.chat
         armed = {"on": False}
-        fired = {"y": False}
+        fired = {"y": 0}
         patch_after_validation(monkeypatch, lambda: armed.__setitem__("on", True))
 
         def chat(self, messages, **kwargs):
-            if armed["on"] and not fired["y"]:
-                fired["y"] = True
+            if armed["on"] and fired["y"] < m0r.TRANSIENT_MAX_ATTEMPTS:
+                fired["y"] += 1
                 raise exc_factory()
             return original(self, messages, **kwargs)
 
@@ -516,14 +524,16 @@ class TestWarmupToolRoundError:
 
         v53（Medium 2）：真实 openai 异常路径替代旧 urllib.HTTPError mock；
         armed flag 触发一次后关闭（不依赖"前 N 次"计数时序）。
+        v66：transient wrapper 会重试 500——armed 计数 3（连续抛
+        TRANSIENT_MAX_ATTEMPTS 次，retry 耗尽）才让异常到达 warmup 工具轮。
         """
         original = Driver.chat
-        state = {"armed": True}
+        state = {"armed": m0r.TRANSIENT_MAX_ATTEMPTS}
 
         def chat(self, messages, **kwargs):
             text = "\n".join(str(m.get("content", "")) for m in messages)
-            if "m0_fanout_probe" in text and state["armed"]:
-                state["armed"] = False  # 触发后 disarm
+            if "m0_fanout_probe" in text and state["armed"] > 0:
+                state["armed"] -= 1  # 连续抛 3 次后关闭（wrapper retry 耗尽）
                 req = httpx.Request("POST", "http://tool")
                 resp = httpx.Response(500, request=req)
                 raise openai.InternalServerError(
@@ -585,12 +595,14 @@ class TestWarmupInternalBug:
     def _patch_chat_warmup_decision(monkeypatch, exc_factory):
         original = Driver.chat
         armed = {"on": False}
-        fired = {"y": False}
+        fired = {"y": 0}
         patch_after_validation(monkeypatch, lambda: armed.__setitem__("on", True))
 
         def chat(self, messages, **kwargs):
-            if armed["on"] and not fired["y"]:
-                fired["y"] = True
+            # v66：transient wrapper 会重试 500——armed 后连续抛 3 次（retry 耗尽）
+            # 才让异常到达 warmup 分支；内部 bug（AssertionError）不重试、第 1 次即传播
+            if armed["on"] and fired["y"] < m0r.TRANSIENT_MAX_ATTEMPTS:
+                fired["y"] += 1
                 raise exc_factory()
             return original(self, messages, **kwargs)
 

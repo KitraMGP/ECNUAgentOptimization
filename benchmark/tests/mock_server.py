@@ -22,6 +22,17 @@ _FINISH = {"reason": "stop"}
 # M0 v49（任务 4）：一次性请求失败开关（500 一次后复位）——模拟"请求级异常但
 # server 进程健康"（warmup 决策异常路径测试；非进程崩溃）
 _ERROR_ONCE = {"on": False}
+# M0 v66（transient retry）：连续 N 次 **chat** 请求失败注入（status 可配置，
+# 默认 500）后自动复位——wrapper 重试测试（首失败后成功 / 连续 3 次失败 /
+# HTTP 400 等）；只作用于 chat.completions 路径（/apply-template、/tokenize、
+# /metrics/kv、/slots、/props、/health 不受影响）。helper：mserver.set_fail(n, status)
+_FAIL = {"remaining": 0, "status": 500}
+
+
+def set_fail(n: int, status: int = 500) -> None:
+    """连续 n 次 chat 请求返回 status（n=0 关闭注入；transient retry 测试用）。"""
+    _FAIL["remaining"] = max(0, n)
+    _FAIL["status"] = status
 
 
 def _make_body(n: int) -> dict:
@@ -165,6 +176,15 @@ class _Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
+        # v66（transient retry）：chat.completions 路径——连续 N 次失败注入
+        # （只作用于 chat；/apply-template、/tokenize、/metrics/kv、/slots、
+        # /props、/health 均不受影响——校准 parity 的 apply-template/tokenize
+        # 前置请求不会被误注入）
+        if _FAIL["remaining"] > 0:
+            _FAIL["remaining"] -= 1
+            self.send_response(_FAIL["status"])
+            self.end_headers()
+            return
         _COUNTER["n"] += 1
         data = json.dumps(_make_body(_COUNTER["n"])).encode("utf-8")
         self.send_response(200)
@@ -200,6 +220,9 @@ class MockOpenAIServer:
         _KV["active_sequences"] = 0
         _KV["erase_disabled"] = False
         _FINISH["reason"] = self.finish_reason
+        # v66：transient retry 失败注入复位（避免跨测试累积）
+        _FAIL["remaining"] = 0
+        _FAIL["status"] = 500
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
         # M0 崩溃模拟：crash_at/count 挂到 httpd（handler 经 self.server 读取）
         self.httpd.crash_at = self.crash_at
