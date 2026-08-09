@@ -107,7 +107,13 @@ class ServerAdapter:
         return False
 
     def stop(self) -> Tuple[bool, str]:
-        """固定清理序列（v26/v28）：poll → 存活 terminate → wait 2s → kill → reap。"""
+        """固定清理序列（v62 语义）：poll → 存活 terminate → wait 2s → kill → wait 5s。
+
+        v62：SIGTERM 超时后 SIGKILL+wait **成功** = 进程已清理 →
+        返回 `(True, "SIGTERM timeout, killed")`（clean kill 兜底），
+        **不得 FormalIncomplete**；只有 kill/wait 后仍存活（wait 再次
+        TimeoutExpired）、stop 抛异常或无法确认退出才返回 False。
+        """
         proc = self.proc
         if proc is None:
             return True, "no process"
@@ -118,15 +124,30 @@ class ServerAdapter:
                 proc.send_signal(signal.SIGTERM)
                 try:
                     proc.wait(timeout=2.0)
+                    detail = "clean stop"
                 except subprocess.TimeoutExpired:
                     proc.kill()
-                    proc.wait(timeout=5.0)
-                    clean = False
-                    detail = "SIGTERM timeout, killed"
+                    try:
+                        proc.wait(timeout=5.0)
+                    except subprocess.TimeoutExpired:
+                        clean = False
+                        detail = "SIGKILL timeout, still alive"
+                    else:
+                        # v62：kill 兜底成功 = 进程已清理 → clean=True，
+                        # detail 供 _stop_server 记 notes/warning
+                        detail = "SIGTERM timeout, killed"
             else:
                 proc.wait(timeout=5.0)  # 已退出：直接 reap，不 send_signal
+                detail = "already exited"
+        except subprocess.TimeoutExpired:
+            # 已退出路径的 wait(5.0) 超时：无法确认退出
+            clean = False
+            detail = "wait timeout, cannot confirm exit"
         except ProcessLookupError:
-            pass  # 进程已消失：静默
+            detail = "process disappeared"  # 进程已消失：clean（无残留）
+        except Exception as e:  # stop 抛异常（如 kill 失败）→ False
+            clean = False
+            detail = f"{type(e).__name__}: {e}"
         self.proc = None
         return clean, detail
 
@@ -310,23 +331,34 @@ class M0FanoutRunner:
                 result = self._adapter.stop()
             except Exception as e:  # noqa: BLE001
                 clean = False
-                self._stop_errors.append(f"{type(e).__name__}: {e}")
+                msg = f"{type(e).__name__}: {e}"
+                self._stop_errors.append(msg)
+                self.notes.append(f"stop 异常: {msg}")  # v62：notes 具体文本
             else:
                 if isinstance(result, tuple) and len(result) >= 2:
                     ok, detail = result[0], result[1]
                     if not ok:
                         clean = False
-                        self._stop_errors.append(f"stop ok=False: {detail}")
+                        msg = f"stop ok=False: {detail}"
+                        self._stop_errors.append(msg)
+                        self.notes.append(msg)  # v62：非 clean 原因写 notes
+                    elif detail:
+                        # v62：clean 但带 detail（如 SIGTERM timeout, killed 兜底）
+                        # → 记 notes/warning，不阻断后续 group
+                        self.notes.append(f"stop clean 但带 warning: {detail}")
                 elif isinstance(result, bool):
                     # v61（任务 5）：bool False 也记录（进程可能残留）
                     if not result:
                         clean = False
-                        self._stop_errors.append("stop 返回 False（进程可能残留）")
+                        msg = "stop 返回 False（进程可能残留）"
+                        self._stop_errors.append(msg)
+                        self.notes.append(msg)  # v62
                 else:
                     # v61（任务 5）：非 tuple/非 bool 返回 → 按诊断失败处理
                     clean = False
-                    self._stop_errors.append(
-                        f"stop 返回异常类型 {type(result).__name__}（期望 tuple/bool）")
+                    msg = f"stop 返回异常类型 {type(result).__name__}（期望 tuple/bool）"
+                    self._stop_errors.append(msg)
+                    self.notes.append(msg)  # v62
             self._adapter = None
         self._driver = None
         self._kv = None
