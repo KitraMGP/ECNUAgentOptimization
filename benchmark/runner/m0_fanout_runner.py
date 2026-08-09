@@ -28,6 +28,8 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional, Tuple
 
+import openai  # v52：校准路径显式捕获 openai.OpenAIError（与 framework/driver 同依赖风格）
+
 from framework import sampler
 from framework.driver import Driver
 from framework.kv_probe import KVProbe
@@ -35,11 +37,12 @@ from runner import fanout_prompts as fp
 from runner import m0_schema as sch
 from runner.e15_branch_concurrent import _http_get_json, http_request
 
-# v51（任务 3）：校准阶段允许归入 PREFLIGHT_INFRA 的明确网络/OS 基础设施异常；
-# 其余（AssertionError/KeyError/TypeError 等内部 bug）不捕获 → run_safe
-# 归 INTERNAL_RUNNER_ERROR + EXIT_SOFTWARE(70)。
-_INFRA_EXCEPTIONS = (urllib.error.HTTPError, urllib.error.URLError,
-                     OSError, TimeoutError, ConnectionError)
+# v52（任务 1）：校准阶段允许归入 PREFLIGHT_INFRA 的明确基础设施异常——
+# ① OSError 族（网络/IO；HTTPError/URLError/TimeoutError/ConnectionError 均为其子类，
+#   不再冗余列出）② openai SDK 异常（OpenAIError 覆盖 APIStatusError/APIConnectionError/
+#   APITimeoutError）。其余（AssertionError/KeyError/TypeError 等内部 bug）不捕获 →
+# run_safe 归 INTERNAL_RUNNER_ERROR + EXIT_SOFTWARE(70)。
+_INFRA_EXCEPTIONS = (OSError, openai.OpenAIError)
 
 SEED = 42
 TEMPERATURE = 0.0
@@ -273,8 +276,11 @@ class M0FanoutRunner:
             row = self._driver.chat(messages, temperature=0.0, seed=SEED, max_tokens=1)
             chat_prompt = int(row["prompt_tokens"])
             return n, chat_prompt
-        except OSError as e:
-            raise ServerError(f"校准端点失败: {e}")
+        except (OSError, openai.OpenAIError) as e:
+            # v52（任务 1）：显式捕获 openai SDK 异常（APIStatusError/APIConnectionError/
+            # APITimeoutError 均属 OpenAIError）+ OSError 族 → 基础设施归因 PREFLIGHT_INFRA；
+            # 内部 bug（AssertionError/KeyError 等）不捕获 → run_safe 70。
+            raise ServerError(f"校准端点失败: {type(e).__name__}: {e}")
 
     def run_calibration(self) -> bool:
         """6 桶校准（short-P/B … long-P/B）+ 预算精确复核；返回 parity_ok。
@@ -309,13 +315,29 @@ class M0FanoutRunner:
             # 预算精确复核（24 候选，同一校准 server）
             self.run_budget_check()
             # erase 全部 slot 回基线（校准后清理协议；v49：best-effort——
-            # 异常后 poll：崩溃 → ServerCrash（校准 server 已退出，不吞），健康 → 继续）
+            # 异常后 poll：崩溃 → ServerCrash（校准 server 已退出，不吞），健康 → 继续；
+            # v52（任务 5）：返回 (0,0) 时同样 poll——死 → ServerCrash（上层转
+            # PREFLIGHT_INFRA），健康 → 记可诊断 note）
             if self._kv is not None:
                 try:
-                    self._kv.clean_all_slots()
-                except Exception:
-                    if self._adapter is not None and self._adapter.poll() is not None:
+                    cleared = self._kv.clean_all_slots()
+                    if cleared == (0, 0):
+                        if (self._adapter is not None
+                                and self._adapter.poll() is not None):
+                            raise ServerCrash("校准后清理: server 已退出") from None
+                        self._add_note(
+                            "校准后 clean_all_slots 返回 (0,0)"
+                            "（无 slot 或端点不可用；server 健康，继续）")
+                except ServerCrash:
+                    raise
+                except Exception as e:
+                    if (self._adapter is not None
+                            and self._adapter.poll() is not None):
                         raise ServerCrash("校准后清理: server 已退出") from None
+                    # 防御分支（kv_probe 行为改变才可达）：健康 → 记可诊断 note
+                    self._add_note(
+                        f"校准后 clean_all_slots 异常（server 健康，继续）: "
+                        f"{type(e).__name__}: {e}")
             mismatched = any(e["code"] == "parity_mismatch"
                              for e in self.parity_progress["errors"])
             return not mismatched
@@ -638,6 +660,15 @@ class M0FanoutRunner:
                 # 记入 decision_error，仍走统一 erase + after_erase 路径；
                 # server 已退出 → ServerCrash → 上层 FORMAL_INCOMPLETE（不伪造观测）。
                 if rep_index is None:
+                    # v52（任务 3）：warmup 决策请求异常——先 poll 判定：已退出 →
+                    # ServerCrash（group ERROR/FORMAL_INCOMPLETE，与工具轮一致）；
+                    # 健康 → 记可诊断 note 后上抛（上层 poll 判定后继续，不静默）
+                    if (self._adapter is not None
+                            and self._adapter.poll() is not None):
+                        raise ServerCrash(str(e)) from e
+                    self._add_note(
+                        f"warmup 决策请求异常（server 健康，继续）: "
+                        f"{type(e).__name__}: {e}")
                     raise
                 if self._adapter is not None and self._adapter.poll() is not None:
                     raise ServerCrash(str(e)) from e

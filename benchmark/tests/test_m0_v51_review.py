@@ -1,13 +1,13 @@
-"""M0 v51 复审阻断修复测试——完整 run e2e 错误码与校准异常归因。
+"""M0 v51/v52 复审修复测试——完整 run e2e 错误码与校准异常归因。
 
-覆盖（v51 任务 1-5）：
+覆盖（v51 任务 1-5 / v52 任务 1-5）：
 - 任务 1：ERROR_CODES 收录 erase_failed/after_erase_missing；**完整 run() e2e**：
   真实端点失败触发 after_erase_missing（/metrics/kv 500）与 erase_failed
   （clean_all_slots 异常防御分支）→ rc=0、phase=formal、FORMAL_INCOMPLETE、
   matrix_complete=false、ERROR group/rep error_type 正确、最终 envelope
   validator 通过（**禁止只测 _run_unit**）
 - 任务 2：warmup clean_all_slots 返回 (0,0) → 主动 poll：dead → ServerCrash/
-  group ERROR；healthy → note + 继续；真实端点不可达（/slots 畸形）healthy
+  group ERROR；healthy → note + 继续；真实端点不可达（/slots 空列表）healthy
   正例 + poll dead 反例
 - 任务 3：校准 catch-all 只捕获明确基础设施异常；AssertionError/内部 bug →
   run_safe 归 INTERNAL_RUNNER_ERROR + exit 70
@@ -15,12 +15,21 @@
   记 note 不静默
 - 任务 5：preflight envelope builder 支持 notes 参数并保留 runner 已有 notes
   （validator 仍 22 键 canonical meta 不变）
+- v52 任务 1-2：**真实 openai SDK 异常（InternalServerError/APIConnectionError）
+  从 Driver.chat 校准路径抛出 → PREFLIGHT_INFRA 合法落盘（rc=0、validator 通过）；
+  禁止 patch run_calibration 抛 HTTPError 替代；AssertionError → run_safe 70**
+- v52 任务 3：warmup 决策请求异常 healthy → note 落盘；dead → ServerCrash
+- v52 任务 4：mock_server slots_malformed 修正为真实 (0,0) 路径（/slots 空列表）；
+  erase_failed 保留为框架防御码（monkeypatch e2e），不宣称真实端点路径
+- v52 任务 5：校准后 clean_all_slots 异常 / (0,0) + server 健康 → note；
+  死 server → ServerCrash → PREFLIGHT_INFRA
 """
 from __future__ import annotations
 
 import json
-import urllib.error
 
+import httpx
+import openai
 import pytest
 
 from framework.driver import Driver
@@ -275,31 +284,29 @@ class TestWarmupZeroZero:
 
 
 class TestCalibrationCatchAll:
-    def test_internal_bug_goes_to_exit70(self, tmp_path, monkeypatch, capsys):
-        """校准阶段内部 bug（AssertionError）→ 不被吞 → run_safe 归
-        INTERNAL_RUNNER_ERROR + EXIT_SOFTWARE(70)。"""
+    """v52（任务 2）：真实 openai SDK 异常从 Driver.chat 校准路径抛出（禁止 patch
+    run_calibration 抛 HTTPError 替代）；内部 bug（AssertionError）→ run_safe 70。"""
 
-        def bug(self):
-            raise AssertionError("internal invariant broken")
+    @staticmethod
+    def _patch_chat_first(monkeypatch, exc_factory):
+        """patch Driver.chat：第一次调用（= 校准 short-P 桶）抛指定异常，其余原逻辑。"""
+        original = Driver.chat
+        calls = {"n": 0}
 
-        monkeypatch.setattr(m0r.M0FanoutRunner, "run_calibration", bug)
-        r = make_runner(tmp_path)
-        rc = r.run_safe()
-        assert rc == sch.EXIT_SOFTWARE
-        assert "INTERNAL_RUNNER_ERROR" in capsys.readouterr().err
-        assert not (tmp_path / "out.json").exists(), "内部 bug 不落盘结果"
+        def chat(self, messages, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise exc_factory()
+            return original(self, messages, **kwargs)
 
-    def test_infra_exception_preflight_infra(self, tmp_path, monkeypatch):
-        """校准阶段明确基础设施异常（HTTP 500）→ PREFLIGHT_INFRA 合法落盘
-        （rc=0、preflight、validator 通过）。"""
+        monkeypatch.setattr(Driver, "chat", chat)
+        return calls
 
-        def infra(self):
-            raise urllib.error.HTTPError(
-                "http://calib", 500, "Internal Server Error", {}, None)
+    @staticmethod
+    def _openai_req():
+        return httpx.Request("POST", "http://calib")
 
-        monkeypatch.setattr(m0r.M0FanoutRunner, "run_calibration", infra)
-        r = make_runner(tmp_path)
-        rc = r.run()
+    def _assert_preflight_infra(self, tmp_path, rc):
         assert rc == 0, rc
         doc = load_doc(tmp_path)
         ok, errs = sch.validate_result_envelope(doc)
@@ -308,6 +315,168 @@ class TestCalibrationCatchAll:
         assert meta["phase"] == "preflight"
         assert meta["preflight_reason"] == "validation_incomplete"
         assert meta["parity_ok"] is None
+        assert doc["verdict"] == "INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE"
+
+    def test_openai_internal_error_preflight_infra(self, tmp_path, monkeypatch):
+        """校准 Driver.chat 抛真实 openai.InternalServerError（500）→ PREFLIGHT_INFRA
+        合法落盘（rc=0、preflight、validator 通过）。"""
+        req = self._openai_req()
+
+        def factory():
+            return openai.InternalServerError(
+                "Internal Server Error",
+                response=httpx.Response(500, request=req),
+                body=None,
+            )
+
+        self._patch_chat_first(monkeypatch, factory)
+        r = make_runner(tmp_path)
+        self._assert_preflight_infra(tmp_path, r.run())
+
+    def test_openai_connection_error_preflight_infra(self, tmp_path, monkeypatch):
+        """校准 Driver.chat 抛真实 openai.APIConnectionError（连接失败）→ 同上。"""
+        req = self._openai_req()
+        self._patch_chat_first(monkeypatch, lambda: openai.APIConnectionError(request=req))
+        r = make_runner(tmp_path)
+        self._assert_preflight_infra(tmp_path, r.run())
+
+    def test_internal_bug_goes_to_exit70(self, tmp_path, monkeypatch, capsys):
+        """校准 Driver.chat 抛内部 bug（AssertionError）→ 不被吞 → run_safe 归
+        INTERNAL_RUNNER_ERROR + EXIT_SOFTWARE(70)。"""
+        self._patch_chat_first(monkeypatch, lambda: AssertionError("internal invariant broken"))
+        r = make_runner(tmp_path)
+        rc = r.run_safe()
+        assert rc == sch.EXIT_SOFTWARE
+        assert "INTERNAL_RUNNER_ERROR" in capsys.readouterr().err
+        assert not (tmp_path / "out.json").exists(), "内部 bug 不落盘结果"
+
+
+# ---- 任务 3：warmup 决策请求异常（与工具轮一致） ----
+
+
+class TestWarmupDecisionError:
+    """v52（任务 3）：warmup 决策请求异常——server 健康 → 记可诊断 note 不静默；
+    server 已退出 → ServerCrash（group ERROR/FORMAL_INCOMPLETE）。"""
+
+    @staticmethod
+    def _patch_chat_warmup_decision(monkeypatch, exc_factory):
+        """patch Driver.chat：decision validation 完成（armed）后的第一次调用
+        = 首个 unit 的第一个 warmup 决策请求，抛指定异常；其余原逻辑。
+        v52 review 修复：改用 patch_after_validation armed flag（替代脆弱
+        的计数 27——不依赖校准 3 桶×2 + 验证 2×10 的 chat 次数）。"""
+        original = Driver.chat
+        armed = {"on": False}
+        fired = {"y": False}
+        patch_after_validation(monkeypatch, lambda: armed.__setitem__("on", True))
+
+        def chat(self, messages, **kwargs):
+            if armed["on"] and not fired["y"]:
+                fired["y"] = True
+                raise exc_factory()
+            return original(self, messages, **kwargs)
+
+        monkeypatch.setattr(Driver, "chat", chat)
+        return armed
+
+    @staticmethod
+    def _conn_error():
+        return openai.APIConnectionError(request=httpx.Request("POST", "http://warmup"))
+
+    def test_healthy_records_note_and_continues(self, tmp_path, monkeypatch):
+        """warmup 决策请求异常（server 健康）→ 记可诊断 note；矩阵完整完成。"""
+        self._patch_chat_warmup_decision(monkeypatch, self._conn_error)
+        r = make_runner(tmp_path)
+        rc = r.run()
+        assert rc == 0, rc
+        doc = load_doc(tmp_path)
+        ok, errs = sch.validate_result_envelope(doc)
+        assert ok, errs
+        assert doc["meta"]["matrix_complete"] is True
+        assert any("warmup 决策请求异常" in n for n in doc["notes"]), doc["notes"]
+
+    def test_dead_raises_server_crash(self, tmp_path, monkeypatch):
+        """warmup 决策请求异常 + server 已退出 → ServerCrash → group ERROR +
+        FORMAL_INCOMPLETE（与工具轮一致）。"""
+        self._patch_chat_warmup_decision(monkeypatch, self._conn_error)
+        patch_after_validation(monkeypatch,
+                               lambda: monkeypatch.setattr(FakeAdapter, "poll_dead", True))
+        r = make_runner(tmp_path)
+        rc = r.run()
+        assert rc == 0, rc
+        doc = load_doc(tmp_path)
+        ok, errs = sch.validate_result_envelope(doc)
+        assert ok, errs
+        meta = doc["meta"]
+        assert meta["phase"] == "formal"
+        assert doc["verdict"] == "INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE"
+        assert meta["matrix_complete"] is False
+        g = find_error_group(doc)
+        assert g is not None
+        assert g["error_type"] == "server_crash"
+
+
+# ---- 任务 5：校准后 clean_all_slots 异常 / (0,0) ----
+
+
+class TestCalibrationCleanZeroZero:
+    """v52（任务 5）：校准后 clean_all_slots 返回 (0,0) 且 server 健康 → 记可诊断
+    note（区别于 warmup 的 (0,0) note）；死 server → ServerCrash → PREFLIGHT_INFRA。"""
+
+    def test_healthy_records_note_and_continues(self, tmp_path, monkeypatch):
+        """校准后 clean_all_slots 返回 (0,0) + server 健康 → note；矩阵完整完成。"""
+        monkeypatch.setattr(KVProbe, "clean_all_slots", lambda self: (0, 0))
+        r = make_runner(tmp_path)
+        rc = r.run()
+        assert rc == 0, rc
+        doc = load_doc(tmp_path)
+        ok, errs = sch.validate_result_envelope(doc)
+        assert ok, errs
+        assert doc["meta"]["matrix_complete"] is True
+        assert any("校准后 clean_all_slots 返回 (0,0)" in n for n in doc["notes"]), doc["notes"]
+
+    def test_clean_exception_healthy_records_note(self, tmp_path, monkeypatch):
+        """校准后 clean_all_slots 抛异常 + server 健康 → 记可诊断 note（防御分支）；
+        仅第一次调用（= 校准后清理）抛，后续（warmup/formal erase）正常返回
+        真实 slot 数 (2,2)，避免污染 formal rep 的严格 erase 检查。"""
+        calls = {"n": 0}
+
+        def boom(self):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("calib clean_all_slots failed")
+            return (2, 2)
+
+        monkeypatch.setattr(KVProbe, "clean_all_slots", boom)
+        r = make_runner(tmp_path)
+        rc = r.run()
+        assert rc == 0, rc
+        doc = load_doc(tmp_path)
+        ok, errs = sch.validate_result_envelope(doc)
+        assert ok, errs
+        assert doc["meta"]["matrix_complete"] is True
+        assert any("校准后 clean_all_slots 异常" in n for n in doc["notes"]), doc["notes"]
+
+    def test_zero_zero_dead_preflight_infra(self, tmp_path, monkeypatch):
+        """校准后 clean_all_slots 返回 (0,0) + server 已退出 → ServerCrash →
+        上层转 PREFLIGHT_INFRA 合法落盘（rc=0、preflight、validator 通过）。
+        注（v52 review）：poll_dead 从校准 server 启动即生效，但 FakeAdapter.
+        wait_health 不受其影响（直接 True）→ 校准正常启动，仅在清理段 poll
+        判死，精确模拟"校准后清理时 server 已退出"。"""
+        monkeypatch.setattr(KVProbe, "clean_all_slots", lambda self: (0, 0))
+        # 校准 server 在校准后清理时已死（首次启动即崩溃标记）
+        FakeAdapter.poll_dead = True
+        try:
+            r = make_runner(tmp_path)
+            rc = r.run()
+        finally:
+            FakeAdapter.poll_dead = None
+        assert rc == 0, rc
+        doc = load_doc(tmp_path)
+        ok, errs = sch.validate_result_envelope(doc)
+        assert ok, errs
+        meta = doc["meta"]
+        assert meta["phase"] == "preflight"
+        assert meta["preflight_reason"] == "validation_incomplete"
         assert doc["verdict"] == "INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE"
 
 
@@ -386,11 +555,19 @@ class TestPreflightNotes:
 
     def test_runner_notes_preserved_in_preflight(self, tmp_path, monkeypatch):
         """runner 已有 notes（_add_note）在 preflight 落盘时保留。"""
-        def infra(self):
-            raise urllib.error.HTTPError(
-                "http://calib", 500, "Internal Server Error", {}, None)
+        # v52（任务 2）：真实 openai SDK 异常从 Driver.chat 校准路径（patch
+        # run_calibration 抛 HTTPError 的旧方式已删除）
+        original = Driver.chat
+        calls = {"n": 0}
 
-        monkeypatch.setattr(m0r.M0FanoutRunner, "run_calibration", infra)
+        def chat(self, messages, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise openai.APIConnectionError(
+                    request=httpx.Request("POST", "http://calib"))
+            return original(self, messages, **kwargs)
+
+        monkeypatch.setattr(Driver, "chat", chat)
         r = make_runner(tmp_path)
         r._add_note("runner-keep-me")
         rc = r.run()
