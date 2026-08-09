@@ -211,6 +211,27 @@ class TestStopKillSemantics:
         assert clean is True
         assert r.notes == []
 
+    def test_stop_normal_detail_not_recorded_as_warning(self, tmp_path):
+        """v64：clean 但正常 detail（clean stop/already exited/no process/process
+        disappeared）不记 notes/warning（v62 曾把 'clean stop' 误记——完整 4B
+        矩阵 run1/run2 的 notes 污染根因）。"""
+        for detail in ("clean stop", "already exited", "no process",
+                       "process disappeared"):
+            r = _make_runner(tmp_path, adapter_cls=ConfigurableStopAdapter)
+            r._adapter = ConfigurableStopAdapter("x", "y", 1,
+                                                 stop_result=(True, detail))
+            clean = r._stop_server()
+            assert clean is True
+            assert r.notes == [], f"detail={detail} 不应记 notes"
+        # 非正常 detail（kill 兜底）仍记 warning
+        r = _make_runner(tmp_path, adapter_cls=ConfigurableStopAdapter)
+        r._adapter = ConfigurableStopAdapter(
+            "x", "y", 1, stop_result=(True, "SIGTERM timeout, killed"))
+        clean = r._stop_server()
+        assert clean is True
+        assert any("stop clean 但带 warning: SIGTERM timeout, killed" in n
+                   for n in r.notes)
+
 
 class TestMainTmpParentBasename:
     """任务 4：纯文件名 --out out.json 默认 tmp 父目录 = cwd（避免 /tmp）。"""

@@ -342,9 +342,12 @@ class M0FanoutRunner:
                         msg = f"stop ok=False: {detail}"
                         self._stop_errors.append(msg)
                         self.notes.append(msg)  # v62：非 clean 原因写 notes
-                    elif detail:
-                        # v62：clean 但带 detail（如 SIGTERM timeout, killed 兜底）
-                        # → 记 notes/warning，不阻断后续 group
+                    elif detail and detail not in (
+                            "clean stop", "already exited",
+                            "no process", "process disappeared"):
+                        # v64：仅**非正常** detail（如 SIGTERM timeout, killed 兜底）
+                        # 记 notes/warning；正常 detail（clean stop/already exited/
+                        # no process/process disappeared）是常规返回、不污染 notes
                         self.notes.append(f"stop clean 但带 warning: {detail}")
                 elif isinstance(result, bool):
                     # v61（任务 5）：bool False 也记录（进程可能残留）
