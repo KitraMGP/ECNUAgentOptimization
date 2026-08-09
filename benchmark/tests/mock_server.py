@@ -15,7 +15,8 @@ from typing import Tuple
 _COUNTER = {"n": 0}
 # E2.0.5：可变的 KV 状态（completion 后 used_cells 增长，slot erase 后归 0）
 _KV = {"used_cells": 0, "active_sequences": 0, "erase_disabled": False,
-       "metrics_fail": False}  # v50：/metrics/kv 端点失败开关（after_erase_missing 生产路径）
+       "metrics_fail": False,   # v50：/metrics/kv 端点失败开关（after_erase_missing 生产路径）
+       "slots_malformed": False}  # v51：/slots 返回非 JSON 开关（list_slots 解析异常 → erase_failed 生产路径）
 # M0（Critical 2）：可配置 finish_reason（"stop" 默认 / "length" 测试决策截断）
 _FINISH = {"reason": "stop"}
 # M0 v49（任务 4）：一次性请求失败开关（500 一次后复位）——模拟"请求级异常但
@@ -78,6 +79,17 @@ class _Handler(BaseHTTPRequestHandler):
                 "build_info": "b3-mockcommit",
             }
         elif self.path.startswith("/slots"):
+            if _KV["slots_malformed"]:
+                # v51（任务 1）：/slots 畸形响应（非 JSON）→ list_slots 解析异常 →
+                # clean_all_slots 抛异常（server 健康）→ erase_failed（生产路径，
+                # 非 mock 抛异常）
+                data = b"not-a-json{"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             body = [{"id": 0, "n_ctx": 512, "is_processing": False, "speculative": False},
                     {"id": 1, "n_ctx": 512, "is_processing": False, "speculative": False}]
         else:

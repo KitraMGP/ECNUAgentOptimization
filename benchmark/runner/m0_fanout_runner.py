@@ -35,6 +35,12 @@ from runner import fanout_prompts as fp
 from runner import m0_schema as sch
 from runner.e15_branch_concurrent import _http_get_json, http_request
 
+# v51（任务 3）：校准阶段允许归入 PREFLIGHT_INFRA 的明确网络/OS 基础设施异常；
+# 其余（AssertionError/KeyError/TypeError 等内部 bug）不捕获 → run_safe
+# 归 INTERNAL_RUNNER_ERROR + EXIT_SOFTWARE(70)。
+_INFRA_EXCEPTIONS = (urllib.error.HTTPError, urllib.error.URLError,
+                     OSError, TimeoutError, ConnectionError)
+
 SEED = 42
 TEMPERATURE = 0.0
 VALIDATION_REQUESTS = 10        # decision validation 每 session ≥10
@@ -682,11 +688,18 @@ class M0FanoutRunner:
                 except Exception as e:
                     if self._adapter is not None and self._adapter.poll() is not None:
                         raise ServerCrash(str(e)) from e
-                    # v50（任务 3）：server 健康但工具轮请求 HTTP 异常——不裸逃逸
-                    # exit70：标当前 rep ERROR（废弃工具轮结果），继续统一
-                    # erase + after_erase 路径；server 已退出 → ServerCrash
-                    # （上一分支）→ group ERROR/FORMAL_INCOMPLETE
-                    tool_error = e
+                    if rep_index is None:
+                        # v51（任务 4）：warmup 工具轮异常（server 健康）→ 记可诊断
+                        # note 而非静默忽略；best-effort erase 由 finally 承担
+                        self._add_note(
+                            f"warmup 工具轮请求异常（server 健康，继续）: "
+                            f"{type(e).__name__}: {e}")
+                    else:
+                        # v50（任务 3）：server 健康但工具轮请求 HTTP 异常——不裸逃逸
+                        # exit70：标当前 rep ERROR（废弃工具轮结果），继续统一
+                        # erase + after_erase 路径；server 已退出 → ServerCrash
+                        # （上一分支）→ group ERROR/FORMAL_INCOMPLETE
+                        tool_error = e
         finally:
             if rep_index is not None:
                 # v48（任务 4）：异常路径同样 stop periodic——先 stop 采样
@@ -707,6 +720,16 @@ class M0FanoutRunner:
                         self._add_note(
                             f"warmup best-effort erase 部分失败 {ok}/{attempt} "
                             f"（server 健康，继续）")
+                    elif attempt == 0:
+                        # v51（任务 2）：(0,0)（无 slot 或 list_slots 端点不可用）
+                        # 主动 poll——server 已退出 → ServerCrash（group ERROR）；
+                        # 健康且确实无 slot → 允许继续（记可诊断 note）
+                        if self._adapter is not None and self._adapter.poll() is not None:
+                            raise ServerCrash(
+                                "warmup clean_all_slots: server 已退出") from None
+                        self._add_note(
+                            "warmup clean_all_slots 返回 (0,0)"
+                            "（无 slot 或端点不可用；server 健康，继续）")
                 except Exception as e:
                     if self._adapter is not None and self._adapter.poll() is not None:
                         raise ServerCrash("warmup erase: server 已退出") from None
@@ -860,9 +883,10 @@ class M0FanoutRunner:
             return self._fail_preflight("validation_incomplete", None,
                                         self.preflight_rejections,
                                         f"{type(e).__name__}: {e}")
-        except Exception as e:
-            # v50（任务 2）：校准阶段任何未预期异常（请求级 HTTP 异常/清理异常）也
-            # 必须落合法 preflight 结果——不得裸逃逸 run_safe exit70
+        except _INFRA_EXCEPTIONS as e:
+            # v51（任务 3）：仅明确的网络/OS 基础设施异常归 PREFLIGHT_INFRA；
+            # 内部 bug（AssertionError/KeyError/TypeError 等）不再被吞——
+            # 上抛 → run_safe 归 INTERNAL_RUNNER_ERROR + EXIT_SOFTWARE(70)
             return self._fail_preflight("validation_incomplete", None,
                                         self.preflight_rejections,
                                         f"{type(e).__name__}: {e}")
@@ -926,7 +950,8 @@ class M0FanoutRunner:
             context, reason=reason, source_phase=self.phase,
             parity_ok=parity_ok, parity_progress=self.parity_progress,
             token_count_method=tcm, decision_validation=dv,
-            preflight_rejections=rejections)
+            preflight_rejections=rejections,
+            notes=self.notes)  # v51：保留 runner 已有 notes（warmup erase 等诊断）
         ok, errs = sch.validate_result_envelope(doc)
         if not ok:
             return self._write_schema_invalid(errs, "preflight")

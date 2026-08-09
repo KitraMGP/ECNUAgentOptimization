@@ -44,13 +44,14 @@ EXIT_SCHEMA_INVALID = 65        # SCHEMA_INVALID envelope+sidecar 已落盘
 EXIT_SOFTWARE = 70              # 内部 envelope/sidecar 自身校验失败（EX_SOFTWARE）
 EXIT_IO_WRITE_FAILED = 74       # 结果文件 I/O 写失败（EX_IOERR）
 
-# ---- 结构化错误码（v29：12 个；v39：parity 四元组；v40：三/四元组分离；v49：+2 erase 码 = 14） ----
+# ---- 结构化错误码（v29：12 个；v39：parity 四元组；v40：三/四元组分离；v49：+2 erase 码 = 14；v51：+2 erase 码 = 16） ----
 ERROR_CODES = (
     "connection_error", "timeout", "http_4xx", "http_5xx",
     "malformed_response", "server_crash", "health_failed",
     "endpoint_unavailable", "parity_mismatch", "budget_rejected",
     "validation_incomplete", "schema_invalid",
     "erase_partial", "after_erase_failed",  # v49：erase 阶段失败（任务 2/5）
+    "erase_failed", "after_erase_missing",  # v51：clean_all_slots 异常 / after_erase 观测缺失（v50 代码已抛、枚举未收录）
 )
 # sidecar validator 独立 6 枚举（v30）
 SIDECAR_ERROR_CODES = (
@@ -317,6 +318,7 @@ def build_preflight_envelope(
     token_count_method: Optional[str],
     decision_validation: Optional[Dict[str, Any]],
     preflight_rejections: Optional[List[Dict[str, Any]]] = None,
+    notes: Optional[List[str]] = None,  # v51：透传可诊断 note（保留 runner 已有 notes）
 ) -> Dict[str, Any]:
     """preflight envelope builder（v37 名称统一：schema_invalid / validation_incomplete 共用）。
 
@@ -342,7 +344,7 @@ def build_preflight_envelope(
         "matrix_complete": False,
     })
     return {"meta": meta, "modes": {}, "gates": {},
-            "verdict": preflight_verdict(reason), "notes": []}
+            "verdict": preflight_verdict(reason), "notes": list(notes or [])}
 
 
 def preflight_verdict(reason: str) -> str:
