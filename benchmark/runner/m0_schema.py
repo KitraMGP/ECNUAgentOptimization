@@ -44,12 +44,13 @@ EXIT_SCHEMA_INVALID = 65        # SCHEMA_INVALID envelope+sidecar 已落盘
 EXIT_SOFTWARE = 70              # 内部 envelope/sidecar 自身校验失败（EX_SOFTWARE）
 EXIT_IO_WRITE_FAILED = 74       # 结果文件 I/O 写失败（EX_IOERR）
 
-# ---- 结构化错误码（v29：12 个；v39：parity 四元组；v40：三/四元组分离） ----
+# ---- 结构化错误码（v29：12 个；v39：parity 四元组；v40：三/四元组分离；v49：+2 erase 码 = 14） ----
 ERROR_CODES = (
     "connection_error", "timeout", "http_4xx", "http_5xx",
     "malformed_response", "server_crash", "health_failed",
     "endpoint_unavailable", "parity_mismatch", "budget_rejected",
     "validation_incomplete", "schema_invalid",
+    "erase_partial", "after_erase_failed",  # v49：erase 阶段失败（任务 2/5）
 )
 # sidecar validator 独立 6 枚举（v30）
 SIDECAR_ERROR_CODES = (
@@ -439,8 +440,20 @@ def _type_name(v: Any) -> str:
     return type(v).__name__
 
 
+def to_json_pointer(path: str) -> str:
+    """点号/数组下标路径 → RFC6901 JSON Pointer（v49 任务 6 修复：sidecar 合同）。
+
+    "modes.off.server_groups[0].error_type" → "$/modes/off/server_groups/0/error_type"；
+    已是 "$"/"$/" 前缀的路径原样返回；空 → "$"。
+    """
+    if not path or path == "$" or path.startswith("$/"):
+        return path or "$"
+    p = re.sub(r"\[(\d+)\]", r"/\1", path.replace(".", "/"))
+    return "$" + p
+
+
 def _push(errs: List[_ERR], code: str, path: str, expected: Any, actual: Any) -> None:
-    errs.append((code, path, expected, _type_name(actual)))
+    errs.append((code, to_json_pointer(path), expected, _type_name(actual)))
 
 
 def validate_parity_progress(pp: Any) -> List[_ERR]:

@@ -301,9 +301,14 @@ class M0FanoutRunner:
                         })
             # 预算精确复核（24 候选，同一校准 server）
             self.run_budget_check()
-            # erase 全部 slot 回基线（校准后清理协议）
+            # erase 全部 slot 回基线（校准后清理协议；v49：best-effort——
+            # 异常后 poll：崩溃 → ServerCrash（校准 server 已退出，不吞），健康 → 继续）
             if self._kv is not None:
-                self._kv.clean_all_slots()
+                try:
+                    self._kv.clean_all_slots()
+                except Exception:
+                    if self._adapter is not None and self._adapter.poll() is not None:
+                        raise ServerCrash("校准后清理: server 已退出") from None
             mismatched = any(e["code"] == "parity_mismatch"
                              for e in self.parity_progress["errors"])
             return not mismatched
@@ -454,6 +459,7 @@ class M0FanoutRunner:
                 baseline = self._capture_baseline(gid)
                 reps: List[Dict[str, Any]] = []
                 crashed = False
+                crash_error_type = "server_crash"  # v49：ServerCrash 默认；EraseFailure 覆盖
                 for bucket in fp.legal_matrix_plan().get(fanout, []):
                     unit_id = sch.unit_id_of(control, ctk, ctv, fanout, bucket)
                     if unit_id in self._rejected_ids():
@@ -467,6 +473,13 @@ class M0FanoutRunner:
                             # Critical 7：warmup 崩溃不得被吞——立即进入 group
                             # ERROR / FORMAL_INCOMPLETE（进程已退出，后续请求必败）
                             crashed = True
+                            break
+                        except EraseFailure as e:
+                            # v49（任务 2/4）：warmup 阶段 erase 失败（best-effort
+                            # erase 后 server 已退出，或严格路径 EraseFailure）——
+                            # 转 group ERROR/FORMAL_INCOMPLETE 并保留诊断 error_type
+                            crashed = True
+                            crash_error_type = e.error_type
                             break
                         except Exception:
                             # v48（任务 7）：warmup 任意请求异常后立即 poll server——
@@ -494,16 +507,31 @@ class M0FanoutRunner:
                                 error_type="server_crash", error_stage="formal",
                                 error_bucket=bucket))
                             break
+                        except EraseFailure as e:
+                            # v49（任务 2/5）：erase 阶段失败（server 健康）——
+                            # 标 rep ERROR（保留可诊断 error_type）+ group
+                            # ERROR/FORMAL_INCOMPLETE（优先后者以免污染后续 rep）
+                            crashed = True
+                            crash_error_type = e.error_type
+                            reps.append(sch.build_rep(
+                                unit_id, ri, fanout, bucket, ctk, ctv,
+                                self._last_prefix_len, self._last_branch_len, gid,
+                                "ERROR", False,
+                                {"error": f"{e.error_type}: {e.detail}"},
+                                error_type=e.error_type, error_stage="formal",
+                                error_bucket=bucket))
+                            break
                 stop_ts = sch.now_utc()
                 if crashed:
-                    # 崩溃 group → status=ERROR + error_type 必填（v42/v47：modes
-                    # 只含已启动 groups；失败 group 以 ERROR 出现）
+                    # 崩溃/erase 失败 group → status=ERROR + error_type 必填
+                    # （v42/v47：modes 只含已启动 groups；失败 group 以 ERROR 出现；
+                    #  v49：error_type 取实际失败类型，EraseFailure 时非 server_crash）
                     group = sch.build_group(gid, "ERROR", start_ts, stop_ts,
                                             baseline=baseline, replicates=reps,
-                                            error_type="server_crash",
+                                            error_type=crash_error_type,
                                             error_stage="formal")
                     self._append_group(control, group)
-                    raise FormalIncomplete("运行中崩溃")
+                    raise FormalIncomplete("运行中崩溃/erase 失败")
                 group = sch.build_group(gid, "COMPLETED", start_ts, stop_ts,
                                         baseline=baseline, replicates=reps)
                 self._append_group(control, group)
@@ -661,21 +689,46 @@ class M0FanoutRunner:
                 # （end_run 必须等 erase+after_erase 之后，否则 after_erase
                 #  样本 run_id=None 不进 rep 聚合——v48 复审根因）
                 self._kv.stop()
+            else:
+                # v49（任务 4）：warmup（rep_index=None）即使 server 健康也执行
+                # best-effort erase——决策/分支请求留下的 slot 占位不清会串扰
+                # 下一个 warmup/formal rep 的 KV 基线；异常后 poll 判断：
+                # 崩溃 → ServerCrash（上层 group ERROR）；健康 → 可继续（仅预热）
+                try:
+                    self._kv.clean_all_slots()
+                except Exception:
+                    if self._adapter is not None and self._adapter.poll() is not None:
+                        raise ServerCrash("warmup erase: server 已退出") from None
         # 4) 回收（erase 全部 slot）+ after_erase（v48：决策 ERROR 与正常统一路径；
         #    任务 3：ERROR rep 不跳过 erase/after_erase——server 健康则 metrics.kv
-        #    存在并由 G-M0-3a 验证归零；崩溃 → ServerCrash → FORMAL_INCOMPLETE）
-        try:
-            self._kv.clean_all_slots()
-            # Critical 1：erase 后采样实际 /metrics/kv——G-M0-3a 从该
-            # 样本验证 used_cells==0 && active_sequences==0（last=erase 后值）
-            if rep_index is not None:
+        #    存在并由 G-M0-3a 验证归零；崩溃 → ServerCrash → FORMAL_INCOMPLETE；
+        #    v49：仅 formal rep（rep_index is not None）走严格检查——warmup 的
+        #    erase 已由 finally best-effort 承担，严格 partial 检查只对 formal）
+        if rep_index is not None:
+            try:
+                # v49（任务 5）：clean_all_slots 返回 (attempt, ok)——partial erase
+                # （attempt>0 且 ok<attempt）→ 立即 EraseFailure（FORMAL_INCOMPLETE，
+                # 带诊断，不等 gate 间接发现；G-M0-3a 已无归零观测可依）
+                attempt, ok = self._kv.clean_all_slots()
+                if attempt > 0 and ok < attempt:
+                    raise EraseFailure("erase_partial",
+                                       f"clean_all_slots 部分成功 {ok}/{attempt}", ok, attempt)
+                # Critical 1：erase 后采样实际 /metrics/kv——G-M0-3a 从该
+                # 样本验证 used_cells==0 && active_sequences==0（last=erase 后值）
                 self._kv.snapshot("after_erase")
-        except Exception as e:
-            if self._adapter is not None and self._adapter.poll() is not None:
-                raise ServerCrash(str(e)) from e
-            raise
-        finally:
-            if rep_index is not None:
+            except EraseFailure:
+                raise
+            except ServerCrash:
+                raise
+            except Exception as e:
+                # v49（任务 2）：server 健康但 erase/after_erase 异常——不得裸异常
+                # exit70 无合法结果；标 EraseFailure（保留可诊断 error_type）+ 上层
+                # group ERROR/FORMAL_INCOMPLETE（优先后者以免污染后续 rep）。
+                # server 已退出 → ServerCrash（归因不变）。
+                if self._adapter is not None and self._adapter.poll() is not None:
+                    raise ServerCrash(str(e)) from e
+                raise EraseFailure("after_erase_failed", str(e)) from e
+            finally:
                 # end_run 在 erase+after_erase 之后：保证 after_erase 样本归组
                 self._kv.end_run()
         # 5) 指标 + rep 对象
@@ -921,9 +974,11 @@ class M0FanoutRunner:
             if total_req >= 2 * VALIDATION_REQUESTS and total_valid == total_req:
                 g1 = "PASS"
         gates["G-M0-1"] = {"status": g1}
-        # G-M0-2：canary 跨分支泄漏率 0（Critical 1：观测缺失 → FAIL，不静默 PASS）
+        # G-M0-2：canary 跨分支泄漏率 0（Critical 1：观测缺失 → FAIL，不静默 PASS；
+        # v49 任务 1：无任何非 ERROR 分支观测 → NOT_APPLICABLE，绝不 PASS）
         leak = False
         leak_na = False
+        any_branch_obs = False
         for control in ("off", "on"):
             for grp in modes.get(control, {}).get("server_groups", []):
                 for rep in grp.get("replicates", []):
@@ -933,6 +988,7 @@ class M0FanoutRunner:
                     if not isinstance(branches, list) or not branches:
                         leak_na = True  # 缺分支观测
                         continue
+                    any_branch_obs = True
                     for b in branches:
                         if b.get("canary_leak"):
                             leak = True
@@ -940,6 +996,11 @@ class M0FanoutRunner:
             gates["G-M0-2"] = {"status": "FAIL"}
         elif leak_na:
             gates["G-M0-2"] = {"status": "FAIL"}
+        elif not any_branch_obs:
+            # v49 任务 1：全矩阵无任何非 ERROR 分支观测（如 5 reps 全 ERROR）——
+            # 隔离性不可测，NOT_APPLICABLE（顶层 verdict 由 REP_ERROR/FORMAL_INCOMPLETE
+            # 处理，不得静默 PASS）
+            gates["G-M0-2"] = {"status": "NOT_APPLICABLE"}
         else:
             gates["G-M0-2"] = {"status": "PASS"}
         # G-M0-3a：每 rep 末 erase 后 used_cells==0 && active_sequences==0
@@ -1078,7 +1139,7 @@ class M0FanoutRunner:
             print(f"INTERNAL_SCHEMA_ENVELOPE_BUG: {env_errs}", file=sys.stderr)
             return sch.EXIT_SOFTWARE
         sidecar = {"errors": [
-            {"path": e.get("path", "$"), "code": e.get("code", "invalid_value"),
+            {"path": sch.to_json_pointer(e.get("path", "$")), "code": e.get("code", "invalid_value"),
              "expected_type": e.get("expected_type", "object"),
              "actual_type": e.get("actual_type", "null")}
             for e in errs]}
@@ -1105,6 +1166,20 @@ class FirstGroupStartFailed(Exception):
 
 class FormalIncomplete(Exception):
     """第 2+ group 启动失败 / 运行中崩溃 → formal/FORMAL_INCOMPLETE（测试㉗）。"""
+
+
+class EraseFailure(Exception):
+    """v49（任务 2/5）：erase 阶段失败（server 健康但 clean_all_slots 部分成功/
+    after_erase 采样异常）→ 立即 group ERROR/FORMAL_INCOMPLETE 并带可诊断 error_type
+    （不裸异常 exit70、不等 gate 间接发现；优先后者以免污染后续 rep）。
+    server 已退出 → 仍由上层归 ServerCrash。"""
+
+    def __init__(self, error_type: str, detail: str, ok: int = 0, attempt: int = 0):
+        super().__init__(f"{error_type}: {detail}")
+        self.error_type = error_type
+        self.detail = detail
+        self.ok = ok
+        self.attempt = attempt
 
 
 class ServerCrash(Exception):

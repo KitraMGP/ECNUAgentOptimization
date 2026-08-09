@@ -804,3 +804,292 @@ class TestSamplerPortFallback:
                             lambda *a, **k: self._procs(
                                 ["llama-server", "--port", "80809"]))
         assert sampler.find_server_pid(port=8080) is None
+
+
+# ---- M0 v49（复审 Medium）：G-M0-2 成功分支观测语义 ----
+
+class TestG2BranchObsSemanticsV49:
+    """G-M0-2 必须基于成功分支观测：无任何非 ERROR 分支观测 → NOT_APPLICABLE，
+    绝不静默 PASS（v49 任务 1）。rep 结构 = 生产 build_rep 输出（可达状态）。"""
+
+    def _gates_with(self, tmp_path, off_reps, on_reps=None):
+        r = TestCritical1KVPath()._runner_with_log(tmp_path)
+        on_reps = off_reps if on_reps is None else on_reps
+
+        def _grp(control, reps):
+            return {
+                "server_group_id": sch.group_id_of(control, "q8_0", "q8_0", 2),
+                "ctk": "q8_0", "ctv": "q8_0", "fanout": 2, "status": "COMPLETED",
+                "baseline": {"rs_buffer_mb": 50.0, "metrics_kv_snapshot": {}},
+                "replicates": reps,
+            }
+
+        modes = {"off": {"server_groups": [_grp("off", off_reps)]},
+                 "on": {"server_groups": [_grp("on", on_reps)]}}
+        return r._compute_gates(modes)
+
+    @staticmethod
+    def _rep(i, status, leak=False):
+        return {
+            "unit_id": f"u{i}", "rep_index": i, "fanout": 2, "bucket": "short",
+            "ctk": "q8_0", "ctv": "q8_0", "prefix_len": 100, "branch_len": 100,
+            "server_group_id": sch.group_id_of("off", "q8_0", "q8_0", 2),
+            "status": status, "decision_fallback": False,
+            "metrics": {"kv": {"last": {"used_cells": 0, "active_sequences": 0}},
+                        "branches": [] if status == "ERROR" else
+                                   [{"branch": "b1", "canary_leak": leak},
+                                    {"branch": "b2", "canary_leak": False}]},
+        }
+
+    def test_all_error_not_applicable(self, tmp_path):
+        """5 reps 全 ERROR（无任何非 ERROR 分支观测）→ NOT_APPLICABLE（不 PASS）。"""
+        g = self._gates_with(tmp_path,
+                             [self._rep(i, "ERROR") for i in range(5)])
+        assert g["G-M0-2"]["status"] == "NOT_APPLICABLE"
+
+    def test_partial_success_no_leak_pass(self, tmp_path):
+        """1 ERROR + 4 OK（无泄漏）→ 部分成功观测 → PASS。"""
+        reps = [self._rep(0, "ERROR")] + [self._rep(i, "OK") for i in range(1, 5)]
+        g = self._gates_with(tmp_path, reps)
+        assert g["G-M0-2"]["status"] == "PASS"
+
+    def test_partial_success_with_leak_fail(self, tmp_path):
+        """1 ERROR + 4 OK（其中 1 个 canary 泄漏）→ FAIL（观测存在即判定）。"""
+        reps = ([self._rep(0, "ERROR"), self._rep(1, "OK", leak=True)]
+                + [self._rep(i, "OK") for i in range(2, 5)])
+        g = self._gates_with(tmp_path, reps)
+        assert g["G-M0-2"]["status"] == "FAIL"
+
+    def test_full_smoke_g2_pass(self, tmp_path, fake_adapter_cls):
+        """生产 e2e：mock 分支无泄漏 → G-M0-2 PASS（可达路径断言）。"""
+        r = make_runner(tmp_path, fake_adapter_cls)
+        rc = r.run()
+        assert rc == 0, rc
+        with open(r.out_path, encoding="utf-8") as f:
+            doc = json.load(f)
+        assert doc["gates"]["G-M0-2"]["status"] == "PASS"
+
+
+# ---- M0 v49（复审 Medium）：erase 异常路径（任务 2/5） ----
+
+class TestEraseFailureV49:
+    def test_erase_partial_formal_incomplete(self, tmp_path, fake_adapter_cls, monkeypatch):
+        """clean_all_slots 部分成功（server 健康、erase 端点 501）→ rep ERROR +
+        group ERROR(error_type=erase_partial) + FORMAL_INCOMPLETE，带诊断，
+        不裸异常 exit70、不等 gate 间接发现（v49 任务 5）。"""
+        prev_clean = KVProbe.clean_all_slots
+
+        def _clean_partial(self):
+            # MockOpenAIServer.__enter__ 会重置 erase_disabled，故在 server 启动后
+            # （即每次 clean_all_slots 时）强制 erase 端点 501 → 部分成功 (2,0)
+            mserver._KV["erase_disabled"] = True
+            try:
+                return prev_clean(self)
+            finally:
+                mserver._KV["erase_disabled"] = False
+
+        monkeypatch.setattr(KVProbe, "clean_all_slots", _clean_partial)
+        r = make_runner(tmp_path, fake_adapter_cls)
+        rc = r.run()
+        assert rc == 0, rc
+        with open(r.out_path, encoding="utf-8") as f:
+            doc = json.load(f)
+        assert doc["meta"]["phase"] == "formal"
+        assert doc["meta"]["matrix_complete"] is False
+        assert doc["verdict"] == "INVALID_RESULTS_SCHEMA_OR_INFRASTRUCTURE"
+        groups = (doc["modes"]["off"]["server_groups"]
+                  + doc["modes"]["on"]["server_groups"])
+        err_groups = [g for g in groups if g["status"] == "ERROR"]
+        assert err_groups, [g["status"] for g in groups]
+        assert err_groups[0]["error_type"] == "erase_partial"
+        err_reps = [rep for rep in err_groups[0]["replicates"]
+                    if rep["status"] == "ERROR"]
+        assert err_reps
+        assert all(rep["error_type"] == "erase_partial" for rep in err_reps)
+
+    def test_after_erase_snapshot_failure_healthy(self, tmp_path,
+                                                 fake_adapter_cls,
+                                                 monkeypatch):
+        """server 健康但 after_erase 采样异常 → EraseFailure(after_erase_failed)
+        → group ERROR + FORMAL_INCOMPLETE（不裸异常 exit70 无合法结果，v49 任务 2）。"""
+        orig = KVProbe.snapshot
+
+        def _snap(self, tag=""):
+            if tag == "after_erase":
+                raise OSError("metrics/kv 采样失败")
+            return orig(self, tag)
+
+        monkeypatch.setattr(KVProbe, "snapshot", _snap)
+        r = make_runner(tmp_path, fake_adapter_cls)
+        rc = r.run()
+        assert rc == 0, rc
+        with open(r.out_path, encoding="utf-8") as f:
+            doc = json.load(f)
+        assert doc["meta"]["matrix_complete"] is False
+        groups = (doc["modes"]["off"]["server_groups"]
+                  + doc["modes"]["on"]["server_groups"])
+        err_groups = [g for g in groups if g["status"] == "ERROR"]
+        assert err_groups
+        assert err_groups[0]["error_type"] == "after_erase_failed"
+
+    def test_erase_failure_dead_server_server_crash(self, tmp_path,
+                                                    fake_adapter_cls,
+                                                    monkeypatch):
+        """erase 失败 + server 已退出（poll 非 None）→ ServerCrash（归因不变，
+        v49 任务 2：server 已退出归 ServerCrash）。"""
+        boom_calls = {"n": 0}
+
+        def _boom(*a, **k):
+            boom_calls["n"] += 1
+            if boom_calls["n"] == 1:
+                return (2, 2)  # 校准后清理正常（mock 2 slots 全成功）
+            raise OSError("erase failed")
+
+        monkeypatch.setattr(KVProbe, "clean_all_slots", _boom)
+        FakeAdapter.poll_dead = True
+        try:
+            r = make_runner(tmp_path, fake_adapter_cls)
+            rc = r.run()
+            assert rc == 0, rc
+            with open(r.out_path, encoding="utf-8") as f:
+                doc = json.load(f)
+            assert doc["meta"]["matrix_complete"] is False
+            groups = (doc["modes"]["off"]["server_groups"]
+                      + doc["modes"]["on"]["server_groups"])
+            assert groups[-1]["status"] == "ERROR"
+            assert groups[-1]["error_type"] == "server_crash"
+        finally:
+            FakeAdapter.poll_dead = None
+
+
+# ---- M0 v49（复审 Medium）：warmup 决策异常 best-effort erase（任务 4） ----
+
+class TestWarmupEraseV49:
+    def test_warmup_decision_error_healthy_erases_and_continues(
+            self, tmp_path, monkeypatch):
+        """warmup 决策请求 500（server 健康）→ best-effort erase 真实执行 +
+        异常被忽略、后续 formal rep 正常（G-M0-3a last=0 残留归零）——
+        不吞崩溃也不中断健康流程（v49 任务 4，直接 _run_unit 路径）。"""
+        adapter = FakeAdapter([], "", 0)
+        adapter.start()
+        try:
+            r = make_runner(tmp_path, None)
+            r._adapter = adapter
+            r._driver = Driver(base_url=f"http://127.0.0.1:{adapter.port}",
+                               model="bench", max_retry=1, sdk_max_retries=0)
+            r._kv = KVProbe(f"http://127.0.0.1:{adapter.port}", enabled=True)
+            r.calibrated_lengths = {("short", 2): {"prefix": 100, "branch": 100}}
+            prev_clean = KVProbe.clean_all_slots
+            calls = {"n": 0}
+
+            def _clean(self):
+                calls["n"] += 1
+                return prev_clean(self)
+
+            monkeypatch.setattr(KVProbe, "clean_all_slots", _clean)
+            uid = sch.unit_id_of("off", "q8_0", "q8_0", 2, "short")
+            gid = sch.group_id_of("off", "q8_0", "q8_0", 2)
+            mserver._ERROR_ONCE["on"] = True  # 首个 POST（warmup 决策）500
+            try:
+                try:
+                    out = r._run_unit(uid, 2, "short", "q8_0", "q8_0", gid, None)
+                except Exception:
+                    out = None  # v48：warmup 请求异常向上抛、由 run_formal 的
+                                # warmup except 处理（poll 健康 → 忽略；本测试模拟）
+            finally:
+                mserver._ERROR_ONCE["on"] = False
+            assert out is None  # warmup 异常路径（best-effort erase 仍执行）
+            assert calls["n"] >= 1  # best-effort erase 真实执行
+            assert mserver._KV["used_cells"] == 0  # 残留归零
+            # 后续 formal rep 正常完成（G-M0-3a 可验证 last=0）
+            rep = r._run_unit(uid, 2, "short", "q8_0", "q8_0", gid, 0)
+            assert rep["status"] in ("OK", "INVALID_DECISION")  # 决策正常（无 ACTION → fallback）
+            assert rep["metrics"]["kv"]["last"]["used_cells"] == 0
+        finally:
+            adapter.stop()
+
+    def test_warmup_erase_crash_group_error(self, tmp_path, fake_adapter_cls,
+                                            monkeypatch):
+        """warmup 的 best-effort erase 异常且 server 已退出 → ServerCrash →
+        group ERROR（不吞崩溃；v49 任务 4 崩溃侧）。"""
+        boom_calls = {"n": 0}
+
+        def _boom(*a, **k):
+            boom_calls["n"] += 1
+            if boom_calls["n"] == 1:
+                return (2, 2)  # 校准后清理正常
+            raise ConnectionError("erase 连接失败")
+
+        monkeypatch.setattr(KVProbe, "clean_all_slots", _boom)
+        FakeAdapter.poll_dead = True
+        try:
+            r = make_runner(tmp_path, fake_adapter_cls)
+            rc = r.run()
+            assert rc == 0, rc
+            with open(r.out_path, encoding="utf-8") as f:
+                doc = json.load(f)
+            assert doc["meta"]["matrix_complete"] is False
+            groups = (doc["modes"]["off"]["server_groups"]
+                      + doc["modes"]["on"]["server_groups"])
+            assert groups[-1]["status"] == "ERROR"
+            assert groups[-1]["error_type"] == "server_crash"
+        finally:
+            FakeAdapter.poll_dead = None
+
+
+# ---- M0 v49（复审 Medium）：periodic 迟到样本不得覆盖 after_erase（任务 3） ----
+
+class TestPeriodicLateAfterEraseV49:
+    def test_late_periodic_does_not_override_after_erase(self, tmp_path):
+        """periodic 迟到样本（stop join 超时后 daemon 线程仍在写）不得覆盖
+        after_erase=0 归零观测——run_aggregate last 优先 tag=after_erase。"""
+        with MockOpenAIServer() as srv:
+            kv = KVProbe(f"http://127.0.0.1:{srv.port}", enabled=True)
+            kv.begin_run("r1")
+            kv.samples = [
+                {"ts": 1.0, "tag": "pre", "run_id": "r1",
+                 "data": {"used_cells": 0, "active_sequences": 0}},
+                {"ts": 2.0, "tag": "periodic", "run_id": "r1",
+                 "data": {"used_cells": 384, "active_sequences": 1}},
+                {"ts": 3.0, "tag": "after_erase", "run_id": "r1",
+                 "data": {"used_cells": 0, "active_sequences": 0}},
+                {"ts": 4.0, "tag": "periodic", "run_id": "r1",  # 迟到样本
+                 "data": {"used_cells": 384, "active_sequences": 1}},
+            ]
+            agg = kv.run_aggregate()["r1"]
+            assert agg["last_used_cells"] == 0      # after_erase 优先
+            assert agg["last_active_sequences"] == 0
+            assert agg["peak_used_cells"] == 384    # peak 仍来自周期高峰
+            kv.end_run()
+
+    def test_thread_fully_exits_after_stop(self):
+        """人为延迟 fetch（3s > join 窗口 2s）→ stop 后线程仍最终退出：
+        不泄漏、不跨 run 污染（线程退出后 samples 冻结）。"""
+        prev = dict(mserver._KV)
+        try:
+            with MockOpenAIServer() as srv:
+                kv = KVProbe(f"http://127.0.0.1:{srv.port}", enabled=True)
+                orig_fetch = kv._fetch
+
+                def slow_fetch():
+                    time.sleep(3.0)  # > stop() 的 join 窗口 2.0
+                    return orig_fetch()
+
+                kv._fetch = slow_fetch
+                kv.begin_run("r1")
+                kv.snapshot("pre")
+                kv.start_periodic(0.01)
+                time.sleep(0.3)  # 线程进入 slow_fetch
+                t = kv._thread
+                assert t is not None and t.is_alive()
+                kv.stop()  # join 超时（线程在 slow_fetch 中）
+                assert kv._thread is None
+                n_before_join = len(kv.samples)
+                t.join(timeout=8.0)  # 等待线程完全退出
+                assert not t.is_alive()
+                n_after_join = len(kv.samples)
+                time.sleep(0.2)
+                assert len(kv.samples) == n_after_join  # 退出后不再增长
+                kv.end_run()
+        finally:
+            mserver._KV.update(prev)

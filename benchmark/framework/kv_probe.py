@@ -190,21 +190,39 @@ class KVProbe:
                                       "last_used_cells": None, "peak_used_cells": None,
                                       "first_active_sequences": None,
                                       "last_active_sequences": None,
-                                      "peak_active_sequences": None})
+                                      "peak_active_sequences": None,
+                                      # v49 任务 3：after_erase 归零观测单独暂存，
+                                      # 防止 periodic 迟到样本（stop join 超时后
+                                      # daemon 线程仍在写）覆盖 last
+                                      "_ae_used": None, "_ae_active": None})
             r["samples"] += 1
             data = s.get("data") if isinstance(s.get("data"), dict) else {}
+            tag = s.get("tag")
             v = data.get("used_cells")
             if isinstance(v, (int, float)):
                 if r["first_used_cells"] is None:
                     r["first_used_cells"] = v
+                if tag == "after_erase":
+                    r["_ae_used"] = v
                 r["last_used_cells"] = v
                 r["peak_used_cells"] = max(r["peak_used_cells"] or 0, v)
             a = data.get("active_sequences")
             if isinstance(a, (int, float)):
                 if r["first_active_sequences"] is None:
                     r["first_active_sequences"] = a
+                if tag == "after_erase":
+                    r["_ae_active"] = a
                 r["last_active_sequences"] = a
                 r["peak_active_sequences"] = max(r["peak_active_sequences"] or 0, a)
+        # v49 任务 3：last 优先 tag=after_erase 样本（周期/迟到样本不得覆盖
+        # G-M0-3a 依赖的归零观测）
+        for r in runs.values():
+            if r["_ae_used"] is not None:
+                r["last_used_cells"] = r["_ae_used"]
+            if r["_ae_active"] is not None:
+                r["last_active_sequences"] = r["_ae_active"]
+            r.pop("_ae_used", None)
+            r.pop("_ae_active", None)
         return runs
 
     def _field_vals(self, field: str, run_id: Optional[str] = None) -> List[float]:

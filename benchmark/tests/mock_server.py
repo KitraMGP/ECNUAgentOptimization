@@ -17,6 +17,9 @@ _COUNTER = {"n": 0}
 _KV = {"used_cells": 0, "active_sequences": 0, "erase_disabled": False}
 # M0（Critical 2）：可配置 finish_reason（"stop" 默认 / "length" 测试决策截断）
 _FINISH = {"reason": "stop"}
+# M0 v49（任务 4）：一次性请求失败开关（500 一次后复位）——模拟"请求级异常但
+# server 进程健康"（warmup 决策异常路径测试；非进程崩溃）
+_ERROR_ONCE = {"on": False}
 
 
 def _make_body(n: int) -> dict:
@@ -98,6 +101,13 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+            return
+        # M0 v49（任务 4）：一次性 500（请求级失败、进程健康）
+        if _ERROR_ONCE["on"]:
+            _ERROR_ONCE["on"] = False
+            self.send_response(500)
+            self.end_headers()
+            return
             return
         length = int(self.headers.get("Content-Length", 0))
         payload = json.loads(self.rfile.read(length).decode("utf-8"))
