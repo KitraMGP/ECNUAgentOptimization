@@ -53,7 +53,7 @@ def test_run_decision_validation_uses_both_controls(monkeypatch):
         return FakeAdapter()
 
     def fake_run_session(port):
-        return [_Rec(True)] * 10
+        return [_Rec(True)] * 10, False
 
     def fake_stop():
         pass
@@ -82,7 +82,7 @@ def test_run_decision_validation_partial_on_second_failure(monkeypatch):
         return FakeAdapter()
 
     def fake_run_session(port):
-        return [_Rec(True)] * 10
+        return [_Rec(True)] * 10, False
 
     def fake_stop():
         pass

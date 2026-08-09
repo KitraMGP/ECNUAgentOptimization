@@ -108,7 +108,7 @@ class TestDecisionValidationSync:
             return FakeAdapter()
 
         def fake_run_session(port):
-            return [_Rec(True)] * 10
+            return [_Rec(True)] * 10, False
 
         calls = {"stop": 0}
 
@@ -149,7 +149,7 @@ class TestDecisionValidationSync:
             run_calls["n"] += 1
             if run_calls["n"] == 2:  # control=on 的 session 中途崩溃
                 raise RuntimeError("mid-session server crash")
-            return [_Rec(True)] * 10
+            return [_Rec(True)] * 10, False
 
         def fake_stop():
             pass
@@ -182,7 +182,7 @@ class TestDecisionValidationSync:
             run_calls["n"] += 1
             if run_calls["n"] == 2:
                 raise TimeoutError("read timeout")
-            return [_Rec(True)] * 10
+            return [_Rec(True)] * 10, False
 
         def fake_stop():
             pass

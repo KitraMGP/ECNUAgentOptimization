@@ -1,16 +1,20 @@
-"""M0 v67 review 收口测试（dv ServerCrash 显式捕获 + 停止后续 session）。
+"""M0 v68 review 修复测试（dv ServerCrash 显式 crashed 信号 + 停止后续 session）。
 
 覆盖（任务 1）：
-- `_run_decision_session` 显式捕获 ServerCrash：当前请求计入
-  requests/error_count/error_summary code=server_crash，立即 break 不再
-  执行剩余请求（server 已死，剩余必败）；
-- `run_decision_validation` 依 requests<target 停止后续 session（崩溃后
-  不再启动新 server）；partial session 保留证据 → 上层构造 partial dv →
-  合法 PREFLIGHT_INFRA 落盘（rc=0、validator 通过、formal 未启动）；
-- 首 session 崩溃 e2e（正）：dv0 崩溃 → 仅 1 个 partial session、后续
+- `_run_decision_session` 显式捕获 ServerCrash 并返回 `(recs, crashed)` 显式
+  信号：当前崩溃请求计入 requests/error_count/error_summary code=server_crash，
+  立即 break 不再执行剩余请求（server 已死，剩余必败）；
+- `run_decision_validation` 据 **crashed 信号无条件停止后续 session**（v68：
+  不得用 len(recs)<target 推断——第 target 个请求崩溃时 len==target 仍须
+  停止，否则会错误启动下一个 server）；partial session 保留证据 → 上层
+  构造 partial dv → 合法 PREFLIGHT_INFRA 落盘（rc=0、validator 通过、
+  formal 未启动）；
+- 首 session 崩溃边界（正，参数化）：dv0 在第 1/5/10 个请求处崩溃 → 均
+  当前请求计 error（requests==崩溃位置）、仅 1 个 partial session、后续
   session（dv1）未启动；
 - 第二 session 崩溃 e2e（正）：dv1 崩溃 → session 0 完整（requests=10、
-  error_count=0）+ session 1 partial（含 server_crash）、无后续 session。
+  error_count=0）+ session 1 partial（含 server_crash）、无后续 session；
+- 无崩溃反 e2e：dv complete。
 """
 from __future__ import annotations
 
@@ -101,10 +105,20 @@ def _load_doc(tmp_path):
 
 
 class TestDvServerCrash:
-    def test_first_session_crash_preflight(self, tmp_path, fake_adapter_cls):
-        """正 e2e：dv0（首个验证 session）崩溃 → 当前请求计入 server_crash、
-        立即 break、session partial（requests<10）→ 停止后续 session（dv1 未
-        启动）→ 合法 PREFLIGHT_INFRA 落盘（rc=0、validator 通过、formal 未启动）。"""
+    @pytest.mark.parametrize("crash_at, expected_requests", [
+        (0, 1),   # 第 1 个请求崩溃（httpd.count=1 > 0）
+        (4, 5),   # 第 5 个请求崩溃（httpd.count=5 > 4）
+        (9, 10),  # 第 10 个（最后一个）请求崩溃（httpd.count=10 > 9）——
+                  # 边界：len(recs)==target 仍须显式 crashed 停止后续 session
+    ])
+    def test_first_session_crash_boundaries(self, tmp_path, fake_adapter_cls,
+                                            crash_at, expected_requests):
+        """正 e2e：dv0（首个验证 session）在第 1/5/10 个请求处崩溃 → 当前崩溃
+        请求计入 server_crash、立即 break（requests==崩溃位置）、**显式 crashed
+        信号停止后续 session**（第 10 个请求崩溃时 len(recs)==target 也须停止，
+        dv1 不启动）→ 合法 PREFLIGHT_INFRA 落盘（rc=0、validator 通过、
+        formal 未启动）。"""
+        fake_adapter_cls.crash_at_value = crash_at
         fake_adapter_cls.crash_at_after = 2  # 实例 1=calib 正常、实例 2=dv0 崩溃
         r = make_runner(tmp_path, fake_adapter_cls)
         rc = r.run()
@@ -121,15 +135,14 @@ class TestDvServerCrash:
         # 首 session 崩溃：只保留 1 个 partial session（dv1 未启动）
         assert len(dv["sessions"]) == 1
         s0 = dv["sessions"][0]
-        assert s0["requests"] < m0r.VALIDATION_REQUESTS
+        assert s0["requests"] == expected_requests
         assert s0["error_count"] == 1
         assert any(e["code"] == "server_crash" for e in s0["error_summary"])
-        # 崩溃请求计入后立即 break：剩余请求不执行
-        assert s0["requests"] == 1
         # formal 未启动
         assert doc["modes"] == {} and doc["gates"] == {}
         assert meta["executed_units"] == 0
         assert meta["matrix_complete"] is False
+
 
     def test_second_session_crash_preflight(self, tmp_path, fake_adapter_cls):
         """正 e2e：dv1（第二验证 session）崩溃 → session 0 完整保留（requests=10、

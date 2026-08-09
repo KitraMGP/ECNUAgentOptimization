@@ -148,6 +148,50 @@ class TestTransientClass:
             urllib.error.HTTPError(
                 "http://t", 400, "bad", None, None)) is None
 
+    def test_text_connection_patterns_retryable(self):
+        """v68：明确 connection 文本模式（非 openai 类型，走 _text_transient）
+        → connection_error 可重试；URLError refused 同。"""
+        for msg in ("Connection refused", "Connection reset by peer",
+                    "Connection error.", "Connection lost.",
+                    "Failed to connect to host", "Unable to connect",
+                    "Cannot connect to server"):
+            assert m0r.M0FanoutRunner._transient_class(
+                Exception(msg)) == "connection_error", msg
+        assert m0r.M0FanoutRunner._transient_class(
+            urllib.error.URLError("Connection refused")) == "connection_error"
+
+    def test_text_disconnect_reconnect_not_misclassified(self):
+        """v68 误匹配反例：裸 connect/disconnect/reconnect/connectivity 等
+        内部消息不得被文本 fallback 归为 connection_error（收紧，不再重试）。"""
+        for msg in ("Disconnected from server", "disconnected",
+                    "Reconnecting in 5s", "reconnect attempt",
+                    "connectivity issue", "no route to connect",
+                    "index out of range"):
+            assert m0r.M0FanoutRunner._transient_class(
+                Exception(msg)) is None, msg
+
+    def test_text_timeout_retryable(self):
+        """v68：文本 timeout 模式（非 openai 类型）→ timeout 可重试。"""
+        assert m0r.M0FanoutRunner._transient_class(
+            Exception("Request timed out")) == "timeout"
+        assert m0r.M0FanoutRunner._transient_class(
+            TimeoutError("socket timed out")) == "timeout"
+
+    def test_classify_error_shared_text_helper(self):
+        """v68：classify_error 与 _transient_class 共用 _text_transient——
+        同一文本在两者下分类一致（connection 正例；disconnect 反例归类默认值
+        而非 connection_error——classify_error 无 None 语义时落默认 connection_error，
+        但 _transient_class 必须 None 不重试）。"""
+        # 正例：明确 connection 文本两者一致
+        e = urllib.error.URLError("Connection refused")
+        assert m0r._text_transient(e) == "connection_error"
+        assert m0r.classify_error(e) == "connection_error"
+        assert m0r.M0FanoutRunner._transient_class(e) == "connection_error"
+        # 反例：disconnect 文本 _transient_class 不重试
+        d = Exception("Disconnected from server")
+        assert m0r._text_transient(d) is None
+        assert m0r.M0FanoutRunner._transient_class(d) is None
+
 
 class TestChatWrapperUnit:
     def test_first_attempt_fails_then_success(self, tmp_path):
@@ -257,7 +301,7 @@ class TestStageCoverage:
         try:
             r = make_runner(tmp_path, adapter)
             mserver.set_fail(1)
-            recs = r._run_decision_session(adapter.port)
+            recs, _ = r._run_decision_session(adapter.port)
             assert len(recs) == m0r.VALIDATION_REQUESTS
             assert all(rec["error"] is None for rec in recs)  # 无 ERROR 记录
         finally:

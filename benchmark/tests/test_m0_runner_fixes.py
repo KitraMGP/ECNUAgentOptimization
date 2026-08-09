@@ -212,7 +212,7 @@ class TestCritical2FinishReason:
         r._stop_server()
         with MockOpenAIServer(finish_reason="length") as srv:
             r._driver, r._kv = r._connect(srv.port)
-            recs = r._run_decision_session(srv.port)
+            recs, _ = r._run_decision_session(srv.port)
         sess = sch.build_decision_session(
             requests=len(recs),
             valid=sum(1 for x in recs if x["ok"] and x["error"] is None),
