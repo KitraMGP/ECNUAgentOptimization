@@ -172,6 +172,17 @@ class M0FanoutRunner:
             os.makedirs(self.tmp_dir, exist_ok=True)
         else:
             self.tmp_dir = tempfile.mkdtemp(prefix="m0_fanout_")
+        # v60（任务 3）：写活跃 run marker（pid/create_ts/keep）——cleanup_stale_dirs
+        # 据此识别活跃 run 不删；keep=false（无 --keep-tmp 参数，文档明确生命周期：
+        # pid 退出 + age 超龄后由 cleanup 删除；用户可改 marker keep=true 或改名目录
+        # 避免意外清理）
+        try:
+            with open(os.path.join(self.tmp_dir, sch.RUN_MARKER_NAME),
+                      "w", encoding="utf-8") as f:
+                json.dump({"pid": os.getpid(), "create_ts": time.time(), "keep": False}, f)
+        except OSError:
+            # marker 写失败不致命（cleanup 退化为无 marker 的 age 判定）
+            pass
         self.ngl = ngl
         self.adapter_cls = adapter_cls
         self._next_port = port_base
@@ -287,27 +298,30 @@ class M0FanoutRunner:
 
         v59：stop 异常不传播——finally 中调用绝不掩盖 try 块 primary 异常；
         错误记入 self._stop_errors（调用方在无 primary 异常时按基础设施处理）。
+        v60（任务 1）：检查 adapter.stop() 返回 `(ok, detail)`——`ok=False`
+        视为 stop failure（进程可能残留，如 SIGTERM 超时转 kill），记录
+        `_stop_errors` 与 detail；抛异常路径保留（同记 _stop_errors 不传播）；
+        非 tuple 返回（旧 mock 契约 None）→ 视为干净。
         返回 True=stop 干净、False=stop 出错（进程可能残留）。
         """
         clean = True
         if self._adapter is not None:
             try:
-                self._adapter.stop()
+                result = self._adapter.stop()
             except Exception as e:  # noqa: BLE001
                 clean = False
                 self._stop_errors.append(f"{type(e).__name__}: {e}")
+            else:
+                if isinstance(result, tuple) and len(result) >= 2:
+                    ok, detail = result[0], result[1]
+                    if not ok:
+                        clean = False
+                        self._stop_errors.append(f"stop ok=False: {detail}")
+                # 非 tuple 返回（None 等旧契约）→ 视为干净
             self._adapter = None
         self._driver = None
         self._kv = None
         return clean
-
-    def _cleanup_all(self) -> None:
-        if self._adapter is not None:
-            try:
-                self._adapter.stop()
-            except Exception:
-                pass
-            self._adapter = None
 
     # ---- driver/kv ----
 
@@ -585,7 +599,35 @@ class M0FanoutRunner:
                 raise FormalIncomplete(str(e))
             try:
                 self._driver, self._kv = self._connect(adapter.port)
+            except _INFRA_EXCEPTIONS as e:
+                # v60（任务 2）：连接基础设施异常（OSError/openai/ServerError，
+                # 含 TimeoutError）→ 首 group（尚无任何 completed group）按首
+                # group preflight/PREFLIGHT_INFRA 规则（FirstGroupStartFailed，
+                # 上层保留完整 decision_validation 落盘 preflight）；第 2+ group
+                # → 保留已完成 groups、失败 group ERROR（endpoint_unavailable）、
+                # FormalIncomplete 合法落盘，绝不 exit70 丢结果。内部 bug
+                # （AssertionError/KeyError/TypeError）不在此捕获 → run_safe 70。
+                if not self.groups_off and not self.groups_on:
+                    raise FirstGroupStartFailed(
+                        f"connect 基础设施失败: {type(e).__name__}: {e}") from e
+                self._record_group_error(gid, control, start_ts,
+                                         "endpoint_unavailable", f"connect: {e}")
+                raise FormalIncomplete(
+                    f"connect 基础设施失败: {type(e).__name__}: {e}") from e
+            try:
                 baseline = self._capture_baseline(gid)
+            except _INFRA_EXCEPTIONS as e:
+                # v60（任务 2）：baseline KV 快照 / 采样的基础设施异常（OSError /
+                # openai 连接失败等）→ 同 connect 归因（首 group preflight；
+                # 第 2+ group 保留已完成 + ERROR + FormalIncomplete）。
+                if not self.groups_off and not self.groups_on:
+                    raise FirstGroupStartFailed(
+                        f"baseline 基础设施失败: {type(e).__name__}: {e}") from e
+                self._record_group_error(gid, control, start_ts,
+                                         "endpoint_unavailable", f"baseline: {e}")
+                raise FormalIncomplete(
+                    f"baseline 基础设施失败: {type(e).__name__}: {e}") from e
+            try:
                 reps: List[Dict[str, Any]] = []
                 crashed = False
                 crash_error_type = "server_crash"  # v49：ServerCrash 默认；EraseFailure 覆盖
@@ -1119,7 +1161,9 @@ class M0FanoutRunner:
         """formal 结果：构造 doc → gates → verdict → 校验 → 原子落盘。"""
         modes = sch.build_modes(self.groups_off, self.groups_on)
         if not self.groups_off and not self.groups_on:
-            # 无任何 group 完成（理论不可达：formal 入口至少启动 1 group）
+            # 防御性兜底（v60：0 group 理论不可达——首 group 任何失败转
+            # FirstGroupStartFailed → preflight 落盘；FormalIncomplete 仅在
+            # 已有 ≥1 completed group 后抛出）
             return self._fail_preflight("validation_incomplete", True,
                                         self.preflight_rejections, "formal 无 group")
         gates = self._compute_gates(modes)
@@ -1462,7 +1506,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port-base", type=int, default=8080)
     parser.add_argument("--ngl", type=int, default=99)
     parser.add_argument("--cleanup-tmp-age", type=float, default=3600.0,
-                        help="陈旧 .m0_fanout_*.tmp 清理 age 阈值（秒，v48）")
+                        help="陈旧 .m0_fanout_*.tmp 清理 age 阈值（秒，v48；v60："
+                             "下限 300s 钳制——低于 300 自动提到 300，防误删活跃 run）")
     return parser
 
 
@@ -1477,6 +1522,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.ctx_size <= 0:
         print("INVALID_CONFIGURATION: --ctx-size 必须为正整数", file=sys.stderr)
         return sch.EXIT_USAGE
+    # v60（任务 3）：--cleanup-tmp-age 合理最小值钳制（<300s 提到 300s）——
+    # 共享父目录并发清理禁止；marker 未写入的目录按 age 判定，过低阈值有
+    # 误删刚结束 run 目录的风险（文档 v60 修订注记明确）
+    if args.cleanup_tmp_age < sch.CLEANUP_AGE_MIN:
+        print(f"cleanup-tmp-age {args.cleanup_tmp_age}s 低于下限 "
+              f"{sch.CLEANUP_AGE_MIN}s，钳制为 {sch.CLEANUP_AGE_MIN}s", file=sys.stderr)
+        args.cleanup_tmp_age = sch.CLEANUP_AGE_MIN
     # Critical 5：CLI 入口清理 results 目录陈旧 atomic tmp 残留
     # （v48，任务 9：仅删超过 age 阈值的陈旧文件，不删活跃并发写；
     #   atomic_write_json 命名 .m0_fanout_<name>.<kind>.<pid>.<rand>.tmp 与 cleanup 匹配）

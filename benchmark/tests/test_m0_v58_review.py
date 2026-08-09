@@ -307,7 +307,7 @@ class TestLogRefreshAndStartedAt:
         adapter = r._start_server(4, "q8_0", "q8_0", "off", "t")
         meta = r._server_meta["t"]
         assert _UTC_RE.match(meta["started_at"]), meta["started_at"]
-        r._cleanup_all()
+        r._stop_server()  # v60：_cleanup_all 已删除（无调用点冗余 stop 逻辑），统一 _stop_server
 
 
 # ---- 5. --tmp-dir 父目录安全 ----

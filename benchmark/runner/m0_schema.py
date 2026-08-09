@@ -1141,17 +1141,63 @@ def cleanup_stale_tmp(results_dir: str, max_age_seconds: float = 3600.0) -> List
 # 父目录 / 用户既有共享目录绝不删除）。
 STALE_DIR_PREFIXES = ("m0_fanout_", "m0_cal_")
 
+# v60（任务 3）：活跃 run marker 文件名——runner 创建专属 tmp 子目录后写入
+# JSON {"pid": <int>, "create_ts": <float>, "keep": <bool>}；cleanup_stale_dirs
+# 据此识别活跃 run 不删（pid 存活即活跃，无论 age）。keep=true 表示显式保留
+# （永不自动删除；用户可用它避免意外清理）。marker 是控制元数据、不反映日志
+# 活跃写入，_dir_newest_mtime 排除它。
+RUN_MARKER_NAME = "ACTIVE.marker"
+
+# v60（任务 3）：--cleanup-tmp-age 合理最小值（秒）——低于该值 CLI 钳制；
+# 共享父目录并发清理禁止（文档 v60 修订注记明确）
+CLEANUP_AGE_MIN = 300.0
+
+
+def _pid_alive(pid: int) -> bool:
+    """pid 是否存活（os.kill(pid, 0) 探测；PermissionError=存在但无权限→保守存活）。"""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _read_run_marker(dir_path: str) -> Optional[Dict[str, Any]]:
+    """读取目录内活跃 marker；缺失/损坏 → None（按无 marker 处理）。"""
+    try:
+        with open(os.path.join(dir_path, RUN_MARKER_NAME), "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
 
 def cleanup_stale_dirs(results_dir: str, max_age_seconds: float = 3600.0) -> List[str]:
-    """清理 results 目录下陈旧的 M0 专属子目录（v59，任务 6）。
+    """清理 results 目录下陈旧的 M0 专属子目录（v59 任务 6 / v60 任务 3 并发安全）。
 
     formal 运行后专属子目录（`m0_fanout_<ts>_<pid>` / `m0_cal_<run_id>`）内含
     完整 -lv5 日志，按设计保留在 results 供排障（不视为泄漏；baseline 只归档
-    key lines）。本函数用于按 age 清理陈旧目录：只删名字以 STALE_DIR_PREFIXES
-    开头的一级子目录、且**递归最新 mtime 超龄**（目录 mtime 只随子项增删更新、
-    不随日志内容写入更新——活跃运行中的 server 持续写日志，目录 mtime 可能很旧；
-    必须取目录树内最新文件 mtime 判定，mtime 新 = 活跃并发写入，不删）；绝不
-    递归进入并删除无关目录、绝不删除父目录。返回被删目录名列表。
+    key lines）。本函数用于按 age 清理陈旧目录，**并发安全（v60）**：
+
+    - 只删名字以 STALE_DIR_PREFIXES 开头的一级子目录；绝不递归进入并删除
+      无关目录、绝不删除父目录/非目录文件；
+    - **活跃 marker 优先（v60）**：目录含 `ACTIVE.marker` 且 `keep=true` →
+      永不删；marker `pid` 存活（`os.kill(pid, 0)`）→ 活跃 run 不删（无论 age）；
+      无 marker 或 marker pid 已死 → 才按 age 判定；
+    - age 判定取**递归最新 mtime**（目录 + 子目录 + 文件，排除 marker）：目录
+      mtime 只随子项增删更新、不随日志内容写入更新——活跃运行中的 server 持续
+      写日志，目录 mtime 可能很旧；最新 mtime 新 = 活跃并发写入，不删；
+    - **并发禁止**：同一 results 目录不得两个进程同时执行本 cleanup（会互相
+      读到对方删除中目录）；`--cleanup-tmp-age` 建议 ≥ 300s 并配合 marker
+      （默认 3600s），详见 M0 文档 v60 修订注记。
+
+    返回被删目录名列表。
     """
     removed: List[str] = []
     if not os.path.isdir(results_dir):
@@ -1167,6 +1213,14 @@ def cleanup_stale_dirs(results_dir: str, max_age_seconds: float = 3600.0) -> Lis
         fp = os.path.join(results_dir, name)
         if not os.path.isdir(fp):
             continue
+        # v60：marker 优先判定（keep / 活跃 pid）
+        marker = _read_run_marker(fp)
+        if marker is not None:
+            if marker.get("keep") is True:
+                continue
+            pid = marker.get("pid")
+            if isinstance(pid, int) and _pid_alive(pid):
+                continue
         try:
             newest = _dir_newest_mtime(fp)
         except OSError:
@@ -1178,10 +1232,19 @@ def cleanup_stale_dirs(results_dir: str, max_age_seconds: float = 3600.0) -> Lis
 
 
 def _dir_newest_mtime(fp: str) -> float:
-    """目录树内最新 mtime（目录本身 + 递归子项；缺失条目跳过）。"""
+    """目录树内最新 mtime（目录本身 + **递归子目录 + 文件**；缺失条目跳过；
+    排除 RUN_MARKER_NAME 控制文件——marker 是元数据、写入即新 mtime，若计入会
+    让带 marker 的陈旧目录永不超龄，v60）。"""
     newest = os.path.getmtime(fp)
-    for root, _dirs, files in os.walk(fp):
+    for root, dirs, files in os.walk(fp):
+        for d in dirs:
+            try:
+                newest = max(newest, os.path.getmtime(os.path.join(root, d)))
+            except OSError:
+                pass
         for name in files:
+            if name == RUN_MARKER_NAME:
+                continue
             try:
                 newest = max(newest, os.path.getmtime(os.path.join(root, name)))
             except OSError:

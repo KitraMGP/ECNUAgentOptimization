@@ -111,9 +111,11 @@ class TestCleanup:
         assert r._adapter is None
 
     def test_cleanup_all_on_error(self, tmp_path, fake_adapter_cls):
+        """v60：_cleanup_all 已删除（无调用点冗余 stop 逻辑）；错误路径清理统一
+        走 _stop_server（stop 异常记 _stop_errors 不传播、adapter 必清空）。"""
         r = make_runner(tmp_path, fake_adapter_cls)
         r._start_server(4, "q8_0", "q8_0", "off", "t")
-        r._cleanup_all()
+        r._stop_server()
         assert r._adapter is None
 
 
