@@ -59,7 +59,7 @@
   - `n_embd_s = n_embd_head_kda² × n_head = 128×128×32 = 524288`。
 - **每 slot RS = 24 层 × (24576+524288) × 4 B = 52,690,944 B = 50.25 MiB**——与探针实测
   （p4=201.00、p10=502.50 MiB）精确闭合，**随 parallel 线性增长**（`n_seq_max = params.n_parallel`，
-  `src/common/common.cpp:1639`）。
+  `common/common.cpp:1639`）。
 - 日志观测点：`RS buffer size = X MiB`（`llama-memory-recurrent.cpp:115`）+ `R/S (f32)` 分解行
   （`:123-126`）；`layers` 打印为**总层数**（实际分配仅 recurrent 层，filter skip `:76-82`）。
 
@@ -74,7 +74,7 @@
 - HTTP 端：`GET /metrics/kv`（`tools/server/server-context.cpp:5328-5364`，推理线程执行、与 KV 变更串行化；
   组装点 `:3106-3135`）。
 - **recurrent 无任何运行期接口**：唯一细分 = 启动日志 `RS buffer size` + 退出时
-  `common_memory_breakdown_print`（`src/common/fit.cpp:817-940`，`server.cpp:531` 调用）——hybrid 下
+  `common_memory_breakdown_print`（`common/fit.cpp:817-940`，`server.cpp:531` 调用）——hybrid 下
   `context` 列 = attn+recr **合并**（`llama_context::memory_breakdown`，`src/llama-context.cpp:3235-3258`），
   **无法拆分**。
 
@@ -98,9 +98,9 @@ llama-model.cpp:2286-2295   llama_memory_hybrid 构造：
 
 ### 2.1 CLI 解析与允许类型
 
-- 参数：`-ctk/--cache-type-k`、`-ctv/--cache-type-v`（`src/common/arg.cpp:2369-2391`；
+- 参数：`-ctk/--cache-type-k`、`-ctv/--cache-type-v`（`common/arg.cpp:2369-2391`；
   官方文档 `tools/server/README.md:71-72`、`docs/multi-gpu.md:44-45`）。
-- 允许值（`kv_cache_types`，`src/common/arg.cpp:302-313`，单一权威表）：
+- 允许值（`kv_cache_types`，`common/arg.cpp:302-313`，单一权威表）：
   `f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1`；默认 `f16`。
 - 本路线只使用 **`q8_0` 与 `f16`**（其余为次级观察，不进入主矩阵）。
 
@@ -129,7 +129,7 @@ llama-model.cpp:2286-2295   llama_memory_hybrid 构造：
 
 ### 2.4 memory breakdown 输出
 
-- 唯一输出点：退出时 `common_memory_breakdown_print`（`src/common/fit.cpp:817-940`，调用点
+- 唯一输出点：退出时 `common_memory_breakdown_print`（`common/fit.cpp:817-940`，调用点
   `server.cpp:531`）：`total = model + (context = KV + RS 合并) + compute`。
 - **运行期不可用**；本路线容量对账依赖：启动日志（`RS buffer size` / `R/S (f32)` /
   `llama_kv_cache` 分配行）+ `/metrics/kv`（attention 权威）+ nvidia-smi 差分（总量 sanity）。
@@ -163,7 +163,7 @@ llama-model.cpp:2286-2295   llama_memory_hybrid 构造：
   recurrent state 固定不随 prompt 增长。
 - E10.3（`docs/E10_3_QWEN35_Q8_KV_VALIDATION.md`）：**20 reps × 6 workload 输出与 F16 完全一致（0 差异）**；
   KV capacity -47%（ctx2048/p2：67,108,864 → 35,651,584 B）；GPU 总显存 -30 MB；decode +1.5~3.3%；
-  状态 `QWEN35_Q8_KV_STATUS: PASS_DEPLOYABLE`。raw：`raw/e10_q8_validation.json`。
+  状态 `QWEN35_Q8_KV_STATUS: PASS_DEPLOYABLE`。raw：`benchmark/results/kv_optimization/raw/e10_q8_validation.json`（E9/E10 文档中简写 `raw/...` 的真实路径）。
 - E13.1（`docs/E13_1_QWEN35_Q8_DEPLOYMENT_PROFILE.md`）：validated profile 固化
   （`--cache-type-k/v q8_0` + `--kv-unified` + ctx4096/p4）；GPU peak 约 -58 MB（3032→2974，5 次采样稳定）；
   decode 最大精确退化 **2.10%**；config `benchmark/configs/qwen35_4b_q8_validated.yaml`（+ E14.1 生产版
@@ -199,8 +199,10 @@ llama-model.cpp:2286-2295   llama_memory_hybrid 构造：
 
 1. **容量边界**：q8_0/q8_0 vs f16/f16 在 hybrid 上的 attention KV 容量差是否为公式值
    （128−68 = **60 MiB @ctx4096**，-46.9%）？RS 是否完全不随 cache-type 变化（50.25 MiB/slot 恒等）？
-2. **质量边界**：q8_0 在 p4/p10 + 并发/fanout 负载下与 f16 的 parity（token 级 hash）与延迟退化，
-   是否仍落在 E13.1 验证边界（≤2.10% decode）内？
+2. **质量边界（拆分判定）**：① 固定短请求（E10.3 workload）q8_0 与 f16 token 级 hash 是否 100%
+   一致（G-Q8-1a 硬条件，预期 E10.3 已实证无损）；② agent fanout 负载（决策+分支+工具轮、
+   生成更长）若出现 token 级差异，量化退化率是否 ≤2.10%（G-Q8-1b 有损描述）——
+   **G-Q8-1b 不反向把 G-Q8-1a FAIL 变 PASS**。
 3. **组合允许性（探针）**：混合 K/V（如 K=q8_0+V=f16）能否启动、容量是否 = 两档可加
    （§2.3 源码预期允许，需启动级实测确认）。
 
@@ -210,8 +212,18 @@ llama-model.cpp:2286-2295   llama_memory_hybrid 构造：
 llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
   -ngl 99 --ctx-size 4096 --parallel N --kv-unified \
   --cache-type-k {q8_0|f16} --cache-type-v {q8_0|f16} \
-  --temp 0 --seed 42 --metrics -lv 5 --log-file <tmp>/server_<tag>.log
+  --flash-attn auto --no-speculative \
+  --temp 0 --seed 42 --metrics -lv 5 \
+  --log-file <run_tmp>/<tag>/server.log --slot-save-path <run_tmp>/<tag>/slots
 ```
+
+- **每生命周期专属目录**：`<run_tmp>/<tag>/` 为本 server 生命周期唯一子目录（log 与 slots 均
+  在其中，多 server 不共享）；`--slot-save-path` 是 `POST /slots erase` 的前置要求
+  （`server-context.cpp:5448`，M0 同款），与 §4.4 erase/after_erase 合同一致。
+- **`--flash-attn auto`**：统一 AUTO、**不显式关闭**（quantized V 需要 FA，
+  `llama-context.cpp:3565-3569`；AUTO 在 q8_0 V 时自动启用）。
+- **`--no-speculative`**：不启用 speculative decode（避免 draft 模型 KV type 干扰观测）。
+- **`n_rs_seq=0`**：不启用 rollback snapshot（默认值，显式声明；G-Q8-4 公式前置条件，§4.5）。
 
 | 固定项 | 值 | 约束来源 |
 |---|---|---|
@@ -222,6 +234,8 @@ llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
 | generation | temp=0 / seed=42 | E13.1 验证范围 |
 | parallel | **p4、p10**（必要时补 p8） | M0 探针已有 p2/p4/p6/p8/p10 空载档 |
 | 环境 | 同一台 RTX 4060 Laptop 8GB，串行执行、每 server 生命周期独立 | M0 run6/7 先例 |
+| flash-attn | `--flash-attn auto`（统一 AUTO，不显式关闭） | q8_0 V 需 FA（llama-context.cpp:3565-3569） |
+| speculative / n_rs_seq | `--no-speculative`；`n_rs_seq=0`（不启用 rollback snapshot） | 保持观测纯净；G-Q8-4 公式前置条件 |
 
 ### 4.3 矩阵设计
 
@@ -244,7 +258,7 @@ llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
 | nvidia-smi（sampler 周期采样） | GPU `memory.used` 峰值（多 PID） | 总量 sanity（G-Q8-5） |
 | 进程 RSS（sampler） | peak_rss_mb | 宿主内存观测 |
 | timings（driver） | latency_ms / ttft_ms（prompt_ms 代理） | 延迟对比（G-Q8-2） |
-| 输出 hash | 同输入 token 级 sha256（temp=0/seed=42） | parity（G-Q8-1） |
+| 输出 hash | 同输入 token 级 sha256（temp=0/seed=42） | parity（G-Q8-1a） |
 
 - 全部采样与 M0 同一 runner 基础设施语义（`M0FanoutRunner` 生命周期 / KVProbe / sampler / gate 骨架）
   或等价独立 runner；**本阶段不实现**，仅定义合同。
@@ -254,10 +268,11 @@ llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
 
 | 门禁 | 定义 | 阈值 |
 |---|---|---|
-| G-Q8-1 parity | 同输入（同 seed/temp）q8_0 与 f16 输出 sha256 一致 | 100%（正式 reps，全 workload）；不一致 → 记录差异 token，判定依据 E13.1 边界（≤2.10% decode 退化容忍，但**无损优先**） |
+| G-Q8-1a parity（硬条件） | 同输入（同 seed/temp）q8_0 与 f16 输出 sha256 一致 | **100%**（正式 reps；至少覆盖固定短请求 workload）；任一不一致 → **G-Q8-1a FAIL**，记录差异 token |
+| G-Q8-1b 退化率（有损描述） | q8_0 vs f16 输出差异的量化退化率（token 级差异比例/decode 退化） | ≤2.10%（E13.1 边界）；**仅描述有损程度，不反向把 G-Q8-1a FAIL 变 PASS**——1a FAIL 即「该负载无损 parity 不成立」 |
 | G-Q8-2 延迟 | q8_0 vs f16 严格 paired（同 profile 内 off/on 等价物——同负载同 parallel 跨 profile 配对） | latency/ttft 中位数偏差 **≤5%**（参考 E10.3 ≤3%、E13.1 2.10%；给并发余量） |
 | G-Q8-3 KV 容量 | `/metrics/kv capacity_bytes` 与公式对账：q8 68 MiB / f16 128 MiB @ctx4096，per-cell 17408/32768 B | 误差 **≤5%**（M0 G-M0-4 同口径） |
-| G-Q8-4 RS 不变 | 启动日志 `RS buffer size` 与公式 `24×548864×4×parallel` 对账，且 **q8_0 与 f16 档完全相等** | 误差 ≤5%；跨 profile 相等是硬条件（否则 = 源码反例，升级调查） |
+| G-Q8-4 RS 不变 | 启动日志 `RS buffer size` 与公式对账，且 **q8_0 与 f16 档完全相等**。**前置条件（写死）**：`n_rs_seq=0`（`n_rows = mem_size = n_seq_max = parallel`）、recurrent 层数 24、R/S 恒 F32 → 公式 `RS = 24 × (24576+524288) × 4 × parallel = 50.25 × parallel MiB`；任何前置条件被违反（如 n_rs_seq>0 或层数变化）→ 公式不适用，NOT_APPLICABLE | 误差 ≤5%；跨 profile 相等是硬条件（否则 = 源码反例，升级调查） |
 | G-Q8-5 GPU 总量 sanity | nvidia-smi 峰值差分 = 权重 + KV(档差 60 MiB) + RS(parallel 线性) + compute，容量差方向正确 | ±10%（M0 同口径）；**只看方向与量级，不作容量收益的独立证明** |
 | G-Q8-6 复现性 | 同配置两次独立 run：capacity/RS 日志一致；latency/ttft 中位数偏差 ≤10%；parity 一致 | M0 G-M0-6 同定义 |
 
@@ -270,7 +285,7 @@ llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
 | 请求 transient 失败 | 重试 wrapper（≤3 次，退避 0.25/0.5）后仍失败 → rep ERROR + 归因分类 | M0 v66-v68 语义复用 |
 | erase/观测失败 | `EraseFailure`（erase_failed/after_erase_missing 等） | 组 ERROR + 诊断，不静默 PASS |
 | 内部 bug（AssertionError/KeyError/TypeError 等） | `INTERNAL_RUNNER_ERROR` | exit 70，不吞 |
-| parity 不一致 | G-Q8-1 FAIL | 记录差异证据；判定依据 §5.1 结论路径 |
+| parity 不一致 | **G-Q8-1a FAIL**（不因 G-Q8-1b ≤2.10% 反向恢复 PASS） | 记录差异证据；判定依据 §5.1 结论路径 |
 
 ### 4.7 重复运行与退出/归档合同
 
@@ -281,7 +296,8 @@ llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
   **本路线新增字段不得破坏既有 validator**（设计期确认：cache profile 字段已存在于 22 键内）。
 - **归档**：正式结果 → `benchmark/baseline/`（可读命名 `qwen35-4b_gpu_q8kv_cap_<run>_<ts>.json`
   系列 + evidence + logevidence key-lines）；`results/` 只留临时输出（gitignore）；-lv5 完整日志
-  留专属 tmp 子目录供排障，**baseline 只归档 key lines**。
+  留专属 tmp 子目录供排障（含每生命周期的 `--slot-save-path` 目录，属同一 `<run_tmp>/<tag>/`
+  专属子目录），**baseline 只归档 key lines**。
 - **结论文档**：运行后产出 `docs/M0_Q8_HYBRID_KV_CAPACITY_RESULT.md`（本设计文档的对照物），
   引用本设计 §4.5 门禁逐项判定。
 
@@ -291,14 +307,21 @@ llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
 
 ### 5.1 预期结论形态（以实测为准，不预设）
 
-- **成功路径（局部容量收益）**：G-Q8-1/2/3/4/5/6 全 PASS + 源码链路（§1.5）确认 →
+- **成功路径（局部容量收益）**：G-Q8-1a PASS（短请求 100%）+ G-Q8-1b ≤2.10%（若有差异，
+  有损描述）+ G-Q8-2/3/4/5/6 全 PASS + 源码链路（§1.5）确认 →
   结论为 **「q8_0 只降低 attention KV 容量（68 vs 128 MiB @ctx4096，-46.9%），RS 固定
   50.25 MiB/slot → 局部容量收益、非全 hybrid state 优化」**。收益边界量化：
-  `KV 容量差 / (权重 + KV + RS×parallel + compute)` 占比（8GB 卡上 ~60 MiB 量级，与 E13.1
-  GPU -58 MB 一致）。
-- **parity 退化情形**：若 G-Q8-1 不全 PASS 但 G-Q8-3/4 PASS → 降级「容量收益成立、
-  质量有损（记录退化 token/比例）」，引用 E13.1 边界与 E10.3 无损范围的差异；
-  **不把有损称为无损**（E15.3 先例：`HOLD_NOT_VALIDATED` 语义）。
+  `KV 容量差 / (权重 + KV + RS×parallel + compute)` 占比（@ctx4096 容量差 = 60 MiB）。
+  **口径区分**：60 MiB 是 KV **capacity 差**（预分配公式值）；E13.1 实测 -58 MB 是
+  nvidia-smi **总 GPU 占用差**（含权重不变 + KV 差 + 缓冲对齐），两者同量级但**不同口径**，
+  不可直接等同（-58 MB < 60 MiB 可能因 ctx 未用满/缓冲对齐，属正常）。
+- **parity 退化情形（有损分级，不反向恢复）**：**G-Q8-1a 是硬条件**——固定短请求
+  （E10.3 workload）上 q8_0 与 f16 必须 token 级 100% 一致（E10.3 已实证 20×6 无损）；
+  agent fanout 负载（更长生成/多轮工具）允许出现 token 级差异，此时 **G-Q8-1a FAIL
+  （该负载无损 parity 不成立）**，由 **G-Q8-1b 量化退化率 ≤2.10%** 作有损描述——
+  最终结论分级：「短请求无损 + agent 负载有损（退化率 X%）→ 容量收益成立、质量有损」，
+  引用 E13.1 边界（仅 ≤16 tokens 验证）与 E10.3 无损范围的差异；
+  **G-Q8-1b 通过不改变 G-Q8-1a FAIL 的结论；不把有损称为无损**（E15.3 先例语义）。
 
 ### 5.2 HOLD / NO_GO 条件（不推断）
 
@@ -327,7 +350,7 @@ llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
 | 1 | Laptop GPU 抖动（E3 先例） | warmup + 中位数 + 严格 paired + 跨轮复现（G-Q8-6） |
 | 2 | p10 高并发下 latency 噪音（M0 f8 例外先例） | n=10 档标注小样本噪音，不单独下结论 |
 | 3 | recurrent 运行期观测缺口（M0 §9.1 未决保留） | 本路线用「启动日志 + 公式」对账；扩展 `llama_kv_stats` 列为**范围外**后续候选 |
-| 4 | q8_0 质量边界（E13.1 仅 ≤16 tokens/≤2.10%） | G-Q8-1 在并发/fanout 负载下重验；超出边界如实降级 |
+| 4 | q8_0 质量边界（E13.1 仅 ≤16 tokens/≤2.10%） | G-Q8-1a（短请求 100%）为硬条件 + G-Q8-1b（退化率 ≤2.10%）作有损描述；超出边界如实降级，不反向恢复 |
 | 5 | 混合组合实测行为未知（源码允许 ≠ 运行期保证） | 探针级启动验证；被拒/无观测 → HOLD（§5.2） |
 | 6 | 8GB 卡 ctx4096 上限（8192 未验证） | 保持 4096；8192 列 NOT_VALIDATED（E13.1 同口径） |
 
@@ -361,14 +384,14 @@ llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
 - `src/llama-model.cpp:2256-2303`（hybrid memory 构造；`2286-2295` recurrent_type 硬编码 F32）
 - `src/llama-context.cpp:260-305`（n_ctx_seq/unified）、`383-393`（llama_memory_params 无 type_r/s）、
   `3560-3596`（K≠V 限制 / FA / block 检查）、`3235-3258`（memory_breakdown context 合并）、`4206-4208`
-- `src/llama-kv-cache.cpp:71-82`（n_stream）、`151-153`（v_cells）、`233-235`（K/V tensor）、
+- `src/llama-kv-cache.cpp:71-82`（n_stream）、`140-143`（v_cells）、`231-232`（K/V tensor）、
   `734-800`（get_kv_stats）、`1910-1913`（total_size）
-- `src/llama-memory-recurrent.cpp:99-126`（RS tensor 分配/日志）、`709-716`（size_r/s_bytes）
+- `src/llama-memory-recurrent.cpp:99-126`（RS tensor 分配/日志）、`709-728`（size_r/s_bytes）
 - `src/llama-memory-hybrid.cpp:182-199`（memory_breakdown 合并 / get_kv_stats 只委托 attention）
 - `src/llama-hparams.cpp:183-230`（n_embd_r/s）、`244-248`（is_mla）
 - `src/models/qwen35.cpp:21-33`（recurrent 层 fallback interval=4）
-- `src/common/arg.cpp:302-313`（kv_cache_types）、`2369-2391`（-ctk/-ctv）、
-  `src/common/common.cpp:1639`（n_seq_max=parallel）、`1667-1668`
-- `src/common/fit.cpp:817-940`（common_memory_breakdown_print；`server.cpp:531` 调用）
+- `common/arg.cpp:302-313`（kv_cache_types）、`2369-2391`（-ctk/-ctv）、
+  `common/common.cpp:1639`（n_seq_max=parallel）、`1667-1668`
+- `common/fit.cpp:817-940`（common_memory_breakdown_print；`server.cpp:531` 调用）
 - `tools/server/server-context.cpp:3106-3135`（kv_stats 组装）、`5328-5364`（/metrics/kv handler）
 - 官方文档：`tools/server/README.md:71-72`、`docs/multi-gpu.md:44-45`（-ctk/-ctv 参数表）
