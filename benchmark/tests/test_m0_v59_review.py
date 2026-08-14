@@ -237,7 +237,7 @@ class TestFormalDvPartialPreflight:
             if calls["n"] == 2:
                 raise openai.APIConnectionError(request=None)
             return [{"ok": True, "error": None, "text": "ACTION: branch(b1)",
-                     "finish_reason": "stop"}] * 10
+                     "finish_reason": "stop"}] * 10, False
 
         def fake_connect(port):
             return (_FakeDrv(), None)

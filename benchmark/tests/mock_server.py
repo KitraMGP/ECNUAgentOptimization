@@ -19,13 +19,10 @@ _KV = {"used_cells": 0, "active_sequences": 0, "erase_disabled": False,
        "slots_malformed": False}  # v52：/slots 返回空列表开关（clean_all_slots 返回 (0,0) 真实路径）；erase_failed 为框架防御码（monkeypatch e2e），无真实端点路径
 # M0（Critical 2）：可配置 finish_reason（"stop" 默认 / "length" 测试决策截断）
 _FINISH = {"reason": "stop"}
-# M0 v49（任务 4）：一次性请求失败开关（500 一次后复位）——模拟"请求级异常但
-# server 进程健康"（warmup 决策异常路径测试；非进程崩溃）
-_ERROR_ONCE = {"on": False}
 # M0 v66（transient retry）：连续 N 次 **chat** 请求失败注入（status 可配置，
 # 默认 500）后自动复位——wrapper 重试测试（首失败后成功 / 连续 3 次失败 /
-# HTTP 400 等）；只作用于 chat.completions 路径（/apply-template、/tokenize、
-# /metrics/kv、/slots、/props、/health 不受影响）。helper：mserver.set_fail(n, status)
+# HTTP 400 等）；v67：**显式限定 /v1/chat/completions 路径**（/apply-template、
+# /tokenize、/metrics/kv、/slots、/props、/health 不受影响）。helper：mserver.set_fail(n, status)
 _FAIL = {"remaining": 0, "status": 500}
 
 
@@ -135,10 +132,13 @@ class _Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
-        # M0 v49（任务 4）：一次性 500（请求级失败、进程健康）
-        if _ERROR_ONCE["on"]:
-            _ERROR_ONCE["on"] = False
-            self.send_response(500)
+        # v66（transient retry）：chat.completions 路径——连续 N 次失败注入
+        # （v67：显式 path 限定，/apply-template、/tokenize、/metrics/kv、/slots、
+        # /props、/health 均不受影响——校准 parity 的 apply-template/tokenize
+        # 前置请求不会被误注入）
+        if self.path.startswith("/v1/chat/completions") and _FAIL["remaining"] > 0:
+            _FAIL["remaining"] -= 1
+            self.send_response(_FAIL["status"])
             self.end_headers()
             return
         length = int(self.headers.get("Content-Length", 0))

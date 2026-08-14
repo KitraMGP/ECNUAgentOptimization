@@ -1,0 +1,149 @@
+{
+ "analysis": "run6 vs run7 配对分析（同 HEAD b6b060f、同命令/硬件，唯一差异 out/tmp run 标识）",
+ "g_m0_6": {
+  "definition": "同配置两次独立 run：TTFT/latency 中位数偏差 ≤10%，决策分支归属一致",
+  "latency_median_ms": {
+   "run6": 467.0,
+   "run7": 451.7
+  },
+  "latency_dev_pct": 3.29,
+  "ttft_median_ms": {
+   "run6": 261.3,
+   "run7": 267.0
+  },
+  "ttft_dev_pct": 2.15,
+  "decision_fallback_consistent": true,
+  "threshold_pct": 10.0,
+  "verdict": "PASS",
+  "computed_as": "归档后跨轮计算（run6-vs-run7 复现性判定，非单 run 机器 gate——单轮 gates 报 NOT_APPLICABLE）",
+  "branch_mismatch": {
+   "cross_run_120_pairs": 0,
+   "off_on_paired_run6_60": 0,
+   "off_on_paired_run7_60": 0,
+   "note": "decision_fallback 全 False（120+120 reps），跨轮与 off-on 严格配对均无分支归属分歧"
+  }
+ },
+ "paired_off_on": {
+  "note": "on 机制在 4B hybrid 被 capability gate 拒绝（shared_cells=0）——off/on 差异为噪音级，不构成共享优化收益（见结论 B）",
+  "run6": {
+   "paired_pairs": 60,
+   "dims": {
+    "all": {
+     "all": {
+      "n": 60,
+      "latency_pct_median": 0.24,
+      "ttft_pct_median": -0.07
+     }
+    },
+    "bucket": {
+     "long": {
+      "n": 10,
+      "latency_pct_median": 2.61,
+      "ttft_pct_median": 2.85
+     },
+     "medium": {
+      "n": 20,
+      "latency_pct_median": -0.18,
+      "ttft_pct_median": -0.07
+     },
+     "short": {
+      "n": 30,
+      "latency_pct_median": 0.24,
+      "ttft_pct_median": -1.13
+     }
+    },
+    "fanout": {
+     "f2": {
+      "n": 30,
+      "latency_pct_median": 0.03,
+      "ttft_pct_median": 0.01
+     },
+     "f4": {
+      "n": 20,
+      "latency_pct_median": 1.12,
+      "ttft_pct_median": 1.03
+     },
+     "f8": {
+      "n": 10,
+      "latency_pct_median": 0.88,
+      "ttft_pct_median": -1.88
+     }
+    },
+    "profile": {
+     "f16": {
+      "n": 30,
+      "latency_pct_median": 1.68,
+      "ttft_pct_median": -0.23
+     },
+     "q8_0": {
+      "n": 30,
+      "latency_pct_median": -0.09,
+      "ttft_pct_median": -0.0
+     }
+    }
+   }
+  },
+  "run7": {
+   "paired_pairs": 60,
+   "dims": {
+    "all": {
+     "all": {
+      "n": 60,
+      "latency_pct_median": 0.62,
+      "ttft_pct_median": 0.99
+     }
+    },
+    "bucket": {
+     "long": {
+      "n": 10,
+      "latency_pct_median": 0.39,
+      "ttft_pct_median": 0.99
+     },
+     "medium": {
+      "n": 20,
+      "latency_pct_median": 0.89,
+      "ttft_pct_median": 1.48
+     },
+     "short": {
+      "n": 30,
+      "latency_pct_median": 0.46,
+      "ttft_pct_median": 0.07
+     }
+    },
+    "fanout": {
+     "f2": {
+      "n": 30,
+      "latency_pct_median": 0.32,
+      "ttft_pct_median": 0.07
+     },
+     "f4": {
+      "n": 20,
+      "latency_pct_median": 1.32,
+      "ttft_pct_median": 1.67
+     },
+     "f8": {
+      "n": 10,
+      "latency_pct_median": 6.88,
+      "ttft_pct_median": 10.27
+     }
+    },
+    "profile": {
+     "f16": {
+      "n": 30,
+      "latency_pct_median": 1.01,
+      "ttft_pct_median": 1.28
+     },
+     "q8_0": {
+      "n": 30,
+      "latency_pct_median": 0.23,
+      "ttft_pct_median": -0.15
+     }
+    }
+   }
+  },
+  "shared_cells_evidence": {
+   "group_baseline_snapshots": "run6/run7 各 12 group baseline /metrics/kv 快照 shared_cells 全 0（共 24 个快照）",
+   "role": "一致性佐证（基线快照，不称全部周期样本）；主证据为 on g6-g11 capability rejection 日志——共享未建立"
+  }
+ }
+}

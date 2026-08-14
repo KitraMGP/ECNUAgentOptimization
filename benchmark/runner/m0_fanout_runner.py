@@ -451,18 +451,14 @@ class M0FanoutRunner:
             return "http_5xx" if code >= 500 else None
         if isinstance(e, openai.APIResponseValidationError):
             return None  # malformed 成功响应不重试
-        # 其余（urllib.HTTPError 等旧路径）：**仅明确 transient 文本**才重试——
-        # 未知异常（IndexError/RuntimeError 等内部 bug，如 driver.py 空 choices）
-        # 一律不重试（与"内部 bug 不重试"一致：宁可标 ERROR 也不重试内部缺陷）
+        # 其余（urllib.HTTPError 等旧路径）：文本 fallback **与 classify_error
+        # 共用单一 helper `_text_transient`**（v68 收紧——模式完全一致；openai
+        # 真实类型分支优先不变）。未知异常（IndexError/RuntimeError 等内部
+        # bug，如 driver.py 空 choices）消息无明确 transient 模式 → None 不重试
         if isinstance(e, urllib.error.HTTPError):
             code = getattr(e, "code", 0)
             return "http_5xx" if 500 <= code < 600 else None
-        low = str(e).lower()
-        if "timed out" in low or "timeout" in low:
-            return "timeout"
-        if "refused" in low or "connection reset" in low:
-            return "connection_error"
-        return None
+        return _text_transient(e)
 
     # ---- 校准（§3.5 步骤 1-3：apply-template + tokenize + parity） ----
 
@@ -598,11 +594,19 @@ class M0FanoutRunner:
 
     # ---- decision validation（G-M0-1 数据源，2 sessions × ≥10） ----
 
-    def _run_decision_session(self, port: int) -> List[Dict[str, Any]]:
-        """单次验证 session：≥10 次决策点请求，逐条记录 valid/invalid/error。"""
+    def _run_decision_session(self, port: int) -> Tuple[List[Dict[str, Any]], bool]:
+        """单次验证 session：≥10 次决策点请求；返回 (recs, crashed)。
+
+        crashed=True 表示 session 因 server 崩溃中断（ServerCrash）——当前
+        崩溃请求已计入 recs 尾部（code=server_crash），剩余请求不再执行。
+        调用方须**无条件**据 crashed 停止后续 session（v68：不得用
+        len(recs)<target 推断——第 target 个请求崩溃时 len==target 仍须停止，
+        否则会错误启动下一个 server）。
+        """
         drv, kv = self._connect(port)
         self._driver, self._kv = drv, kv
         recs: List[Dict[str, Any]] = []
+        crashed = False
         target = VALIDATION_REQUESTS
         for _ in range(target):
             msgs = fp.decision_messages(fp.build_context("short"), fanout=8)
@@ -617,10 +621,20 @@ class M0FanoutRunner:
                 invalid = fp.decision_invalid(text, str(fr), 8)
                 recs.append({"ok": not invalid, "error": None, "text": text,
                              "finish_reason": str(fr)})
+            except ServerCrash:
+                # v67/v68：server 崩溃（wrapper poll 已确认进程退出）——当前
+                # 请求计入 requests/error_count/error_summary code=server_crash，
+                # 立即 break 不再执行剩余请求（server 已死，剩余必败）；
+                # crashed=True 显式信号（v68 边界：第 target 个请求崩溃时
+                # len(recs)==target 仍须停止后续 session）
+                recs.append({"ok": False, "error": "server_crash", "text": "",
+                             "finish_reason": ""})
+                crashed = True
+                break
             except Exception as e:
                 recs.append({"ok": False, "error": classify_error(e), "text": "",
                              "finish_reason": ""})
-        return recs
+        return recs, crashed
 
     def run_decision_validation(self) -> Tuple[bool, List[Dict[str, Any]]]:
         """2 次独立 server 会话验证；返回 (证据完整, sessions)。
@@ -643,7 +657,7 @@ class M0FanoutRunner:
                 break
             before_stop = len(self._stop_errors)
             try:
-                recs = self._run_decision_session(adapter.port)
+                recs, crashed = self._run_decision_session(adapter.port)
             except _INFRA_EXCEPTIONS:
                 # v59：session 级基础设施异常（连接失败等）→ 停止验证阶段
                 # （本 session 不 append），已完成 session 保留 → 上层构造
@@ -658,6 +672,13 @@ class M0FanoutRunner:
                 break
             # v58：session 完成立即同步（异常时本 session 不 append，已完成保留）
             self.decision_sessions.append(self._session_from_recs(recs, control))
+            if crashed:
+                # v68：session 因 server 崩溃中断（**显式 crashed 信号**，不依赖
+                # len(recs)<target——第 target 个请求崩溃时 len==target 仍须停止
+                # 后续 session，否则会错误启动下一个 server）→ 无条件停止；
+                # partial session 已 append 保留证据（尾部含 code=server_crash）
+                # → 上层构造 partial dv → PREFLIGHT_INFRA 合法落盘
+                break
         complete = len(self.decision_sessions) == VALIDATION_SESSIONS and all(
             s["requests"] >= VALIDATION_REQUESTS and s["error_count"] == 0
             for s in self.decision_sessions)
@@ -1630,6 +1651,29 @@ class ServerCrash(Exception):
     """server 运行中崩溃（进程退出）。"""
 
 
+# v68：文本 fallback 分类——`_transient_class` 与 `classify_error` 共用单一
+# helper（模式完全一致）。仅明确 transient 文本：
+# - "timed out"/"timeout" → timeout；
+# - \bconnection\b（connection refused/reset/error/lost/closed 等明确连接
+#   语义）或 failed to connect / unable to connect / cannot connect →
+#   connection_error；
+# 裸 "connect" 不匹配（disconnect/reconnect/connectivity 等内部消息会误判）；
+# 其余（未知内部 bug）→ None（不重试）。
+_TEXT_TIMEOUT_MARKERS = ("timed out", "timeout")
+_TEXT_CONNECTION_RE = re.compile(
+    r"\bconnection\b|failed to connect|unable to connect|cannot connect")
+
+
+def _text_transient(e: Exception) -> Optional[str]:
+    """文本 fallback 的 transient 分类（None = 无明确 transient 模式）。"""
+    low = str(e).lower()
+    if any(m in low for m in _TEXT_TIMEOUT_MARKERS):
+        return "timeout"
+    if _TEXT_CONNECTION_RE.search(low):
+        return "connection_error"
+    return None
+
+
 def classify_error(e: Exception) -> str:
     # v66：按异常类型 + status_code 精确分类（openai SDK 2.x，优先于文本启发式）；
     # 文本 fallback 保留（urllib.HTTPError / 旧路径）。
@@ -1661,10 +1705,11 @@ def classify_error(e: Exception) -> str:
         return "http_4xx" if 400 <= code < 500 else "http_5xx"
     if isinstance(e, (TimeoutError,)):
         return "timeout"
-    if "timed out" in low:
-        return "timeout"
-    if "connection" in low or "refused" in low or "connect" in low:
-        return "connection_error"
+    # v68：文本 fallback 与 `_transient_class` 共用 `_text_transient`
+    # （模式完全一致）；classify_error 无 None 语义 → 未知默认 connection_error
+    cls = _text_transient(e)
+    if cls is not None:
+        return cls
     return "connection_error"
 
 

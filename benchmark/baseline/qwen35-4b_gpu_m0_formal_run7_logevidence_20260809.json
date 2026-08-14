@@ -1,0 +1,104 @@
+{
+ "run_id": "m0-formal-4b-run7",
+ "tmp_dir": "results/m0_fanout_20260809_232046_4067926",
+ "server_logs_key_lines": {
+  "calib": [
+   "0.00.545.167 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.546.172 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB",
+   "0.01.698.133 I llama_kv_cache:      CUDA0 KV buffer size =    68.00 MiB",
+   "0.01.699.353 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB"
+  ],
+  "dv0": [
+   "0.00.476.434 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.478.766 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+   "0.01.184.441 I llama_kv_cache:      CUDA0 KV buffer size =    68.00 MiB",
+   "0.01.187.172 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB"
+  ],
+  "dv1": [
+   "0.00.449.931 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.452.298 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+   "0.01.143.906 I llama_kv_cache:      CUDA0 KV buffer size =    68.00 MiB",
+   "0.01.146.440 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+   "0.01.199.480 W srv    load_model: E8-C1: capability rejected: memory implementation does not support cross-slot prefix metadata sharing (only standard unified attention KV is audited)"
+  ],
+  "g0": [
+   "0.00.471.847 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.472.833 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB",
+   "0.01.187.670 I llama_kv_cache:      CUDA0 KV buffer size =    68.00 MiB",
+   "0.01.188.891 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB"
+  ],
+  "g1": [
+   "0.00.461.190 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.462.608 I llama_memory_recurrent:      CUDA0 RS buffer size =   301.50 MiB",
+   "0.01.159.462 I llama_kv_cache:      CUDA0 KV buffer size =    68.00 MiB",
+   "0.01.161.131 I llama_memory_recurrent:      CUDA0 RS buffer size =   301.50 MiB"
+  ],
+  "g2": [
+   "0.00.474.543 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.476.886 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+   "0.05.660.119 I llama_kv_cache:      CUDA0 KV buffer size =    68.00 MiB",
+   "0.05.662.648 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB"
+  ],
+  "g3": [
+   "0.00.462.726 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.463.710 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB",
+   "0.01.731.891 I llama_kv_cache:      CUDA0 KV buffer size =   128.00 MiB",
+   "0.01.733.340 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB"
+  ],
+  "g4": [
+   "0.00.469.804 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.471.204 I llama_memory_recurrent:      CUDA0 RS buffer size =   301.50 MiB",
+   "0.01.626.844 I llama_kv_cache:      CUDA0 KV buffer size =   128.00 MiB",
+   "0.01.628.698 I llama_memory_recurrent:      CUDA0 RS buffer size =   301.50 MiB"
+  ],
+  "g5": [
+   "0.00.466.787 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.469.162 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+   "0.01.556.897 I llama_kv_cache:      CUDA0 KV buffer size =   128.00 MiB",
+   "0.01.559.835 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB"
+  ],
+  "g6": [
+   "0.00.489.648 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.490.645 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB",
+   "0.04.440.461 I llama_kv_cache:      CUDA0 KV buffer size =    68.00 MiB",
+   "0.04.441.809 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB",
+   "0.04.508.140 W srv    load_model: E8-C1: capability rejected: memory implementation does not support cross-slot prefix metadata sharing (only standard unified attention KV is audited)"
+  ],
+  "g7": [
+   "0.00.495.201 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.496.617 I llama_memory_recurrent:      CUDA0 RS buffer size =   301.50 MiB",
+   "0.01.312.210 I llama_kv_cache:      CUDA0 KV buffer size =    68.00 MiB",
+   "0.01.313.861 I llama_memory_recurrent:      CUDA0 RS buffer size =   301.50 MiB",
+   "0.01.368.667 W srv    load_model: E8-C1: capability rejected: memory implementation does not support cross-slot prefix metadata sharing (only standard unified attention KV is audited)"
+  ],
+  "g8": [
+   "0.00.474.819 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.477.155 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+   "0.02.114.540 I llama_kv_cache:      CUDA0 KV buffer size =    68.00 MiB",
+   "0.02.117.075 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+   "0.02.181.613 W srv    load_model: E8-C1: capability rejected: memory implementation does not support cross-slot prefix metadata sharing (only standard unified attention KV is audited)"
+  ],
+  "g9": [
+   "0.00.533.150 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.534.119 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB",
+   "0.02.165.859 I llama_kv_cache:      CUDA0 KV buffer size =   128.00 MiB",
+   "0.02.167.510 I llama_memory_recurrent:      CUDA0 RS buffer size =   201.00 MiB",
+   "0.02.226.214 W srv    load_model: E8-C1: capability rejected: memory implementation does not support cross-slot prefix metadata sharing (only standard unified attention KV is audited)"
+  ],
+  "g10": [
+   "0.00.515.265 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.516.674 I llama_memory_recurrent:      CUDA0 RS buffer size =   301.50 MiB",
+   "0.01.259.061 I llama_kv_cache:      CUDA0 KV buffer size =   128.00 MiB",
+   "0.01.260.932 I llama_memory_recurrent:      CUDA0 RS buffer size =   301.50 MiB",
+   "0.01.320.889 W srv    load_model: E8-C1: capability rejected: memory implementation does not support cross-slot prefix metadata sharing (only standard unified attention KV is audited)"
+  ],
+  "g11": [
+   "0.00.477.224 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+   "0.00.479.564 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+   "0.01.957.321 I llama_kv_cache:      CUDA0 KV buffer size =   128.00 MiB",
+   "0.01.960.079 I llama_memory_recurrent:      CUDA0 RS buffer size =   502.50 MiB",
+   "0.02.028.992 W srv    load_model: E8-C1: capability rejected: memory implementation does not support cross-slot prefix metadata sharing (only standard unified attention KV is audited)"
+  ]
+ },
+ "note": "完整 -lv5 日志留 results/m0_fanout_* 专属目录（gitignore 不入库）"
+}

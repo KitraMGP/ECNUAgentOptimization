@@ -339,7 +339,7 @@ class TestSmoke:
             if calls["n"] == 2:  # session 1（control=on）中途抛异常
                 raise RuntimeError("mock dv boom")
             return [dict(ok=True, error=None, finish_reason="stop",
-                         text="ACTION: branch(b1)")] * 10
+                         text="ACTION: branch(b1)")] * 10, False
 
         monkeypatch.setattr(m0r.M0FanoutRunner, "_run_decision_session", fake_run_session)
         rep = run_short_calibration(**cal_args(tmp_path))

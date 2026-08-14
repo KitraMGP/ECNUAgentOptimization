@@ -212,7 +212,7 @@ class TestCritical2FinishReason:
         r._stop_server()
         with MockOpenAIServer(finish_reason="length") as srv:
             r._driver, r._kv = r._connect(srv.port)
-            recs = r._run_decision_session(srv.port)
+            recs, _ = r._run_decision_session(srv.port)
         sess = sch.build_decision_session(
             requests=len(recs),
             valid=sum(1 for x in recs if x["ok"] and x["error"] is None),
@@ -1133,8 +1133,8 @@ class TestWarmupEraseV49:
             monkeypatch.setattr(KVProbe, "clean_all_slots", _clean)
             uid = sch.unit_id_of("off", "q8_0", "q8_0", 2, "short")
             gid = sch.group_id_of("off", "q8_0", "q8_0", 2)
-            # v66：transient wrapper 会重试 500——一次性注入（_ERROR_ONCE）会被
-            # 第 2 次尝试成功吸收、不再走异常路径；改用连续 3 次 500（retry 耗尽）
+            # v66：transient wrapper 会重试 500——一次性注入会被第 2 次尝试
+            # 成功吸收、不再走异常路径；改用连续 3 次 500（retry 耗尽）
             # 触发 warmup 决策异常（server 健康 → 记 note / 上层 poll 忽略）
             mserver.set_fail(3)
             try:

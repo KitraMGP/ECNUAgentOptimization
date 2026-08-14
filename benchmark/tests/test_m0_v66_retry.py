@@ -20,6 +20,7 @@
 """
 from __future__ import annotations
 
+import threading
 import urllib.error
 
 import pytest
@@ -147,6 +148,50 @@ class TestTransientClass:
             urllib.error.HTTPError(
                 "http://t", 400, "bad", None, None)) is None
 
+    def test_text_connection_patterns_retryable(self):
+        """v68：明确 connection 文本模式（非 openai 类型，走 _text_transient）
+        → connection_error 可重试；URLError refused 同。"""
+        for msg in ("Connection refused", "Connection reset by peer",
+                    "Connection error.", "Connection lost.",
+                    "Failed to connect to host", "Unable to connect",
+                    "Cannot connect to server"):
+            assert m0r.M0FanoutRunner._transient_class(
+                Exception(msg)) == "connection_error", msg
+        assert m0r.M0FanoutRunner._transient_class(
+            urllib.error.URLError("Connection refused")) == "connection_error"
+
+    def test_text_disconnect_reconnect_not_misclassified(self):
+        """v68 误匹配反例：裸 connect/disconnect/reconnect/connectivity 等
+        内部消息不得被文本 fallback 归为 connection_error（收紧，不再重试）。"""
+        for msg in ("Disconnected from server", "disconnected",
+                    "Reconnecting in 5s", "reconnect attempt",
+                    "connectivity issue", "no route to connect",
+                    "index out of range"):
+            assert m0r.M0FanoutRunner._transient_class(
+                Exception(msg)) is None, msg
+
+    def test_text_timeout_retryable(self):
+        """v68：文本 timeout 模式（非 openai 类型）→ timeout 可重试。"""
+        assert m0r.M0FanoutRunner._transient_class(
+            Exception("Request timed out")) == "timeout"
+        assert m0r.M0FanoutRunner._transient_class(
+            TimeoutError("socket timed out")) == "timeout"
+
+    def test_classify_error_shared_text_helper(self):
+        """v68：classify_error 与 _transient_class 共用 _text_transient——
+        同一文本在两者下分类一致（connection 正例；disconnect 反例归类默认值
+        而非 connection_error——classify_error 无 None 语义时落默认 connection_error，
+        但 _transient_class 必须 None 不重试）。"""
+        # 正例：明确 connection 文本两者一致
+        e = urllib.error.URLError("Connection refused")
+        assert m0r._text_transient(e) == "connection_error"
+        assert m0r.classify_error(e) == "connection_error"
+        assert m0r.M0FanoutRunner._transient_class(e) == "connection_error"
+        # 反例：disconnect 文本 _transient_class 不重试
+        d = Exception("Disconnected from server")
+        assert m0r._text_transient(d) is None
+        assert m0r.M0FanoutRunner._transient_class(d) is None
+
 
 class TestChatWrapperUnit:
     def test_first_attempt_fails_then_success(self, tmp_path):
@@ -256,7 +301,7 @@ class TestStageCoverage:
         try:
             r = make_runner(tmp_path, adapter)
             mserver.set_fail(1)
-            recs = r._run_decision_session(adapter.port)
+            recs, _ = r._run_decision_session(adapter.port)
             assert len(recs) == m0r.VALIDATION_REQUESTS
             assert all(rec["error"] is None for rec in recs)  # 无 ERROR 记录
         finally:
@@ -275,19 +320,30 @@ class TestStageCoverage:
             adapter.stop()
 
     def test_branch_threadpool_uses_wrapper_no_deadlock(self, tmp_path, monkeypatch):
-        """ThreadPool branch：分支第一条 transient 500 → wrapper 重试成功 →
-        所有分支无 error、barrier 正常放行（重试 sleep 不阻塞其他线程）。"""
+        """ThreadPool branch：分支阶段恰好一次 transient 500 → wrapper 重试成功 →
+        所有分支无 error、barrier 正常放行（重试 sleep 不阻塞其他线程）。
+
+        v67：分支线程并发，计数/注入用 Lock 保护——只有**一个**分支线程触发
+        set_fail(1)（inject.done 保证恰好一次）；断言注入被消费
+        （_FAIL.remaining==0 = 某分支 chat 收到 500 后 wrapper 重试成功，
+        即 retry 确实发生，而非注入未命中）。"""
         adapter = FakeAdapter([], "", 0)
         adapter.start()
         try:
             r = make_runner(tmp_path, adapter)
             calls = {"n": 0}
+            inject = {"done": False}
+            lock = threading.Lock()
             orig_chat = r._chat
 
             def counting_chat(msgs, **kw):
-                calls["n"] += 1
-                if calls["n"] == 2:  # 分支阶段第一条 chat（决策已成功）
-                    mserver.set_fail(1)
+                with lock:
+                    calls["n"] += 1
+                    # 决策（1 次）成功后，分支阶段（fanout=2 并发）首个进入的
+                    # 线程注入恰好一次 500；其余线程（inject.done）不再注入
+                    if not inject["done"] and 2 <= calls["n"] <= 3:
+                        inject["done"] = True
+                        mserver.set_fail(1)
                 return orig_chat(msgs, **kw)
 
             monkeypatch.setattr(r, "_chat", counting_chat)
@@ -296,11 +352,16 @@ class TestStageCoverage:
             assert not any(b.get("error") for b in rep["metrics"]["branches"])
             # barrier 正常放行：分支观测齐（fanout=2）
             assert len(rep["metrics"]["branches"]) == 2
+            # v67：注入确实发生且被 wrapper 重试吸收（retry 发生）
+            assert inject["done"] is True
+            assert mserver._FAIL["remaining"] == 0
         finally:
             adapter.stop()
 
     def test_tool_round_uses_wrapper(self, tmp_path, monkeypatch):
-        """工具轮 chat：工具轮第一条 transient 500 → wrapper 重试成功 → rep OK。"""
+        """工具轮 chat：工具轮第一条 transient 500 → wrapper 重试成功 → rep OK。
+
+        v67：补 retry 发生断言——注入被消费（_FAIL.remaining==0）。"""
         adapter = FakeAdapter([], "", 0)
         adapter.start()
         try:
@@ -317,6 +378,7 @@ class TestStageCoverage:
             monkeypatch.setattr(r, "_chat", counting_chat)
             rep = r._run_unit(UID, 2, "short", "q8_0", "q8_0", GID, 0)
             assert rep["status"] in ("OK", "INVALID_DECISION")  # 工具轮恢复，无 ERROR
+            assert mserver._FAIL["remaining"] == 0  # v67：注入被消费 = retry 发生
         finally:
             adapter.stop()
 
@@ -384,5 +446,6 @@ class TestRepPeakMem:
             # 已有成功样本（决策 + 分支）保留，非 0.0 占位
             assert rep["metrics"]["peak_rss_mb"] == 99.0
             assert rep["metrics"]["peak_gpu_mb"] == 44.0
+            assert mserver._FAIL["remaining"] == 0  # v67：3 次注入全消费（retry 耗尽）
         finally:
             adapter.stop()
