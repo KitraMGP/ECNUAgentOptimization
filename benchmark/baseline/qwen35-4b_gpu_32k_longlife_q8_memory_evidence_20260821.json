@@ -1,0 +1,70 @@
+{
+  "experiment_id": "qwen35-4b-gpu-32k-longlife-q8-repeat-20260821",
+  "variant": "q8_0_profile_repeat_measurement",
+  "status": "REPEAT_MEASUREMENT_NOT_F16_PAIRED",
+  "model": "models/Qwen3.5-4B-Q4_K_M.gguf",
+  "ctx_size": 32768,
+  "parallel": 1,
+  "cache_type_k": "q8_0",
+  "cache_type_v": "q8_0",
+  "kv_unified": true,
+  "temperature": 0.0,
+  "seed": 42,
+  "scenario": "long_life",
+  "long_rounds": 40,
+  "warmup": 2,
+  "formal_repeats": 5,
+  "extended_repeats": 10,
+  "results": [
+    "benchmark/baseline/qwen35-4b_gpu_32k_longlife_q8_repeat5_run1_20260821.json",
+    "benchmark/baseline/qwen35-4b_gpu_32k_longlife_q8_repeat5_run2_20260821.json",
+    "benchmark/baseline/qwen35-4b_gpu_32k_longlife_q8_repeat10_variance_20260821.json"
+  ],
+  "server_logs": [
+    "results/bench32k_server.log",
+    "results/bench32k_q8_server.log"
+  ],
+  "allocation_observation": {
+    "attention_kv_mib": 544.0,
+    "k_mib": 272.0,
+    "v_mib": 272.0,
+    "recurrent_state_mib": 50.25,
+    "cuda_memory_breakdown_mib": 3376.0,
+    "peak_gpu_mb": 3502.0
+  },
+  "repeat5_run1_summary": {
+    "throughput_tps_mean": 1816.35,
+    "decode_tps_mean": 74.18,
+    "peak_gpu_mb_mean": 3502.0,
+    "peak_rss_mb_mean": 2975.48,
+    "state_retention_rate_mean": 1.0,
+    "truncations_mean": 0.0
+  },
+  "repeat5_run2_summary": {
+    "throughput_tps_mean": 1837.584,
+    "decode_tps_mean": 74.82,
+    "peak_gpu_mb_mean": 3502.0,
+    "peak_rss_mb_mean": 4764.62,
+    "state_retention_rate_mean": 1.0,
+    "truncations_mean": 0.0
+  },
+  "repeat10_variance_summary": {
+    "throughput_tps_mean": 1805.274,
+    "decode_tps_mean": 74.098,
+    "peak_gpu_mb_mean": 3502.0,
+    "peak_rss_mb_mean": 3001.4,
+    "peak_rss_mb_p95": 4480.6,
+    "state_retention_rate_mean": 1.0,
+    "truncations_mean": 0.0,
+    "rss_status": "NOISY"
+  },
+  "paired_comparison_note": "Both prior 32K long_life runs used q8_0/q8_0. They are not f16-to-q8_0 paired evidence. A new f16 baseline is required.",
+  "workload_limitations": [
+    "long_life 40 rounds did not trigger truncation",
+    "maximum prompt was far below 32768 tokens",
+    "the result validates the q8_0 profile and workload stability, not full 32K saturation"
+  ],
+  "reproduction_commands": [
+    "cd benchmark && uv run python agent_bench.py --host 127.0.0.1 --port <port> --scenario long_life --long-rounds 40 --ctx-size 32768 --parallel 1 --repeat 5 --warmup 2 --seed 42 --temperature 0 --model-path ../models/Qwen3.5-4B-Q4_K_M.gguf --output-dir results"
+  ]
+}
