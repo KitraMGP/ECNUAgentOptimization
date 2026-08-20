@@ -127,6 +127,42 @@ def test_long_life_state_retention_failure():
     assert ev["task_success"] is False
 
 
+def test_realistic_agent_trace_and_recovery():
+    responses = [
+        default_row(text="计划已创建。"),
+        default_row(text="ACTION: search_orders(customer_id=C-10086)"),
+        default_row(text="ACTION: get_order_detail(order_id=SO-7319)"),
+        default_row(text="ACTION: get_order_detail(order_id=SO-7319)"),
+        default_row(text="ACTION: update_order(order_id=SO-7319, status=approved)"),
+        default_row(text="ACTION: verify_order(order_id=SO-7319)"),
+        default_row(text=("{\"task_id\":\"TASK-AGENT-20260821\",\"order_id\":"
+                          "\"SO-7319\",\"total\":\"598.00\",\"status\":\"approved\"}")),
+    ]
+    drv = FakeDriver(responses=responses)
+    wl = get_workload("realistic_agent")
+    spec = wl.generate({"rounds": 7, "payload_chars": 512})
+    result = wl.run(drv, spec)
+    ev = wl.evaluate(result, spec)
+    assert len(result["rows"]) == 7
+    assert ev["task_success"] is True
+    assert ev["retry_recovered"] is True
+    assert ev["order_updated"] is True
+    assert ev["order_verified"] is True
+    assert ev["tool_errors"] == 1
+    assert [r["action"] for r in result["rows"]] == [
+        None, "search_orders", "get_order_detail", "get_order_detail",
+        "update_order", "verify_order", None,
+    ]
+
+
+def test_realistic_agent_fingerprint_and_payload_parameter():
+    wl = get_workload("realistic_agent")
+    a = wl.generate({"rounds": 7, "payload_chars": 512})
+    b = wl.generate({"rounds": 7, "payload_chars": 4096})
+    assert a.fingerprint() != b.fingerprint()
+    assert a.meta["trace"].startswith("plan>")
+
+
 def test_spec_fingerprint_deterministic():
     wl = get_workload("multi_turn")
     s1 = wl.generate({"rounds": 20})
@@ -138,5 +174,5 @@ def test_spec_fingerprint_deterministic():
 
 def test_registry_has_all_scenarios():
     assert set(get_workload(n).name for n in
-               ["multi_turn", "tool_call", "branch", "long_life"]) == {
-        "multi_turn", "tool_call", "branch", "long_life"}
+               ["multi_turn", "tool_call", "branch", "long_life", "realistic_agent"]) == {
+        "multi_turn", "tool_call", "branch", "long_life", "realistic_agent"}

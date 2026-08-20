@@ -29,6 +29,7 @@ SCENARIO_TITLES = {
     "tool_call": "场景2 工具调用",
     "branch": "场景3 分支推理",
     "long_life": "场景4 长生命周期",
+    "realistic_agent": "场景5 真实 Agent 模拟",
 }
 
 # all 的展开（与旧脚本一致：不含 long_life）
@@ -272,13 +273,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--port", type=int, default=None)
     ap.add_argument("--server-url", default=None, help="OpenAI 兼容 base_url（默认 http://host:port/v1）")
     ap.add_argument("--scenario",
-                    choices=["multi_turn", "tool_call", "branch", "long_life", "all"],
+                    choices=["multi_turn", "tool_call", "branch", "long_life", "realistic_agent", "all"],
                     default=None)
     ap.add_argument("--rounds", type=int, default=None)
     ap.add_argument("--tool-steps", type=int, default=None)
     ap.add_argument("--branch-rounds", type=int, default=None)
     ap.add_argument("--long-rounds", type=int, default=None)
     ap.add_argument("--long-secret", default=None)
+    ap.add_argument("--realistic-rounds", type=int, default=None)
+    ap.add_argument("--realistic-payload-chars", type=int, default=None)
     ap.add_argument("--ctx-size", type=int, default=None,
                     help="llama-server 的上下文长度（需与 server --ctx-size 一致）")
     ap.add_argument("--model-path", default=None, help="GGUF 模型文件路径（空则从 /props 探测）")
@@ -317,6 +320,8 @@ def cli_main(argv: Optional[List[str]] = None) -> int:
         "scenario": args.scenario, "rounds": args.rounds,
         "tool_steps": args.tool_steps, "branch_rounds": args.branch_rounds,
         "long_rounds": args.long_rounds, "long_secret": args.long_secret,
+        "realistic_rounds": args.realistic_rounds,
+        "realistic_payload_chars": args.realistic_payload_chars,
         "ctx_size": args.ctx_size, "repeat": args.repeat, "warmup": args.warmup,
         "seed": args.seed, "temperature": args.temperature,
         "output_dir": args.output_dir, "report_path": args.report,

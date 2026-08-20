@@ -1,7 +1,7 @@
 # Agent 工作流 Benchmark
 
 面向智能体的内存管理系统赛题的评测框架：在 llama-server 的 OpenAI 兼容 API 上，
-对多轮对话 / 工具调用 / 分支推理 / 长生命周期 / 分支压力五类 agent 工作流做
+对多轮对话 / 工具调用 / 分支推理 / 长生命周期 / realistic agent / 分支压力六类 agent 工作流做
 **KV 缓存、内存、延迟、并发承载**指标的量化评测。
 
 E0 完成基础设施重构；E1-E4 逐步接入 KV 观测（`/metrics/kv`）、unified 价值感知
@@ -24,6 +24,7 @@ benchmark/
 │   ├── tool_call.py     #   工具调用（文本 ACTION 协议）
 │   ├── branch.py        #   分支推理（公共前缀派生 A/B）
 │   ├── long_life.py     #   长生命周期（秘密数字 + 应用层截断）
+│   ├── realistic_agent.py # L2：规划/工具链/失败重试/状态更新/总结
 │   └── branch_pressure.py # 分支压力（E2.5：双分支 JSON evaluator）
 ├── scripts/             # 各阶段实验 runner（e2-e4 系列 + 诊断/汇总）
 ├── schemas/             # 匿名 lifecycle trace schema（E3.5）
@@ -59,6 +60,8 @@ cd benchmark
 uv run python agent_bench.py --scenario multi_turn --rounds 20      # 单场景
 uv run python agent_bench.py --scenario all                          # 三场景（同旧脚本）
 uv run python agent_bench.py --scenario long_life --long-rounds 40 --ctx-size 2048
+uv run python agent_bench.py --scenario realistic_agent --realistic-rounds 10 \
+  --realistic-payload-chars 12000 --ctx-size 32768 --parallel 1
 uv run python agent_bench.py --config configs/example.yaml           # 配置文件驱动
 ```
 
@@ -79,7 +82,7 @@ uv run python agent_bench.py --config configs/example.json \
 |---|---|---|
 | `--host` / `--port` | 127.0.0.1 / 8080 | llama-server 地址 |
 | `--server-url` | （空） | 显式 OpenAI base_url，如 `http://127.0.0.1:8080/v1` |
-| `--scenario` | all | multi_turn / tool_call / branch / long_life / all |
+| `--scenario` | all | multi_turn / tool_call / branch / long_life / realistic_agent / all |
 | `--repeat` | 1 | 正式重复次数（1 = 与旧脚本行为一致；>1 时结果含 `runs` 与聚合统计） |
 | `--warmup` | 0 | 预热轮数（不计入统计） |
 | `--seed` | 42 | 确定性种子（配合 temperature=0） |
@@ -90,6 +93,8 @@ uv run python agent_bench.py --config configs/example.json \
 | `--parallel N` | 自动探测 | server 并行 slot 数（与 `--ctx-size` 平分语义相关，用于 ctx 检查） |
 | `--report PATH` | 无 | 生成 markdown 实验报告 |
 | `--ctx-size` | 2048 | 需与 llama-server `--ctx-size` 一致（long_life 场景触发 KV 回收） |
+| `--realistic-rounds` | 10 | realistic_agent 阶段数（至少 7） |
+| `--realistic-payload-chars` | 12000 | realistic_agent 详情工具 payload 大小 |
 
 ## Workload 接口
 
@@ -103,9 +108,17 @@ uv run python agent_bench.py --config configs/example.json \
 
 ## 测试
 
+测试分层：
+
+- **L0 回归**：`multi_turn`、`tool_call`、基础 `branch`，验证 API 和基本结果结构；
+- **L1 机制**：`long_life`、`branch_pressure`、E15 分支并发、M0 fanout，验证生命周期、分支和资源归因；
+- **L2 真实 Agent 模拟**：`realistic_agent`，验证规划、工具链、一次 transient failure 重试、状态更新、校验和最终总结。
+
+L0/L1/L2 目前均使用确定性 workload；L2 不声称真实互联网工具质量，工具延迟和返回值由 workload 固定，便于 baseline/candidate paired。
+
 ```bash
 cd benchmark
-uv run pytest -q        # 42 个用例：config/driver/metrics/workloads/runner/report/e2e 冒烟
+uv run pytest -q        # 全量：分层 workload、driver、metrics、runner、report 与 e2e 冒烟
 ```
 
 测试不依赖 GPU / 真实 llama-server：Driver 走 mock（单测）与本地 mock HTTP server（e2e，含
