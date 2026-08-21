@@ -5,6 +5,7 @@
 ## Project
 
 - 目标：在保证推理效果前提下降低智能体推理的显存/内存占用与延迟（赛题要求优化前后同硬件对比）。
+- **具体目标应参见文件`实习题目.md`。**
 - 技术栈：llama.cpp（C++ 推理框架，qwen35 架构）+ Python 3.13 / uv（benchmark）+ OpenAI 兼容 API。
 - 入口：`benchmark/agent_bench.py`（兼容入口，委托 `runner.cli_main`）；核心优化代码位于 `llama.cpp/tools/server/`（slot 生命周期策略层）与 `llama.cpp/src/`（KV 统计接口）。
 - 模型：Qwen3.5-4B（GPU 正式；GGUF `qwen3-5-4B-Q4_K_M.gguf`，当前已下载）/ Qwen3.5-0.8B（CPU 开发；`Qwen3.5-0.8B-Q4_K_M.gguf`，可脚本拉取）/ Qwen2.5-0.5B（最小验证；`qwen2.5-0.5b-instruct-q4_k_m.gguf`，可脚本拉取），GGUF 在 `models/`（不入库）。
@@ -61,6 +62,7 @@ uv run python agent_bench.py --scenario long_life --long-rounds 40   # 长生命
 - **模型能力限制**：Qwen3.5-0.8B 指令遵循不稳定（工具参数可能填错）；默认 `--no-think`/`enable_thinking:false` 防思考循环。
 - **不要自己尝试安装软件包**：如果需要安装非普通 uv Python 依赖的软件包，需要使用 root 权限安装软件，或者需要写入不可写目录，不要自己操作，请停下来让用户操作。
 - **AGENTS.md 必须及时更新**：当命令、目录结构、约定或架构发生变化时，本文件应在该变更落地后立即同步更新，保持准确——这是每个 agent 与协作者的职责，不要等到项目结束时才补。
+- **用户要求执行已经达成的目标时要告知用户已实现**：用户要求执行某操作（如清理文档中冗余内容、清理冗余代码、确保符合xxx约束等等），如果用户要求达到的目标已经达到而无需操作，应该告知用户。
 
 ## Notes
 
