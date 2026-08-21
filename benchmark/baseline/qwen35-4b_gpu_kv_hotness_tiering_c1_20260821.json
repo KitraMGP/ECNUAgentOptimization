@@ -1,0 +1,26 @@
+{
+  "date": "2026-08-21T14:45:16Z",
+  "model": "/home/kitra/Projects/ECNUTraining/models/Qwen3.5-4B-Q4_K_M.gguf",
+  "server": "/home/kitra/Projects/ECNUTraining/llama.cpp/build-cuda/bin/llama-server",
+  "port": 8091,
+  "scenarios": {
+    "C1": {
+      "name": "C1",
+      "first_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+      "recall_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+      "first_prompt_n": 238,
+      "recall_prompt_n": 238,
+      "spills": 1,
+      "restores": 1,
+      "l2_entries_after_spill": 1,
+      "l2_bytes_after_spill": 60724816,
+      "l2_entries_after_restore": 1,
+      "tiering_mode": "ram,disk",
+      "l2_cap_ok": true,
+      "hash_match": true,
+      "suffix_prefill": false,
+      "pass": true
+    }
+  },
+  "all_pass": true
+}
