@@ -1,11 +1,18 @@
 # M0-Q8：q8_0/混合 KV 容量研究设计（Hybrid KV Capacity Design）
 
-> 状态：**DESIGN ONLY**——本阶段仅做技术调研与设计，**不实现代码、不运行正式 GPU 实验**。
+> 状态：**DESIGN CONTRACT + IMPLEMENTED PROBE**——本文保留原始设计合同；实现与本轮探针结果见 `docs/M0_Q8_HYBRID_KV_CAPACITY_RESULT_20260821.md`。正式多轮 32K GPU paired matrix 仍未完成。
 > 日期：2026-08-09 ｜ 前置：M0 正式收口（根仓库 `3ae6bb6`，benchmark PASS；4B hybrid 共享优化
 > NOT_APPLICABLE/NO_GAIN，见 `docs/M0_FINAL_RESULT.md`）｜ llama.cpp HEAD `4a699aaad`（8570，零改动）。
 > 路线定位：**独立路线**，不依赖 M0 的共享机制（`--kv-prefix-share` 在 4B hybrid 上被 capability gate
 > 拒绝），而是对**上游既有参数组合 `--cache-type-k/v`** 在 hybrid 模型上的容量/质量/性能边界做
 > 系统性量化——**不宣称任何自研算法**。
+
+> **Implementation follow-up (2026-08-21):** The design-only baseline below remains the
+> historical experiment contract. The follow-up implementation adds component metrics,
+> explicit recurrent type/capacity configuration, and the exact-token `needle` workload.
+> Qwen3.5-4B q8/F32 and Q4/F32 startup/smoke probes passed; F16/BF16 recurrent state is
+> explicitly rejected by the current CUDA graph (F32-only), and reduced recurrent row
+> capacity is explicitly rejected because seq_id currently addresses physical rows.
 
 ---
 
@@ -15,9 +22,9 @@
 |---|---|
 | 前置路线 M0 | 已收口：`verdict=PASS`（run6/run7，120/120 reps OK）；两层结论 A（benchmark 基础设施）PASS / B（on 机制优化收益）NOT_APPLICABLE/NO_GAIN |
 | 本路线问题 | q8_0/混合 KV 容量在 Qwen3.5-4B hybrid 上的**真实收益边界**：只降 attention KV，还是影响全部 hybrid state？ |
-| 核心事实（源码级，§1/§2） | `--cache-type-k/v` **只作用于 attention 部分**；recurrent R/S **硬编码 F32**、与 ctx 无关、随 parallel 线性 |
+| 核心事实（源码级，§1/§2） | `--cache-type-k/v` **只作用于 attention 部分**；recurrent 默认/当前可运行类型为 F32、与 ctx 无关、随 parallel 线性 |
 | 预期结论形态 | 「局部容量收益、非全 hybrid state 优化」（§5.1）——若混合组合被拒绝/无独立观测则 HOLD/NO_GO（§5.2） |
-| 本阶段交付 | 本设计文档 + AGENTS.md 同步（路线状态：M0 已收口、q8 路线 DESIGN ONLY） |
+| 本阶段交付 | 设计合同 + 实现探针结果文档 + AGENTS.md 同步（正式 32K matrix 未完成） |
 
 ---
 
@@ -65,25 +72,24 @@
 
 ### 1.4 /metrics/kv 观测边界
 
-- **`get_kv_stats` 只委托 attention 部分**（`src/llama-memory-hybrid.cpp:190-194`，注释
-  "recurrent state is not part of the KV cache statistics"）；`seq_cell_stats` 同样只委托 attention
-  （`:196-199`）。
+- 原始设计时 **`get_kv_stats` 只委托 attention 部分**；本轮已扩展为 additive 分组件快照：attention
+  保留既有字段，hybrid/recurrent 增加 recurrent R/S bytes、rows、`n_seq_max`、`n_rs_slots`；
+  `seq_cell_stats` 仍只统计 attention cell。
 - `llama_kv_cache::get_kv_stats`（`src/llama-kv-cache.cpp:734-800`）：`capacity_bytes = total_size()`（**预分配
   固定容量**，不含权重）；`used_bytes = used_cells × kv_bytes / capacity_cells`（仅无 SWA 时有效）；
   `capacity_cells/used_cells/shared_cells/active_sequences`；`physical_sharing = false` 恒 false（无 COW）。
 - HTTP 端：`GET /metrics/kv`（`tools/server/server-context.cpp:5328-5364`，推理线程执行、与 KV 变更串行化；
   组装点 `:3106-3135`）。
-- **recurrent 无任何运行期接口**：唯一细分 = 启动日志 `RS buffer size` + 退出时
-  `common_memory_breakdown_print`（`common/fit.cpp:817-940`，`server.cpp:531` 调用）——hybrid 下
-  `context` 列 = attn+recr **合并**（`llama_context::memory_breakdown`，`src/llama-context.cpp:3235-3258`），
-  **无法拆分**。
+- **recurrent metrics 边界**：本轮新增只读分组件 capacity snapshot；可拆分预分配 R/S bytes
+  与 row 配置，但不提供 recurrent token/state 使用率。hybrid 的 `memory_breakdown` context 列
+  仍为 attn+recr 合并。
 
 ### 1.5 为什么 q8_0 不改变 recurrent state（源码链路）
 
 ```
 common/arg.cpp:2369-2391   -ctk/-ctv 解析 → params.cache_type_k/v
 common/common.cpp:1667-1668 → cparams.type_k/v
-llama-context.cpp:383-393   llama_memory_params = { type_k, type_v }（无 type_r/type_s）
+llama-context.cpp:383-393   llama_memory_params = { type_k, type_v, type_r, type_s }
 llama-model.cpp:2286-2295   llama_memory_hybrid 构造：
                               attn_type_k/v ← params.type_k/v（受 -ctk/-ctv 影响）
                               recurrent_type_k/v ← GGML_TYPE_F32（硬编码）
@@ -107,8 +113,10 @@ llama-model.cpp:2286-2295   llama_memory_hybrid 构造：
 ### 2.2 生效范围：只作用于 attention 部分
 
 - 源码链路见 §1.5：`llama_memory_hybrid` 构造时 `attn_type_k/v ← params.type_k/v`、
-  `recurrent_type_k/v ← GGML_TYPE_F32`（`src/llama-model.cpp:2286-2295`）。
-- **对 hybrid 模型，"KV cache type" 语义 = attention KV cache type**；recurrent state 无 CLI 开关
+- `recurrent_type_r/s` 现在来自显式 context 参数，默认 F32；当前 CUDA recurrent graph 对 F16/BF16
+  在 context 创建阶段拒绝（不隐式回退）。
+- **对 hybrid 模型，"KV cache type" 语义 = attention KV cache type**；recurrent state 另有
+  `--cache-type-r/--cache-type-s` CLI 开关，但当前可运行 profile 仍限 F32
   （E9.4 结论 4「`-ctk/-ctv` 在 hybrid 上不可用」为历史笔误——实为单横线短参数名 `-ctk` 误写为
   `--ctk` 导致解析失败，长参数 `--cache-type-k/v` 实测可用且已修正（E9.4 第 18 行补测）；本设计
   以 `--cache-type-k/v` 为准）。
@@ -184,16 +192,17 @@ llama-model.cpp:2286-2295   llama_memory_hybrid 构造：
 |---|---|---|---|
 | **capacity（固定预分配）** | KV buffer 总量，由 ctx × per-cell 决定 | `/metrics/kv capacity_bytes`、启动日志 KV 分配行 | **是**（q8_0 68 vs f16 128 MiB @ctx4096） |
 | **used cells（运行期占用）** | attention cells 中实际被序列占用的数量 | `/metrics/kv used_cells`（erase 后可归零验证） | 否（容量不变，占用与负载相关） |
-| **recurrent state** | RS buffer 总量 + 运行期状态 | **总量：启动日志 `RS buffer size`；运行期：无接口** | **否**（恒 F32，50.25 MiB/slot） |
+| **recurrent state** | RS buffer 总量 + 运行期状态 | **总量：启动日志 + `/metrics/kv` recurrent snapshot；运行期使用率：无接口** | **否**（当前可运行 profile 恒 F32，50.25 MiB/slot） |
 
 - GPU/RSS 总量差分只能看到**三者之和**（+权重+compute）；本路线的容量归因必须按 §3.1 公式
   对账，**禁止把 GPU 总量差直接称为"KV 容量收益"**。
-- **recurrent 运行期不可观测**（§9.1 M0 未决问题保留）：本路线不新增 llama.cpp 扩展
-  （DESIGN ONLY；若后续需要运行期 recurrent 计数，需最小扩展 `llama_kv_stats`——列为**本路线范围外**）。
+- **recurrent 运行期观测边界**：本轮已新增只读 capacity snapshot；当前字段描述预分配 R/S
+  容量与 row 配置，不等同于 recurrent 运行期 token/state 使用率。仍不得用 GPU 总量差分伪造
+  recurrent 使用率。
 
 ---
 
-## 4. 下一实验设计与门禁（DESIGN ONLY——本阶段不执行）
+## 4. 下一实验设计与门禁（正式 32K matrix 尚未执行）
 
 ### 4.1 实验目标与判定问题
 
@@ -360,10 +369,10 @@ llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
 
 | 项 | 状态 |
 |---|---|
-| `docs/M0_Q8_HYBRID_KV_CAPACITY_DESIGN.md`（本文档） | ✅ 本阶段唯一交付 |
-| AGENTS.md 同步：M0 路线状态 = **已收口**（3ae6bb6）；q8 路线 = **DESIGN ONLY** | ✅ 随本阶段提交 |
-| 实现代码 / 测试代码 | **不创建**（DESIGN ONLY 合同） |
-| 正式 GPU 矩阵 | **不运行**（DESIGN ONLY 合同；§4 为下一阶段合同） |
+| `docs/M0_Q8_HYBRID_KV_CAPACITY_DESIGN.md`（本文档） | ✅ 设计合同，已由结果文档补充实现状态 |
+| `docs/M0_Q8_HYBRID_KV_CAPACITY_RESULT_20260821.md` | ✅ 本轮实现、指标、探针证据 |
+| 实现代码 / 测试代码 | ✅ 已创建并通过构建/回归 |
+| 正式 32K GPU paired matrix | **未完成**（仍按 §4 门禁执行） |
 | git | 根仓库单 commit；**不 push**；llama.cpp 零改动（双仓库 clean） |
 
 ---
@@ -381,13 +390,13 @@ llama.cpp/build-cuda/bin/llama-server -m models/qwen3-5-4B-Q4_K_M.gguf \
   `benchmark/configs/qwen35_4b_q8_validated.yaml` / `qwen35_4b_q8_production.yaml`
 
 ### llama.cpp 源码（只读核对，commit 4a699aaad）
-- `src/llama-model.cpp:2256-2303`（hybrid memory 构造；`2286-2295` recurrent_type 硬编码 F32）
-- `src/llama-context.cpp:260-305`（n_ctx_seq/unified）、`383-393`（llama_memory_params 无 type_r/s）、
+- `src/llama-model.cpp:2256-2303`（hybrid memory 构造；recurrent_type_r/s 显式传入）
+- `src/llama-context.cpp:260-305`（n_ctx_seq/unified）、`383-393`（llama_memory_params 含 type_r/s）、
   `3560-3596`（K≠V 限制 / FA / block 检查）、`3235-3258`（memory_breakdown context 合并）、`4206-4208`
 - `src/llama-kv-cache.cpp:71-82`（n_stream）、`140-143`（v_cells）、`231-232`（K/V tensor）、
   `734-800`（get_kv_stats）、`1910-1913`（total_size）
 - `src/llama-memory-recurrent.cpp:99-126`（RS tensor 分配/日志）、`709-728`（size_r/s_bytes）
-- `src/llama-memory-hybrid.cpp:182-199`（memory_breakdown 合并 / get_kv_stats 只委托 attention）
+- `src/llama-memory-hybrid.cpp:182-205`（memory_breakdown 合并 / 分组件 get_kv_stats）
 - `src/llama-hparams.cpp:183-230`（n_embd_r/s）、`244-248`（is_mla）
 - `src/models/qwen35.cpp:21-33`（recurrent 层 fallback interval=4）
 - `common/arg.cpp:302-313`（kv_cache_types）、`2369-2391`（-ctk/-ctv）、

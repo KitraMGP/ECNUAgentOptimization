@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 # 合法场景名（与旧 CLI choices 一致 + all）
-SCENARIOS = ("multi_turn", "tool_call", "branch", "long_life", "realistic_agent", "all")
+SCENARIOS = ("multi_turn", "tool_call", "branch", "long_life", "needle", "realistic_agent", "all")
 
 # 兼容旧 CLI 的字段（旧结果 JSON 的 config 键集）
 _LEGACY_KEYS = (
@@ -47,6 +47,7 @@ class BenchmarkConfig:
     branch_rounds: int = 5
     long_rounds: int = 40
     long_secret: str = "9527"
+    needle_target_tokens: int = 8192
     realistic_rounds: int = 10
     realistic_payload_chars: int = 12000
     # ---- 输出 ----
@@ -81,6 +82,7 @@ class BenchmarkConfig:
         self.branch_rounds = int(self.branch_rounds)
         self.long_rounds = int(self.long_rounds)
         self.long_secret = str(self.long_secret)
+        self.needle_target_tokens = int(self.needle_target_tokens)
         self.realistic_rounds = int(self.realistic_rounds)
         self.realistic_payload_chars = int(self.realistic_payload_chars)
         if self.scenario not in SCENARIOS:
@@ -92,6 +94,8 @@ class BenchmarkConfig:
             raise ValueError(f"warmup 必须 >= 0，当前 {self.warmup}")
         if self.ctx_size <= 0:
             raise ValueError(f"ctx_size 必须 > 0，当前 {self.ctx_size}")
+        if self.needle_target_tokens <= 0:
+            raise ValueError("needle_target_tokens 必须 > 0")
         if self.realistic_rounds < 7 or self.realistic_payload_chars < 256:
             raise ValueError("realistic_agent 参数不足：realistic_rounds>=7 且 payload_chars>=256")
 

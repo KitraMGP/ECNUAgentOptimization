@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+import json
 
 import pytest
 
@@ -134,3 +135,21 @@ def test_chat_raises_other_errors(driver_with_mock_client):
     client.chat.completions.create.side_effect = Exception("connection refused")
     with pytest.raises(Exception, match="connection refused"):
         drv.chat([{"role": "user", "content": "hi"}])
+
+
+def test_nonstandard_endpoints_use_server_root(driver_with_mock_client):
+    drv, _ = driver_with_mock_client
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps({"prompt": "rendered"}).encode()
+
+    with patch("framework.driver.urllib.request.urlopen", return_value=Response()) as urlopen:
+        assert drv.apply_template([{"role": "user", "content": "hi"}]) == "rendered"
+    assert urlopen.call_args.args[0].full_url == "http://127.0.0.1:8080/apply-template"

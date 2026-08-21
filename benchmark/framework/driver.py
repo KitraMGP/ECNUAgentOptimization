@@ -17,6 +17,7 @@ import json
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
@@ -187,8 +188,18 @@ class Driver:
     # ---- M0 非标准端点（§4.2：/apply-template + /tokenize 精确 token 计数） ----
 
     def _post_json(self, path: str, payload: Dict[str, Any], timeout: float = 30.0) -> Any:
-        """POST 非标准端点并解析 JSON；失败抛 OSError（由调用方归因基础设施）。"""
-        url = f"{self.base_url.rstrip('/')}{path}"
+        """POST server-root 非标准端点并解析 JSON。
+
+        OpenAI requests use ``base_url`` ending in ``/v1``.  llama-server's
+        ``/apply-template`` and ``/tokenize`` endpoints are intentionally
+        registered at the server root, not below ``/v1``.
+        """
+        parsed = urllib.parse.urlsplit(self.base_url)
+        base_path = parsed.path.rstrip("/")
+        if base_path.endswith("/v1"):
+            base_path = base_path[:-3]
+        root = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, base_path, "", "")).rstrip("/")
+        url = f"{root}{path}"
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
             url, data=data, headers={"Content-Type": "application/json"})

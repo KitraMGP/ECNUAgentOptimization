@@ -163,6 +163,16 @@ def test_realistic_agent_fingerprint_and_payload_parameter():
     assert a.meta["trace"].startswith("plan>")
 
 
+def test_needle_exact_token_workload(fake_driver):
+    wl = get_workload("needle")
+    spec = wl.generate({"target_tokens": 96})
+    result = wl.run(fake_driver, spec)
+    assert [row["position"] for row in result["rows"]] == ["early", "middle", "late"]
+    assert all(row["actual_prompt_tokens"] <= 96 for row in result["rows"])
+    assert result["meta"]["token_count_method"] == "apply-template+tokenize"
+    assert wl.evaluate(result, spec)["task_success"] is False
+
+
 def test_spec_fingerprint_deterministic():
     wl = get_workload("multi_turn")
     s1 = wl.generate({"rounds": 20})
@@ -174,5 +184,5 @@ def test_spec_fingerprint_deterministic():
 
 def test_registry_has_all_scenarios():
     assert set(get_workload(n).name for n in
-               ["multi_turn", "tool_call", "branch", "long_life", "realistic_agent"]) == {
-        "multi_turn", "tool_call", "branch", "long_life", "realistic_agent"}
+               ["multi_turn", "tool_call", "branch", "long_life", "needle", "realistic_agent"]) == {
+        "multi_turn", "tool_call", "branch", "long_life", "needle", "realistic_agent"}

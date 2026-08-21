@@ -38,7 +38,7 @@ class FakeDriver:
         self._idx = 0
         self.calls = []
 
-    def chat(self, messages, _retry=0):
+    def chat(self, messages, _retry=0, **_kwargs):
         self.calls.append([dict(m) for m in messages])
         if self._responses:
             r = self._responses[self._idx % len(self._responses)]
@@ -46,6 +46,12 @@ class FakeDriver:
         else:
             r = default_row()
         return dict(r)
+
+    def apply_template(self, messages, add_generation_prompt=True, chat_template_kwargs=None):
+        return "\n".join(str(message.get("content", "")) for message in messages)
+
+    def count_tokens(self, content, add_special=False):
+        return len(str(content).split())
 
     @property
     def n_calls(self):

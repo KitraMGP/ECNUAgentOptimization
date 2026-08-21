@@ -273,13 +273,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--port", type=int, default=None)
     ap.add_argument("--server-url", default=None, help="OpenAI 兼容 base_url（默认 http://host:port/v1）")
     ap.add_argument("--scenario",
-                    choices=["multi_turn", "tool_call", "branch", "long_life", "realistic_agent", "all"],
+                    choices=["multi_turn", "tool_call", "branch", "long_life", "needle", "realistic_agent", "all"],
                     default=None)
     ap.add_argument("--rounds", type=int, default=None)
     ap.add_argument("--tool-steps", type=int, default=None)
     ap.add_argument("--branch-rounds", type=int, default=None)
     ap.add_argument("--long-rounds", type=int, default=None)
     ap.add_argument("--long-secret", default=None)
+    ap.add_argument("--needle-target-tokens", type=int, default=None,
+                    help="needle workload 的目标 prompt token 数（/tokenize 精确计数）")
     ap.add_argument("--realistic-rounds", type=int, default=None)
     ap.add_argument("--realistic-payload-chars", type=int, default=None)
     ap.add_argument("--ctx-size", type=int, default=None,
@@ -320,6 +322,7 @@ def cli_main(argv: Optional[List[str]] = None) -> int:
         "scenario": args.scenario, "rounds": args.rounds,
         "tool_steps": args.tool_steps, "branch_rounds": args.branch_rounds,
         "long_rounds": args.long_rounds, "long_secret": args.long_secret,
+        "needle_target_tokens": args.needle_target_tokens,
         "realistic_rounds": args.realistic_rounds,
         "realistic_payload_chars": args.realistic_payload_chars,
         "ctx_size": args.ctx_size, "repeat": args.repeat, "warmup": args.warmup,
