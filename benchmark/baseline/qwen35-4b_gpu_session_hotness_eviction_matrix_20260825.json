@@ -1,0 +1,73 @@
+{
+  "date": "2026-08-25T09:46:25Z",
+  "model": "Qwen3.5-4B-Q4_K_M.gguf",
+  "scenario": "session_hotness_victim_matrix",
+  "repeats_per_run": 20,
+  "matrix_runs": 3,
+  "strategies": {
+    "off": {
+      "victims": [
+        0,
+        0,
+        0
+      ],
+      "victim_mode": 0,
+      "all_pass": true,
+      "mean_hot_latency_ms": 35.53174999979092,
+      "mean_pressure_latency_ms": 305.03594699985115,
+      "mean_used_cells_before": 1324.0,
+      "mean_used_cells_after": 1376.0,
+      "hashes": [
+        "75a11da44c802486bc6f65640aa48a730f0f684c5c07a42ba3cd1735eb3fb070"
+      ]
+    },
+    "recency": {
+      "victims": [
+        0,
+        0,
+        0
+      ],
+      "victim_mode": 0,
+      "all_pass": true,
+      "mean_hot_latency_ms": 37.16569766644776,
+      "mean_pressure_latency_ms": 304.3688956665089,
+      "mean_used_cells_before": 1324.0,
+      "mean_used_cells_after": 1376.0,
+      "hashes": [
+        "75a11da44c802486bc6f65640aa48a730f0f684c5c07a42ba3cd1735eb3fb070"
+      ]
+    },
+    "lfu": {
+      "victims": [
+        1,
+        1,
+        1
+      ],
+      "victim_mode": 1,
+      "all_pass": true,
+      "mean_hot_latency_ms": 40.544500334362965,
+      "mean_pressure_latency_ms": 307.5143756662631,
+      "mean_used_cells_before": 1324.0,
+      "mean_used_cells_after": 1504.0,
+      "hashes": [
+        "75a11da44c802486bc6f65640aa48a730f0f684c5c07a42ba3cd1735eb3fb070"
+      ]
+    },
+    "cost": {
+      "victims": [
+        0,
+        0,
+        0
+      ],
+      "victim_mode": 0,
+      "all_pass": true,
+      "mean_hot_latency_ms": 37.08936199958165,
+      "mean_pressure_latency_ms": 303.86053600038093,
+      "mean_used_cells_before": 1324.0,
+      "mean_used_cells_after": 1376.0,
+      "hashes": [
+        "75a11da44c802486bc6f65640aa48a730f0f684c5c07a42ba3cd1735eb3fb070"
+      ]
+    }
+  }
+}

@@ -124,3 +124,26 @@ B1/C1 的 Qwen hybrid 结果证明了真实 GPU used-cell 释放、L2 上限和�
 - 把 `--checkpoint-reuse` 当 hybrid restore
 - 默认打开 hotness / ram / ram,disk
 - 跨重启 L2 持久化
+
+## Session 热度淘汰完整实测（2026-08-25）
+
+新增 runner：`benchmark/scripts/kv_hotness_eviction_matrix.py`。固定 Qwen3.5-4B Q4_K_M、CUDA、`ctx=2048`、`parallel=3`、`--kv-unified`；每个策略独立启动 3 次，每次构造 20 次 hot session reuse、1 个 cold session 和 1 个 pressure session，记录 victim、KV metrics、延迟和输出 hash。Control 为 `--kv-hotness off`，比较 `recency`、`lfu`、`cost`。
+
+归档：
+
+- 原始矩阵：`benchmark/results/kv_hotness_eviction_matrix_repeated_20260825/report.json`
+- 汇总证据：`benchmark/baseline/qwen35-4b_gpu_session_hotness_eviction_matrix_20260825.json`
+
+| 策略 | 3 次 victim | 平均 hot latency | 平均 pressure latency | used cells（前→后） | hash |
+|---|---|---:|---:|---:|---|
+| off | 0,0,0 | 35.53 ms | 305.04 ms | 1324→1376 | 3/3 一致 |
+| recency | 0,0,0 | 37.17 ms | 304.37 ms | 1324→1376 | 3/3 一致 |
+| lfu | 1,1,1 | 40.54 ms | 307.51 ms | 1324→1504 | 3/3 一致 |
+| cost | 0,0,0 | 37.09 ms | 303.86 ms | 1324→1376 | 3/3 一致 |
+
+实测结论：
+
+1. **LFU 价值保护有效**：20 次 hot session reuse 后，LFU 在 3/3 次实验中淘汰 cold slot 1；off/recency/cost 淘汰 slot 0。该结果与策略语义一致：recency 更重视 slot 的最近一次使用时间，而 LFU 保护高频 session。
+2. **recency 与 off 在本构造中相同**：pressure 请求前 hot slot 是更早建立的 slot 0，且测试没有在 pressure 前再次访问它；因此 recency 选择 slot 0 并非实现失效，而是该访问时序下的预期结果。
+3. **输出正确性稳定**：每个策略 3/3 次 pressure 输出 hash 均为 `75a11da4…`，无策略导致输出变化。
+4. **本矩阵验证的是 victim 选择，不是性能收益**：单次 pressure latency 差异不足以宣称生产收益；LFU/recency/cost 的平均 pressure latency 与 off 接近，且该场景只迁移一次。要证明收益，需要冷热访问分布下的多轮 restore/offload 长生命周期实验。
