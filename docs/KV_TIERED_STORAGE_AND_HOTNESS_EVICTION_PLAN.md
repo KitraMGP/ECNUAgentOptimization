@@ -5,9 +5,7 @@
 - 约束：主模型 Qwen3.5-4B 为 hybrid（8 attention + 24 recurrent）；KV buffer 启动时预分配；不得把 metadata sharing 称为物理 COW
 - 结论：可开展的是 **server 层 sequence-state 三级迁移** 与 **slot/session 级热度淘汰**；不可开展的是 PagedAttention/vAttention 式 GPU 内部分页，以及 H2O/SnapKV 原样 per-head 有损淘汰
 
-**第一刀状态（2026-08-21）**：阶段 A+B 已落地（`--kv-hotness` / `--kv-tiering ram`，默认 off）。TinyLlama 5 例 + idle-lifecycle 回归 PASS；Qwen3.5-4B A1/A2/B1 PASS。详见 `docs/KV_TIERED_STORAGE_AND_HOTNESS_EVICTION_RESULT_20260821.md`。L2 磁盘与 token 级有损淘汰仍后置。
-
-**阶段 C 状态（2026-08-21）**：`--kv-tiering ram,disk` + `--kv-tier2-max-mib` 已落地。TinyLlama L2 spill/restore PASS；Qwen3.5-4B C1 PASS（spill+restore+hash+上限）。hybrid restore 后不能安全 `seq_rm` 后缀 → 丢弃 tokens 全量 prefill，不宣称后缀-only。Token 级有损淘汰仍后置。
+**当前状态（2026-08-25）**：阶段 A/B/C 已实现并完成定向回归；新增 restore 热度元数据贯通和 tier transition metrics。TinyLlama 分层 restore 与 Qwen3.5-4B L0→L1 offload、L1→L2 spill、安全回退均通过。Qwen3.5-4B hybrid over-long state 仍拒绝 restore 并全量 prefill，不宣称 suffix-only 命中。Token 级有损淘汰与跨重启 L2 仍后置。
 
 ---
 

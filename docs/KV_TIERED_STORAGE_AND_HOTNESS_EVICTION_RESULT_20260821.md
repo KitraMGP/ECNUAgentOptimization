@@ -80,6 +80,41 @@ B1 同时确认 attention/recurrent **capacity 未变**。used_cells 降到 0 �
 
 A2 压力场景：recency 选择 slot 1，active slot 未清理，`used_cells` 1574→1808 / capacity 2048。四个场景全部 PASS。A1 仅 3 个请求，延迟结果是单轮探针，不升级为稳定性能收益。
 
+## 2026-08-25 实现收口与快速复测
+
+本轮实现：
+
+- L1/L2 restore 将 `last_used_tick`、`hit_count`、`recompute_ms` 回写 slot，保持冷热迁移后的热度连续性；
+- `/metrics/kv` 增加 `lookup_count`、`lcp_hit_count`，以及 `offload_count`、`l1_restore_count`、`l2_spill_count`、`l2_restore_count`、`l2_gc_count`；
+- TinyLlama/Qwen tiering 回归增加 transition-counter 断言。
+
+验证：
+
+```text
+18 passed  # test_kv_hotness_tiering.py + test_unified_idle_lifecycle.py + test_metrics_kv.py
+A1/A2/B1/C1: PASS
+```
+
+最新 Qwen 运行证据：`benchmark/baseline/qwen35-4b_gpu_kv_hotness_tiering_post_restore_metrics_20260825.json`。
+
+| 场景 | 结果 | 观测 |
+|---|---|---|
+| A1 | PASS | recency p50 216.09 vs control 209.89 ms，+2.95%，hash 同 |
+| A2 | PASS | victim=slot1；active 未清；used 1574→1808 / capacity 2048 |
+| B1 | PASS | `offload_count=1`；used cells 305→0；attention capacity 64 MiB、recurrent capacity 100.66 MiB 不变；hash 同 |
+| C1 | PASS | `l2_spill_count=1`；57.9 MiB ≤ 256 MiB；`l2_restore_count=0`，因为 hybrid over-long state 安全拒绝并全量 prefill；hash 同 |
+
+B1/C1 的 Qwen hybrid 结果证明了真实 GPU used-cell 释放、L2 上限和安全回退；TinyLlama 测试证明 attention-only L1/L2 restore 命中。Qwen 本轮单次 A1/B1/C1 延迟分别为探针结果，不升级为稳定性能收益；后续长生命周期收益需要重复 paired 矩阵。
+
+追加快速 paired probe（B1/C1，各 3 次，control 与 enabled 每次独立启动）：归档 `benchmark/baseline/qwen35-4b_gpu_kv_hotness_tiering_repeated_20260825.json`。
+
+| 场景 | 平均延迟变化 | 范围 | 正确性/容量 |
+|---|---:|---:|---|
+| B1 RAM offload | -7.10% | -4.04%～-9.56% | 3/3 hash 同；每次 used cells 305→0 |
+| C1 RAM+disk | -8.30% | -7.25%～-8.99% | 3/3 hash 同；每次 spill=1，L2≤256 MiB |
+
+这组结果说明当前短场景中存在可重复的探针级延迟下降，同时满足 hash 和缓存占用门禁；仍不是 20～40 轮真实 Agent 工作流的稳定生产收益证明，后者需要后续长生命周期 paired 实验。
+
 ## 不做的边界（本轮保持）
 
 - token 级 SnapKV/H2O

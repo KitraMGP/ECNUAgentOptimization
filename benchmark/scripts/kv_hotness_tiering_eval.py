@@ -267,6 +267,8 @@ def run_b1(out_dir: str) -> Dict[str, Any]:
         "recall_prompt_n": recall["prompt_n"],
         "offloads": offloads,
         "l1_entries": (snap.get("tiering") or {}).get("l1_entries"),
+        "offload_count": (snap.get("tiering") or {}).get("offload_count"),
+        "l1_restore_count": (snap2.get("tiering") or {}).get("l1_restore_count"),
         "last_victim": (snap.get("tiering") or {}).get("last_victim"),
         "capacity_cells": snap.get("capacity_cells"),
         "used_after_offload": snap.get("used_cells"),
@@ -343,7 +345,9 @@ def run_c1(out_dir: str) -> Dict[str, Any]:
         "restores": len(restores),
         "l2_entries_after_spill": (snap.get("tiering") or {}).get("l2_entries"),
         "l2_bytes_after_spill": l2_bytes,
+        "l2_spill_count": (snap.get("tiering") or {}).get("l2_spill_count"),
         "l2_entries_after_restore": (snap2.get("tiering") or {}).get("l2_entries"),
+        "l2_restore_count": (snap2.get("tiering") or {}).get("l2_restore_count"),
         "tiering_mode": (snap.get("tiering") or {}).get("mode"),
         "l2_cap_ok": l2_bytes <= 256 * 1024 * 1024,
     })

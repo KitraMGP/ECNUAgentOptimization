@@ -1,0 +1,207 @@
+{
+  "date": "2026-08-25T07:22:50Z",
+  "model": "/home/kitra/Projects/ECNUTraining/models/Qwen3.5-4B-Q4_K_M.gguf",
+  "server": "/home/kitra/Projects/ECNUTraining/llama.cpp/build-cuda/bin/llama-server",
+  "port": 8091,
+  "scenarios": {
+    "A1": {
+      "name": "A1",
+      "runs": {
+        "control": {
+          "rows": [
+            {
+              "status": "ok",
+              "content": "\n\n<think>\nThinking Process:\n\n1",
+              "content_sha256": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+              "prompt_n": 197,
+              "cache_n": 0,
+              "prompt_ms": 113.934,
+              "predicted_ms": 113.136,
+              "latency_ms": 229.7433429994271,
+              "id_slot": 0,
+              "tokens_cached": 204
+            },
+            {
+              "status": "ok",
+              "content": "\n\n<think>\nThinking Process:\n\n1",
+              "content_sha256": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+              "prompt_n": 197,
+              "cache_n": 0,
+              "prompt_ms": 100.589,
+              "predicted_ms": 106.713,
+              "latency_ms": 209.9001810020127,
+              "id_slot": 1,
+              "tokens_cached": 204
+            },
+            {
+              "status": "ok",
+              "content": "\n\n<think>\nThinking Process:\n\n1",
+              "content_sha256": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+              "prompt_n": 197,
+              "cache_n": 0,
+              "prompt_ms": 98.456,
+              "predicted_ms": 104.258,
+              "latency_ms": 205.49158900030307,
+              "id_slot": 2,
+              "tokens_cached": 204
+            }
+          ],
+          "hashes": [
+            "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+            "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+            "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71"
+          ],
+          "latency_ms": [
+            229.7433429994271,
+            209.9001810020127,
+            205.49158900030307
+          ],
+          "capacity_cells": 4096,
+          "used_cells": 612,
+          "hotness": "off"
+        },
+        "recency": {
+          "rows": [
+            {
+              "status": "ok",
+              "content": "\n\n<think>\nThinking Process:\n\n1",
+              "content_sha256": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+              "prompt_n": 197,
+              "cache_n": 0,
+              "prompt_ms": 116.344,
+              "predicted_ms": 104.202,
+              "latency_ms": 222.5046929997916,
+              "id_slot": 0,
+              "tokens_cached": 204
+            },
+            {
+              "status": "ok",
+              "content": "\n\n<think>\nThinking Process:\n\n1",
+              "content_sha256": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+              "prompt_n": 197,
+              "cache_n": 0,
+              "prompt_ms": 103.903,
+              "predicted_ms": 102.628,
+              "latency_ms": 216.08691000074032,
+              "id_slot": 1,
+              "tokens_cached": 204
+            },
+            {
+              "status": "ok",
+              "content": "\n\n<think>\nThinking Process:\n\n1",
+              "content_sha256": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+              "prompt_n": 197,
+              "cache_n": 0,
+              "prompt_ms": 97.054,
+              "predicted_ms": 104.642,
+              "latency_ms": 204.4990609974775,
+              "id_slot": 2,
+              "tokens_cached": 204
+            }
+          ],
+          "hashes": [
+            "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+            "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+            "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71"
+          ],
+          "latency_ms": [
+            222.5046929997916,
+            216.08691000074032,
+            204.4990609974775
+          ],
+          "capacity_cells": 4096,
+          "used_cells": 612,
+          "hotness": "recency"
+        }
+      },
+      "hash_match": true,
+      "latency_p50_control": 209.9001810020127,
+      "latency_p50_recency": 216.08691000074032,
+      "latency_dev_pct": 2.9474624410487325,
+      "pass": true
+    },
+    "A2": {
+      "name": "A2",
+      "purged": [
+        1
+      ],
+      "pressure_status": "ok",
+      "used_before": 1574,
+      "used_after": 1808,
+      "capacity_cells": 2048,
+      "active_not_cleared": true,
+      "oldest_idle_selected": true,
+      "pass": true
+    },
+    "B1": {
+      "name": "B1",
+      "control_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+      "control_latency_ms": 255.72077299875673,
+      "first_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+      "recall_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+      "first_prompt_n": 298,
+      "recall_prompt_n": 298,
+      "offloads": [
+        [
+          "0",
+          "pressure"
+        ]
+      ],
+      "l1_entries": 1,
+      "offload_count": 1,
+      "l1_restore_count": 0,
+      "last_victim": {
+        "id": 0,
+        "score": 1.0,
+        "reason": "pressure",
+        "idle_ticks": 1,
+        "pre_used_cells": 305,
+        "post_used_cells": 0
+      },
+      "capacity_cells": 2048,
+      "used_after_offload": 0,
+      "used_after_recall": 0,
+      "attention_capacity": 67108864,
+      "recurrent": {
+        "capacity_bytes": 105381888,
+        "r_bytes": 4718592,
+        "s_bytes": 100663296,
+        "n_rows": 2,
+        "n_seq_max": 2,
+        "n_rs_seq": 0,
+        "n_rs_slots": 2
+      },
+      "tier_latency_ms": 236.73835200315807,
+      "latency_delta_pct": -7.423104808028618,
+      "hash_match": true,
+      "used_cells_dropped": true,
+      "suffix_prefill": false,
+      "hybrid_safe_fallback": true,
+      "pass": true
+    },
+    "C1": {
+      "name": "C1",
+      "first_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+      "recall_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+      "control_latency_ms": 229.3521569990844,
+      "tier_latency_ms": 210.9830930021417,
+      "first_prompt_n": 238,
+      "recall_prompt_n": 238,
+      "spills": 1,
+      "restores": 0,
+      "l2_entries_after_spill": 1,
+      "l2_bytes_after_spill": 60724816,
+      "l2_spill_count": 1,
+      "l2_entries_after_restore": 2,
+      "l2_restore_count": 0,
+      "tiering_mode": "ram,disk",
+      "l2_cap_ok": true,
+      "latency_delta_pct": -8.009108890576531,
+      "hash_match": true,
+      "hybrid_safe_fallback": true,
+      "suffix_prefill": false,
+      "pass": true
+    }
+  },
+  "all_pass": true
+}
