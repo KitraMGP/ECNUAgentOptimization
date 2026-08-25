@@ -104,16 +104,18 @@ A1/A2/B1/C1: PASS
 | B1 | PASS | `offload_count=1`；used cells 305→0；attention capacity 64 MiB、recurrent capacity 100.66 MiB 不变；hash 同 |
 | C1 | PASS | `l2_spill_count=1`；57.9 MiB ≤ 256 MiB；`l2_restore_count=0`，因为 hybrid over-long state 安全拒绝并全量 prefill；hash 同 |
 
-B1/C1 的 Qwen hybrid 结果证明了真实 GPU used-cell 释放、L2 上限和安全回退；TinyLlama 测试证明 attention-only L1/L2 restore 命中。Qwen 本轮单次 A1/B1/C1 延迟分别为探针结果，不升级为稳定性能收益；后续长生命周期收益需要重复 paired 矩阵。
+B1/C1 的 Qwen hybrid 结果证明了真实 GPU used-cell 释放、L2 上限和安全回退；TinyLlama 测试证明 attention-only L1/L2 restore 命中。最终 capability-gate 源码的 B1/C1 复测仍为 PASS，归档 `benchmark/baseline/qwen35-4b_gpu_kv_hotness_tiering_capability_gate_final_20260825.json`。Qwen 本轮单次 A1/B1/C1 延迟分别为探针结果，不升级为稳定性能收益；后续长生命周期收益需要重复 paired 矩阵。
 
-追加快速 paired probe（B1/C1，各 3 次，control 与 enabled 每次独立启动）：归档 `benchmark/baseline/qwen35-4b_gpu_kv_hotness_tiering_repeated_20260825.json`。
+追加快速 paired probe（B1/C1，各 3 次，使用 restore metadata 修复后的最终源码；control 与 enabled 每次独立启动）：归档 `benchmark/baseline/qwen35-4b_gpu_kv_hotness_tiering_final_repeated_20260825.json`。
 
 | 场景 | 平均延迟变化 | 范围 | 正确性/容量 |
 |---|---:|---:|---|
-| B1 RAM offload | -7.10% | -4.04%～-9.56% | 3/3 hash 同；每次 used cells 305→0 |
-| C1 RAM+disk | -8.30% | -7.25%～-8.99% | 3/3 hash 同；每次 spill=1，L2≤256 MiB |
+| B1 RAM offload | -6.81% | -6.00%～-7.45% | 3/3 hash 同；每次 used cells 305→0 |
+| C1 RAM+disk | -6.80% | -6.37%～-7.02% | 3/3 hash 同；每次 spill=1，L2≤256 MiB |
 
 这组结果说明当前短场景中存在可重复的探针级延迟下降，同时满足 hash 和缓存占用门禁；仍不是 20～40 轮真实 Agent 工作流的稳定生产收益证明，后者需要后续长生命周期 paired 实验。
+
+`realistic_agent` 7 轮 smoke 经过 recurrent-memory capability gate 修复后完成：Control 与 tiered 均 `task_success=true`。归档 `benchmark/baseline/qwen35-4b_gpu_realistic_agent_tiering_smoke_20260825.json`。tiered 自动 offload 保持正确性，但 p50 `2020.6 ms` vs control `1878.2 ms`（+7.58%），p95 `3624.7 ms` vs `2287.1 ms`（+58.48%），说明短 Agent 会话中频繁冷热迁移的重算成本超过收益；该场景不能宣称性能提升。性能收益证据仍来自 completion 级 B1/C1 paired probe，真实长生命周期 Agent 需提高复用率/压力触发阈值后再测。
 
 ## 不做的边界（本轮保持）
 

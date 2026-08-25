@@ -5,7 +5,7 @@
 - 约束：主模型 Qwen3.5-4B 为 hybrid（8 attention + 24 recurrent）；KV buffer 启动时预分配；不得把 metadata sharing 称为物理 COW
 - 结论：可开展的是 **server 层 sequence-state 三级迁移** 与 **slot/session 级热度淘汰**；不可开展的是 PagedAttention/vAttention 式 GPU 内部分页，以及 H2O/SnapKV 原样 per-head 有损淘汰
 
-**当前状态（2026-08-25）**：阶段 A/B/C 已实现并完成定向回归；新增 restore 热度元数据贯通和 tier transition metrics。TinyLlama 分层 restore 与 Qwen3.5-4B L0→L1 offload、L1→L2 spill、安全回退均通过。Qwen3.5-4B hybrid over-long state 仍拒绝 restore 并全量 prefill，不宣称 suffix-only 命中。Token 级有损淘汰与跨重启 L2 仍后置。
+**当前状态（2026-08-25）**：阶段 A/B/C 已实现并完成定向回归；新增 restore 热度元数据贯通、tier transition metrics，以及基于 recurrent-memory capability 的 hybrid restore gate。TinyLlama 分层 restore 与 Qwen3.5-4B L0→L1 offload、L1→L2 spill、安全回退均通过。Qwen3.5-4B hybrid over-long state 仍拒绝 restore 并全量 prefill，不宣称 suffix-only 命中。Qwen realistic_agent 7 轮 smoke 正确性通过但频繁迁移导致 p50/p95 变慢，尚无该场景稳定收益。Token 级有损淘汰与跨重启 L2 仍后置。
 
 ---
 

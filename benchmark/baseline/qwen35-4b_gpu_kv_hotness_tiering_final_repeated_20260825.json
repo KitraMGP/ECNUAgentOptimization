@@ -1,0 +1,239 @@
+{
+  "date": "2026-08-25",
+  "source": "final source after restore metadata fix",
+  "model": "Qwen3.5-4B-Q4_K_M.gguf",
+  "runs": [
+    {
+      "run": "kv_hotness_tiering_perf_final_r1",
+      "B1": {
+        "name": "B1",
+        "control_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "control_latency_ms": 251.25571399985347,
+        "first_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "recall_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "first_prompt_n": 298,
+        "recall_prompt_n": 298,
+        "offloads": [
+          [
+            "0",
+            "pressure"
+          ]
+        ],
+        "l1_entries": 1,
+        "offload_count": 1,
+        "l1_restore_count": 0,
+        "last_victim": {
+          "id": 0,
+          "score": 1.0,
+          "reason": "pressure",
+          "idle_ticks": 1,
+          "pre_used_cells": 305,
+          "post_used_cells": 0
+        },
+        "capacity_cells": 2048,
+        "used_after_offload": 0,
+        "used_after_recall": 0,
+        "attention_capacity": 67108864,
+        "recurrent": {
+          "capacity_bytes": 105381888,
+          "r_bytes": 4718592,
+          "s_bytes": 100663296,
+          "n_rows": 2,
+          "n_seq_max": 2,
+          "n_rs_seq": 0,
+          "n_rs_slots": 2
+        },
+        "tier_latency_ms": 233.7278310005786,
+        "latency_delta_pct": -6.976113187732361,
+        "hash_match": true,
+        "used_cells_dropped": true,
+        "suffix_prefill": false,
+        "hybrid_safe_fallback": true,
+        "pass": true
+      },
+      "C1": {
+        "name": "C1",
+        "first_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "recall_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "control_latency_ms": 229.92199299915228,
+        "tier_latency_ms": 215.27280100053758,
+        "first_prompt_n": 238,
+        "recall_prompt_n": 238,
+        "spills": 1,
+        "restores": 0,
+        "l2_entries_after_spill": 1,
+        "l2_bytes_after_spill": 60724816,
+        "l2_spill_count": 1,
+        "l2_entries_after_restore": 2,
+        "l2_restore_count": 0,
+        "tiering_mode": "ram,disk",
+        "l2_cap_ok": true,
+        "latency_delta_pct": -6.371374833493509,
+        "hash_match": true,
+        "hybrid_safe_fallback": true,
+        "suffix_prefill": false,
+        "pass": true
+      }
+    },
+    {
+      "run": "kv_hotness_tiering_perf_final_r2",
+      "B1": {
+        "name": "B1",
+        "control_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "control_latency_ms": 254.16830799804302,
+        "first_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "recall_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "first_prompt_n": 298,
+        "recall_prompt_n": 298,
+        "offloads": [
+          [
+            "0",
+            "pressure"
+          ]
+        ],
+        "l1_entries": 1,
+        "offload_count": 1,
+        "l1_restore_count": 0,
+        "last_victim": {
+          "id": 0,
+          "score": 1.0,
+          "reason": "pressure",
+          "idle_ticks": 1,
+          "pre_used_cells": 305,
+          "post_used_cells": 0
+        },
+        "capacity_cells": 2048,
+        "used_after_offload": 0,
+        "used_after_recall": 0,
+        "attention_capacity": 67108864,
+        "recurrent": {
+          "capacity_bytes": 105381888,
+          "r_bytes": 4718592,
+          "s_bytes": 100663296,
+          "n_rows": 2,
+          "n_seq_max": 2,
+          "n_rs_seq": 0,
+          "n_rs_slots": 2
+        },
+        "tier_latency_ms": 235.23435199967935,
+        "latency_delta_pct": -7.449377205009153,
+        "hash_match": true,
+        "used_cells_dropped": true,
+        "suffix_prefill": false,
+        "hybrid_safe_fallback": true,
+        "pass": true
+      },
+      "C1": {
+        "name": "C1",
+        "first_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "recall_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "control_latency_ms": 229.56852500283276,
+        "tier_latency_ms": 213.48722800030373,
+        "first_prompt_n": 238,
+        "recall_prompt_n": 238,
+        "spills": 1,
+        "restores": 0,
+        "l2_entries_after_spill": 1,
+        "l2_bytes_after_spill": 60724816,
+        "l2_spill_count": 1,
+        "l2_entries_after_restore": 2,
+        "l2_restore_count": 0,
+        "tiering_mode": "ram,disk",
+        "l2_cap_ok": true,
+        "latency_delta_pct": -7.005009507436001,
+        "hash_match": true,
+        "hybrid_safe_fallback": true,
+        "suffix_prefill": false,
+        "pass": true
+      }
+    },
+    {
+      "run": "kv_hotness_tiering_perf_final_r3",
+      "B1": {
+        "name": "B1",
+        "control_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "control_latency_ms": 254.82973199905246,
+        "first_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "recall_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "first_prompt_n": 298,
+        "recall_prompt_n": 298,
+        "offloads": [
+          [
+            "0",
+            "pressure"
+          ]
+        ],
+        "l1_entries": 1,
+        "offload_count": 1,
+        "l1_restore_count": 0,
+        "last_victim": {
+          "id": 0,
+          "score": 1.0,
+          "reason": "pressure",
+          "idle_ticks": 1,
+          "pre_used_cells": 305,
+          "post_used_cells": 0
+        },
+        "capacity_cells": 2048,
+        "used_after_offload": 0,
+        "used_after_recall": 0,
+        "attention_capacity": 67108864,
+        "recurrent": {
+          "capacity_bytes": 105381888,
+          "r_bytes": 4718592,
+          "s_bytes": 100663296,
+          "n_rows": 2,
+          "n_seq_max": 2,
+          "n_rs_seq": 0,
+          "n_rs_slots": 2
+        },
+        "tier_latency_ms": 239.53595099737868,
+        "latency_delta_pct": -6.001568530367032,
+        "hash_match": true,
+        "used_cells_dropped": true,
+        "suffix_prefill": false,
+        "hybrid_safe_fallback": true,
+        "pass": true
+      },
+      "C1": {
+        "name": "C1",
+        "first_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "recall_hash": "126357be2c69be7db433ab949bec80b1a2cb843e33388401c2a431453de91d71",
+        "control_latency_ms": 230.3790990008565,
+        "tier_latency_ms": 214.20803400178556,
+        "first_prompt_n": 238,
+        "recall_prompt_n": 238,
+        "spills": 1,
+        "restores": 0,
+        "l2_entries_after_spill": 1,
+        "l2_bytes_after_spill": 60724816,
+        "l2_spill_count": 1,
+        "l2_entries_after_restore": 2,
+        "l2_restore_count": 0,
+        "tiering_mode": "ram,disk",
+        "l2_cap_ok": true,
+        "latency_delta_pct": -7.019328172218795,
+        "hash_match": true,
+        "hybrid_safe_fallback": true,
+        "suffix_prefill": false,
+        "pass": true
+      }
+    }
+  ],
+  "summary": {
+    "B1": {
+      "mean_latency_delta_pct": -6.809019641036182,
+      "min_latency_delta_pct": -7.449377205009153,
+      "max_latency_delta_pct": -6.001568530367032,
+      "all_hash_match": true,
+      "all_pass": true
+    },
+    "C1": {
+      "mean_latency_delta_pct": -6.798570837716102,
+      "min_latency_delta_pct": -7.019328172218795,
+      "max_latency_delta_pct": -6.371374833493509,
+      "all_hash_match": true,
+      "all_pass": true
+    }
+  }
+}

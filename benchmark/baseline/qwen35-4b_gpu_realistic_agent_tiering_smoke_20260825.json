@@ -1,0 +1,56 @@
+{
+  "date": "2026-08-25",
+  "scenario": "realistic_agent",
+  "rounds": 7,
+  "payload_chars": 256,
+  "model": "Qwen3.5-4B-Q4_K_M.gguf",
+  "control": {
+    "task_success": true,
+    "p50_latency_ms": 1878.2,
+    "p95_latency_ms": 2287.1,
+    "avg_latency_ms": 1834.7,
+    "throughput_tps": 362.68,
+    "cached_tokens": 2767,
+    "cache_hit_rate": 0.7259,
+    "recompute_tokens": 1045,
+    "peak_gpu_mb": 3070.0,
+    "peak_rss_mb": 1242.7,
+    "evaluation": {
+      "task_success": true,
+      "plan_completed": true,
+      "tool_calls": 0,
+      "retry_recovered": false,
+      "order_updated": false,
+      "order_verified": false,
+      "summary_facts": true,
+      "tool_errors": 0
+    }
+  },
+  "tiered": {
+    "task_success": true,
+    "p50_latency_ms": 2020.6,
+    "p95_latency_ms": 3624.7,
+    "avg_latency_ms": 2196.2,
+    "throughput_tps": 355.42,
+    "cached_tokens": 2902,
+    "cache_hit_rate": 0.6499,
+    "recompute_tokens": 1563,
+    "peak_gpu_mb": 3070.0,
+    "peak_rss_mb": 1241.8,
+    "evaluation": {
+      "task_success": true,
+      "plan_completed": true,
+      "tool_calls": 0,
+      "retry_recovered": false,
+      "order_updated": false,
+      "order_verified": false,
+      "summary_facts": true,
+      "tool_errors": 0
+    }
+  },
+  "comparison": {
+    "p50_delta_pct": 7.58172718560323,
+    "p95_delta_pct": 58.48454374535438,
+    "task_success_preserved": true
+  }
+}
