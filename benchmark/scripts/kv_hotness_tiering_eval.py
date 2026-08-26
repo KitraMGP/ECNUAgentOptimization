@@ -20,9 +20,9 @@ from typing import Any, Dict, Optional
 from urllib import error, request
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SERVER = os.path.join(ROOT, "llama.cpp", "build-cuda", "bin", "llama-server")
-MODEL = os.path.join(ROOT, "models", "Qwen3.5-4B-Q4_K_M.gguf")
-PORT = 8091
+SERVER = os.environ.get("KV_EVAL_SERVER", os.path.join(ROOT, "llama.cpp", "build-cuda", "bin", "llama-server"))
+MODEL = os.environ.get("KV_EVAL_MODEL", os.path.join(ROOT, "models", "Qwen3.5-4B-Q4_K_M.gguf"))
+PORT = int(os.environ.get("KV_EVAL_PORT", "8091"))
 BASE = f"http://127.0.0.1:{PORT}"
 
 CHUNK = (
@@ -80,15 +80,20 @@ def start_server(log_path: str, *, parallel: int, ctx: int, cache_ram: int,
         "-ngl", "99", "--ctx-size", str(ctx), "--parallel", str(parallel),
         "--kv-unified", "--seed", "42", "--temp", "0",
         "--cache-type-r", "f32", "--cache-type-s", "f32",
-        "--cache-ram", str(cache_ram),
         "--kv-hotness", hotness, "--kv-tiering", tiering,
         "--kv-tier-idle-ticks", str(idle_ticks),
         "--kv-tier-pressure", str(pressure),
-        "--no-cache-idle-slots",
         "--chat-template-kwargs", '{"enable_thinking":false}',
     ]
+    if os.environ.get("KV_NO_CACHE_RAM") != "1":
+        cmd.extend(["--cache-ram", str(cache_ram)])
+    if os.environ.get("KV_KEEP_IDLE_SLOTS") != "1":
+        cmd.append("--no-cache-idle-slots")
     if extra:
         cmd.extend(extra)
+    allocator = os.environ.get("KV_ALLOCATOR")
+    if allocator:
+        cmd.extend(["--kv-allocator", allocator, "--kv-block-size", os.environ.get("KV_BLOCK_SIZE", "16")])
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     logf = open(log_path, "w")
     return subprocess.Popen(cmd, stdout=logf, stderr=logf)
